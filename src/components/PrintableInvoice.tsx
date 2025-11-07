@@ -7,7 +7,7 @@ import {
     StyleSheet,
     Image
 } from '@react-pdf/renderer';
-import Logo from "@/assets/logo.png";
+import Logo from "../assets/logo.png";
 
 // ---------------- STYLES ----------------
 const styles = StyleSheet.create({

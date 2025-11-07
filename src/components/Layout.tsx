@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import Logo from "@/assets/Logo.svg"
+import Logo from "../assets/logo.svg"
 import {
   LayoutDashboard,
   FileText,
