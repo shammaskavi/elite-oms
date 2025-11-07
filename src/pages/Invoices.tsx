@@ -1,0 +1,1119 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { InvoiceView } from "@/components/InvoiceView";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Plus, Trash2, Search, Eye, UserPlus, ChevronDown, ChevronUp } from "lucide-react";
+import { toast } from "sonner";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+export default function Invoices() {
+  const [open, setOpen] = useState(false);
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("");
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [formData, setFormData] = useState({
+    invoice_number: "",
+    customer_id: "",
+    date: new Date().toISOString().split("T")[0],
+    delivery_date: new Date().toISOString().split("T")[0],
+    subtotal: "0",
+    tax: "0",
+    discount: "0",
+    discount_type: "fixed",
+    coupon_code: "",
+    offer_description: "",
+    total: "0",
+    payment_method: "cash",
+    payment_status: "unpaid",
+    paid_amount: "0",
+  });
+  const [newCustomer, setNewCustomer] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+  });
+  const [items, setItems] = useState<any[]>([
+    { name: "", qty: "1", unit_price: "0", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" },
+  ]);
+  const queryClient = useQueryClient();
+
+  // Auto-generate invoice number when dialog opens
+  useEffect(() => {
+    if (open) {
+      generateInvoiceNumber();
+    }
+  }, [open]);
+
+  const generateInvoiceNumber = async () => {
+    const { data } = await (supabase as any)
+      .from("invoices")
+      .select("invoice_number")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (data && data.length > 0) {
+      const lastNumber = data[0].invoice_number;
+      const match = lastNumber.match(/INV-(\d+)/);
+      if (match) {
+        const nextNum = parseInt(match[1]) + 1;
+        setFormData(prev => ({
+          ...prev,
+          invoice_number: `INV-${nextNum.toString().padStart(3, '0')}`
+        }));
+      } else {
+        setFormData(prev => ({ ...prev, invoice_number: "INV-001" }));
+      }
+    } else {
+      setFormData(prev => ({ ...prev, invoice_number: "INV-001" }));
+    }
+  };
+
+  const { data: invoices, isLoading } = useQuery({
+    queryKey: ["invoices"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("invoices")
+        .select(`
+          *, 
+          customers(id, name, phone, email, address),
+          orders(payment_status)
+        `)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: customers } = useQuery({
+    queryKey: ["customers"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("customers").select("*");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: products } = useQuery({
+    queryKey: ["products"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("products").select("*");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const { data: profile } = await (supabase as any)
+        .from("profiles")
+        .select("id")
+        .eq("user_id", user?.id)
+        .single();
+
+      if (editingDraftId) {
+        // Update existing draft
+        const { data: invoice, error: invoiceError } = await (supabase as any)
+          .from("invoices")
+          .update({
+            customer_id: data.customer_id,
+            date: data.date,
+            subtotal: parseFloat(data.subtotal),
+            tax: parseFloat(data.tax),
+            total: parseFloat(data.total),
+            payment_method: data.payment_method,
+            payment_status: "unpaid",
+            raw_payload: {
+              items: data.items,
+              discount: data.discount,
+              discount_type: data.discount_type,
+              coupon_code: data.coupon_code,
+              offer_description: data.offer_description,
+              paid_amount: data.paid_amount,
+              delivery_date: data.delivery_date,
+            },
+            status: "draft",
+          })
+          .eq("id", editingDraftId)
+          .select()
+          .single();
+
+        if (invoiceError) throw invoiceError;
+
+        // Delete existing items and re-insert
+        await (supabase as any)
+          .from("invoice_items")
+          .delete()
+          .eq("invoice_id", editingDraftId);
+
+        const itemsData = data.items.map((item: any) => ({
+          invoice_id: invoice.id,
+          sku: item.name,
+          name: item.name,
+          qty: parseFloat(item.qty),
+          unit_price: parseFloat(item.unit_price),
+          total: parseFloat(item.qty) * parseFloat(item.unit_price),
+        }));
+
+        const { error: itemsError } = await (supabase as any)
+          .from("invoice_items")
+          .insert(itemsData);
+
+        if (itemsError) throw itemsError;
+
+        return invoice;
+      } else {
+        // Create new draft
+        const { data: invoice, error: invoiceError } = await (supabase as any)
+          .from("invoices")
+          .insert([{
+            invoice_number: data.invoice_number,
+            customer_id: data.customer_id,
+            date: data.date,
+            subtotal: parseFloat(data.subtotal),
+            tax: parseFloat(data.tax),
+            total: parseFloat(data.total),
+            payment_method: data.payment_method,
+            payment_status: "unpaid",
+            uploaded_by: profile?.id,
+            raw_payload: {
+              items: data.items,
+              discount: data.discount,
+              discount_type: data.discount_type,
+              coupon_code: data.coupon_code,
+              offer_description: data.offer_description,
+              paid_amount: data.paid_amount,
+              delivery_date: data.delivery_date,
+            },
+            status: "draft",
+          }])
+          .select()
+          .single();
+
+        if (invoiceError) throw invoiceError;
+
+        const itemsData = data.items.map((item: any) => ({
+          invoice_id: invoice.id,
+          sku: item.name,
+          name: item.name,
+          qty: parseFloat(item.qty),
+          unit_price: parseFloat(item.unit_price),
+          total: parseFloat(item.qty) * parseFloat(item.unit_price),
+        }));
+
+        const { error: itemsError } = await (supabase as any)
+          .from("invoice_items")
+          .insert(itemsData);
+
+        if (itemsError) throw itemsError;
+
+        return invoice;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      toast.success(editingDraftId ? "Draft updated" : "Invoice saved as draft");
+      setOpen(false);
+      setEditingDraftId(null);
+      resetForm();
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const { data: profile } = await (supabase as any)
+        .from("profiles")
+        .select("id")
+        .eq("user_id", user?.id)
+        .single();
+
+      let invoice;
+
+      if (editingDraftId) {
+        // Finalize existing draft
+        const { data: updatedInvoice, error: invoiceError } = await (supabase as any)
+          .from("invoices")
+          .update({
+            customer_id: data.customer_id,
+            date: data.date,
+            subtotal: parseFloat(data.subtotal),
+            tax: parseFloat(data.tax),
+            total: parseFloat(data.total),
+            payment_method: data.payment_method,
+            payment_status: data.payment_status || "unpaid",
+            raw_payload: {
+              items: data.items,
+              discount: data.discount,
+              discount_type: data.discount_type,
+              coupon_code: data.coupon_code,
+              offer_description: data.offer_description,
+              paid_amount: data.paid_amount,
+              delivery_date: data.delivery_date,
+            },
+            status: "finalized",
+          })
+          .eq("id", editingDraftId)
+          .select()
+          .single();
+
+        if (invoiceError) throw invoiceError;
+        invoice = updatedInvoice;
+
+        // Delete existing items and re-insert
+        await (supabase as any)
+          .from("invoice_items")
+          .delete()
+          .eq("invoice_id", editingDraftId);
+      } else {
+        // Create new invoice
+        const { data: newInvoice, error: invoiceError } = await (supabase as any)
+          .from("invoices")
+          .insert([{
+            invoice_number: data.invoice_number,
+            customer_id: data.customer_id,
+            date: data.date,
+            subtotal: parseFloat(data.subtotal),
+            tax: parseFloat(data.tax),
+            total: parseFloat(data.total),
+            payment_method: data.payment_method,
+            payment_status: data.payment_status || "unpaid",
+            uploaded_by: profile?.id,
+            raw_payload: {
+              items: data.items,
+              discount: data.discount,
+              discount_type: data.discount_type,
+              coupon_code: data.coupon_code,
+              offer_description: data.offer_description,
+              paid_amount: data.paid_amount,
+              delivery_date: data.delivery_date,
+            },
+            status: "finalized",
+          }])
+          .select()
+          .single();
+
+        if (invoiceError) throw invoiceError;
+        invoice = newInvoice;
+      }
+
+      const itemsData = data.items.map((item: any) => ({
+        invoice_id: invoice.id,
+        sku: item.name,
+        name: item.name,
+        qty: parseFloat(item.qty),
+        unit_price: parseFloat(item.unit_price),
+        total: parseFloat(item.qty) * parseFloat(item.unit_price),
+      }));
+
+      const { error: itemsError } = await (supabase as any)
+        .from("invoice_items")
+        .insert(itemsData);
+
+      if (itemsError) throw itemsError;
+
+      // Create ONE order per invoice item (not per qty)
+      const ordersToInsert: any[] = [];
+      data.items.forEach((item: any, itemIndex: number) => {
+        const orderCode = `${data.invoice_number}-${item.name.substring(0, 3).toUpperCase()}`;
+        ordersToInsert.push({
+          order_code: orderCode,
+          invoice_id: invoice.id,
+          customer_id: data.customer_id,
+          total_amount: parseFloat(item.qty) * parseFloat(item.unit_price),
+          order_status: "pending",
+          payment_status: data.payment_status,
+          created_by: profile?.id,
+          metadata: {
+            item_name: item.name,
+            item_index: itemIndex,
+            qty: parseFloat(item.qty),
+            num_products: parseInt(item.num_products || 1),
+            unit_price: item.unit_price,
+            delivery_date: item.delivery_date,
+            reference_name: item.reference_name,
+          },
+        });
+      });
+
+      const { data: newOrders, error: orderError } = await (supabase as any)
+        .from("orders")
+        .insert(ordersToInsert)
+        .select();
+
+      if (orderError) throw orderError;
+
+      // Create initial "Ordered" stages for each product in each order
+      const stagesToInsert: any[] = [];
+      newOrders.forEach((order: any) => {
+        const numProducts = parseInt(order.metadata?.num_products || 1);
+
+        for (let productNum = 1; productNum <= numProducts; productNum++) {
+          stagesToInsert.push({
+            order_id: order.id,
+            stage_name: "Ordered",
+            status: "done",
+            start_ts: new Date().toISOString(),
+            end_ts: new Date().toISOString(),
+            metadata: {
+              product_number: productNum,
+              product_name: `${order.metadata?.item_name} - Product ${productNum}`,
+              auto_created: true,
+            }
+          });
+        }
+      });
+
+      if (stagesToInsert.length > 0) {
+        const { error: stagesError } = await (supabase as any)
+          .from("order_stages")
+          .insert(stagesToInsert);
+        if (stagesError) throw stagesError;
+      }
+
+      // Create initial "Ordered" stage for each order
+      if (newOrders) {
+        const stagesToInsert = newOrders.map((order: any) => ({
+          order_id: order.id,
+          stage_name: "Ordered",
+          status: "done",
+          start_ts: data.date,
+          end_ts: data.date,
+        }));
+
+        await (supabase as any).from("order_stages").insert(stagesToInsert);
+      }
+
+      return invoice;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success(editingDraftId ? "Invoice finalized and order created" : "Invoice and order created");
+      setOpen(false);
+      setEditingDraftId(null);
+      resetForm();
+    },
+  });
+
+  const createCustomerMutation = useMutation({
+    mutationFn: async (data: typeof newCustomer) => {
+      const { data: customer, error } = await (supabase as any)
+        .from("customers")
+        .insert([data])
+        .select()
+        .single();
+      if (error) throw error;
+      return customer;
+    },
+    onSuccess: (customer) => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      setFormData({ ...formData, customer_id: customer.id });
+      setCustomerDialogOpen(false);
+      setNewCustomer({ name: "", phone: "", email: "", address: "" });
+      toast.success("Customer added successfully");
+    },
+    onError: () => {
+      toast.error("Failed to add customer");
+    },
+  });
+
+  const handleAddCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    createCustomerMutation.mutate(newCustomer);
+  };
+
+  const resetForm = () => {
+    setFormData({
+      invoice_number: "",
+      customer_id: "",
+      date: new Date().toISOString().split("T")[0],
+      delivery_date: new Date().toISOString().split("T")[0],
+      subtotal: "0",
+      tax: "0",
+      discount: "0",
+      discount_type: "fixed",
+      coupon_code: "",
+      offer_description: "",
+      total: "0",
+      payment_method: "cash",
+      payment_status: "unpaid",
+      paid_amount: "0",
+    });
+    setItems([{ name: "", qty: "1", unit_price: "0", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createMutation.mutate({ ...formData, items });
+  };
+
+  const handleSaveDraft = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveDraftMutation.mutate({ ...formData, items });
+  };
+
+  const updateTotals = (updatedItems: any[], discountValue?: string, discountTypeValue?: string) => {
+    const subtotal = updatedItems.reduce(
+      (sum, item) => sum + parseFloat(item.qty || 0) * parseFloat(item.unit_price || 0),
+      0
+    );
+    const tax = subtotal * 0; // No tax for now
+
+    const discount = parseFloat(discountValue || formData.discount || "0");
+    const discountType = discountTypeValue || formData.discount_type;
+
+    let discountAmount = 0;
+    if (discountType === "percentage") {
+      discountAmount = (subtotal * discount) / 100;
+    } else {
+      discountAmount = discount;
+    }
+
+    const total = subtotal + tax - discountAmount;
+
+    setFormData(prev => ({
+      ...prev,
+      subtotal: subtotal.toString(),
+      tax: tax.toString(),
+      total: Math.max(0, total).toString()
+    }));
+  };
+
+  const addItem = () => {
+    setItems([...items, { name: "", qty: "1", unit_price: "0", num_products: "1", delivery_date: formData.delivery_date, reference_name: "" }]);
+  };
+
+  const removeItem = (index: number) => {
+    const newItems = items.filter((_, i) => i !== index);
+    setItems(newItems);
+    updateTotals(newItems);
+  };
+
+  const updateItem = (index: number, field: string, value: string) => {
+    const newItems = [...items];
+    newItems[index][field] = value;
+
+    setItems(newItems);
+    updateTotals(newItems);
+  };
+
+  // Filter invoices
+  const filteredInvoices = invoices?.filter(invoice => {
+    const matchesSearch =
+      invoice.invoice_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      invoice.customers?.name.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const isDraft = invoice.status === "draft";
+    const isPaid = invoice.orders?.every((o: any) => o.payment_status === "paid");
+
+    const matchesPayment =
+      paymentFilter === "all" ||
+      (paymentFilter === "draft" && isDraft) ||
+      (paymentFilter === "paid" && !isDraft && isPaid) ||
+      (paymentFilter === "unpaid" && !isDraft && !isPaid);
+
+    const matchesDate = !dateFilter ||
+      new Date(invoice.date).toISOString().split("T")[0] === dateFilter;
+
+    return matchesSearch && matchesPayment && matchesDate;
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from("invoices").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      toast.success("Invoice deleted");
+    },
+  });
+
+  return (
+    <div className="space-y-6 p-4 md:p-0">
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+        <h1 className="text-3xl font-bold">Invoices</h1>
+        <Dialog open={open} onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) {
+            resetForm();
+            setEditingDraftId(null);
+          }
+        }}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Invoice
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingDraftId ? "Edit Draft Invoice" : "Create Invoice"}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {/* Row 1: Invoice Number, Invoice Date, Delivery Date */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label htmlFor="invoice_number" className="text-xs">Invoice Number *</Label>
+                  <Input
+                    id="invoice_number"
+                    value={formData.invoice_number}
+                    onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
+                    required
+                    disabled
+                    className="bg-muted h-9"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="date" className="text-xs">Invoice Date *</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    required
+                    className="h-9"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="delivery_date" className="text-xs">Delivery Date *</Label>
+                  <Input
+                    id="delivery_date"
+                    type="date"
+                    value={formData.delivery_date}
+                    onChange={(e) => {
+                      const newDeliveryDate = e.target.value;
+                      setFormData({ ...formData, delivery_date: newDeliveryDate });
+                      setItems(items.map(item => ({ ...item, delivery_date: newDeliveryDate })));
+                    }}
+                    required
+                    className="h-9"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Customer dropdown with inline Add New */}
+              <div>
+                <Label htmlFor="customer_id" className="text-xs">Customer *</Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={formData.customer_id}
+                    onValueChange={(value) => setFormData({ ...formData, customer_id: value })}
+                    required
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers?.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.name} {customer.phone && `(${customer.phone})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCustomerDialogOpen(true)}
+                    className="h-9 whitespace-nowrap"
+                  >
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    Add New Customer
+                  </Button>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="space-y-2">
+                <Label className="text-xs">Items</Label>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="h-8 text-xs">Name *</TableHead>
+                        <TableHead className="h-8 text-xs w-20">Qty *</TableHead>
+                        <TableHead className="h-8 text-xs w-24">Price *</TableHead>
+                        <TableHead className="h-8 text-xs w-24">Product *</TableHead>
+                        <TableHead className="h-8 text-xs w-24">Total</TableHead>
+                        <TableHead className="h-8 text-xs">Customer Ref</TableHead>
+                        <TableHead className="h-8 text-xs w-32">Delivery Date *</TableHead>
+                        <TableHead className="h-8 text-xs w-12"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="p-2">
+                            <Input
+                              value={item.name}
+                              onChange={(e) => updateItem(index, "name", e.target.value)}
+                              required
+                              placeholder="Item name"
+                              className="h-8"
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input
+                              type="number"
+                              value={item.qty}
+                              onChange={(e) => updateItem(index, "qty", e.target.value)}
+                              required
+                              min="1"
+                              className="h-8"
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={item.unit_price}
+                              onChange={(e) => updateItem(index, "unit_price", e.target.value)}
+                              required
+                              placeholder="500.00"
+                              className="h-8"
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Select
+                              value={item.num_products}
+                              onValueChange={(value) => updateItem(index, "num_products", value)}
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">1</SelectItem>
+                                <SelectItem value="2">2</SelectItem>
+                                <SelectItem value="3">3</SelectItem>
+                                <SelectItem value="4">4</SelectItem>
+                                <SelectItem value="5">5</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input
+                              value={`₹${(parseFloat(item.qty || 0) * parseFloat(item.unit_price || 0)).toFixed(2)}`}
+                              disabled
+                              className="bg-muted h-8 font-medium"
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input
+                              value={item.reference_name}
+                              onChange={(e) => updateItem(index, "reference_name", e.target.value)}
+                              placeholder="Reference"
+                              className="h-8"
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input
+                              type="date"
+                              value={item.delivery_date}
+                              onChange={(e) => updateItem(index, "delivery_date", e.target.value)}
+                              required
+                              className="h-8"
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeItem(index)}
+                              disabled={items.length === 1}
+                              className="h-8 w-8"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addItem} className="w-full h-8">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add Item
+                </Button>
+              </div>
+
+              {/* Collapsible Discount Section */}
+              <Collapsible open={showDiscount} onOpenChange={setShowDiscount} className="border-t pt-3">
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="link" className="h-auto p-0 text-sm">
+                    {showDiscount ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
+                    Add Discount / Coupon
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label htmlFor="coupon_code" className="text-xs">Coupon Code</Label>
+                      <Input
+                        id="coupon_code"
+                        value={formData.coupon_code}
+                        onChange={(e) => setFormData({ ...formData, coupon_code: e.target.value })}
+                        placeholder="Enter code"
+                        className="h-9"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="discount_type" className="text-xs">Discount Type</Label>
+                      <Select
+                        value={formData.discount_type}
+                        onValueChange={(value) => {
+                          setFormData({ ...formData, discount_type: value });
+                          updateTotals(items, formData.discount, value);
+                        }}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fixed">₹ Fixed</SelectItem>
+                          <SelectItem value="percentage">% Percentage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="discount" className="text-xs">Amount</Label>
+                      <Input
+                        id="discount"
+                        type="number"
+                        step="0.01"
+                        value={formData.discount}
+                        onChange={(e) => {
+                          setFormData({ ...formData, discount: e.target.value });
+                          updateTotals(items, e.target.value, formData.discount_type);
+                        }}
+                        placeholder="0.00"
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              {/* Totals Section */}
+              <div className="border-t pt-3 space-y-1.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal:</span>
+                  <span className="font-medium">₹{parseFloat(formData.subtotal).toFixed(2)}</span>
+                </div>
+                {parseFloat(formData.discount) > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>Discount ({formData.discount_type === "percentage" ? `${formData.discount}%` : `₹${formData.discount}`}):</span>
+                    <span className="font-medium">
+                      -₹{(formData.discount_type === "percentage"
+                        ? (parseFloat(formData.subtotal) * parseFloat(formData.discount)) / 100
+                        : parseFloat(formData.discount)).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xl font-bold pt-1.5 border-t">
+                  <span>Total:</span>
+                  <span>₹{parseFloat(formData.total).toFixed(2)}</span>
+                </div>
+
+                {/* Advance Payment Row */}
+                <div className="flex justify-between items-center pt-1.5">
+                  <span className="text-sm">Advance:</span>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={formData.payment_method}
+                      onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
+                    >
+                      <SelectTrigger className="h-8 w-32 text-xs">
+                        <SelectValue placeholder="Mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="card">Card</SelectItem>
+                        <SelectItem value="upi">UPI</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.paid_amount}
+                      onChange={(e) => {
+                        const paidAmount = parseFloat(e.target.value) || 0;
+                        const total = parseFloat(formData.total) || 0;
+                        const status = paidAmount >= total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+                        setFormData({
+                          ...formData,
+                          paid_amount: e.target.value,
+                          payment_status: status
+                        });
+                      }}
+                      placeholder="0.00"
+                      className="h-8 w-32 text-right"
+                    />
+                    <span className="font-medium min-w-[100px] text-right">₹{parseFloat(formData.paid_amount || "0").toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Due Amount Row */}
+                <div className="flex justify-between text-lg font-semibold pt-1">
+                  <span>Due Amount:</span>
+                  <span className="text-destructive">₹{Math.max(0, parseFloat(formData.total) - parseFloat(formData.paid_amount || "0")).toFixed(2)}</span>
+                </div>
+              </div>
+
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={handleSaveDraft}
+                >
+                  {editingDraftId ? "Update Draft" : "Save as Draft"}
+                </Button>
+                <Button type="submit" className="flex-1">
+                  {editingDraftId ? "Finalize & Create Order" : "Create Invoice & Order"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Customer Dialog */}
+        <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Customer</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleAddCustomer} className="space-y-4">
+              <div>
+                <Label htmlFor="new_customer_name">Name *</Label>
+                <Input
+                  id="new_customer_name"
+                  value={newCustomer.name}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="new_customer_phone">Phone</Label>
+                <Input
+                  id="new_customer_phone"
+                  value={newCustomer.phone}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="new_customer_email">Email</Label>
+                <Input
+                  id="new_customer_email"
+                  type="email"
+                  value={newCustomer.email}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="new_customer_address">Address</Label>
+                <Input
+                  id="new_customer_address"
+                  value={newCustomer.address}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setCustomerDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Add Customer</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Search & Filter */}
+      <Card className="p-6">
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Search className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-xl font-semibold">Search & Filter Invoices</h2>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-4">
+            <Input
+              placeholder="Search by invoice number or customer..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1"
+            />
+
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-full md:w-auto"
+            />
+
+            <Tabs value={paymentFilter} onValueChange={setPaymentFilter} className="w-full md:w-auto">
+              <TabsList className="grid grid-cols-4 w-full md:w-auto">
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="paid">Paid</TabsTrigger>
+                <TabsTrigger value="unpaid">Unpaid</TabsTrigger>
+                <TabsTrigger value="draft">Draft</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Invoice #</TableHead>
+              <TableHead>Customer</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Total</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center">Loading...</TableCell>
+              </TableRow>
+            ) : filteredInvoices?.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center">No invoices found</TableCell>
+              </TableRow>
+            ) : (
+              filteredInvoices?.map((invoice: any) => {
+                const isPaid = invoice.orders?.every((o: any) => o.payment_status === "paid");
+                const isDraft = invoice.status === "draft";
+                return (
+                  <TableRow
+                    key={invoice.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => setSelectedInvoice(invoice)}
+                  >
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {invoice.invoice_number}
+                        {isDraft && <Badge variant="outline" className="text-xs">Draft</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell>{invoice.customers?.name || "-"}</TableCell>
+                    <TableCell>{new Date(invoice.date).toLocaleDateString()}</TableCell>
+                    <TableCell>₹{invoice.total}</TableCell>
+                    <TableCell>
+                      {isDraft ? (
+                        <Badge variant="secondary">Draft</Badge>
+                      ) : (
+                        <Badge variant={isPaid ? "success" : "warning"}>
+                          {isPaid ? "Paid" : "Unpaid"}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-2">
+                        {!isDraft && invoice.orders?.[0]?.id && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              navigate(`/orders/${invoice.orders[0].id}`);
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteMutation.mutate(invoice.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {selectedInvoice && (
+        <InvoiceView
+          invoice={selectedInvoice}
+          open={!!selectedInvoice}
+          onOpenChange={(open) => !open && setSelectedInvoice(null)}
+          onEditDraft={(invoice) => {
+            // Load draft data into form
+            setEditingDraftId(invoice.id);
+            setFormData({
+              invoice_number: invoice.invoice_number,
+              customer_id: invoice.customer_id,
+              date: new Date(invoice.date).toISOString().split("T")[0],
+              delivery_date: invoice.raw_payload?.delivery_date || new Date().toISOString().split("T")[0],
+              subtotal: invoice.subtotal.toString(),
+              tax: invoice.tax.toString(),
+              discount: invoice.raw_payload?.discount || "0",
+              discount_type: invoice.raw_payload?.discount_type || "fixed",
+              coupon_code: invoice.raw_payload?.coupon_code || "",
+              offer_description: invoice.raw_payload?.offer_description || "",
+              total: invoice.total.toString(),
+              payment_method: invoice.payment_method || "cash",
+              payment_status: invoice.payment_status || "unpaid",
+              paid_amount: invoice.raw_payload?.paid_amount || "0",
+            });
+            setItems(invoice.raw_payload?.items || [{ name: "", qty: "1", unit_price: "0", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
+            setSelectedInvoice(null);
+            setOpen(true);
+          }}
+        />
+      )}
+    </div>
+  );
+}
