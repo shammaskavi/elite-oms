@@ -221,7 +221,7 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                     </View>
                     <View style={styles.contactInfo}>
                         <Text>Opp: G.P.O., City Point, Near Old Bus Stop, Anand - 388 001</Text>
-                        <Text>Ph: 02692-3527056 (Store) | 99250 41003</Text>
+                        <Text>Ph: 02692-352706 (Store) | 99250 41003</Text>
                         <Text>email: sareepalaceanand@gmail.com | www.sareepalaceelite.com</Text>
                     </View>
                 </View>
