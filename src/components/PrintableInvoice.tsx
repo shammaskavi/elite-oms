@@ -163,7 +163,6 @@ const styles = StyleSheet.create({
         width: "100%",
         height: '100%',
         border: '1pt solid #9C27B0',
-        borderRadius: 6,
     },
 });
 
