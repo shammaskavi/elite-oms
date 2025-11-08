@@ -8,6 +8,7 @@ import {
     Image,
 } from '@react-pdf/renderer';
 import Logo from "../assets/logo.png";
+import qr from "../assets/payment-qr.png";
 
 // ---------------- STYLES ----------------
 const styles = StyleSheet.create({
@@ -47,6 +48,7 @@ const styles = StyleSheet.create({
     infoColLeft: { width: '65%', borderRight: '0.5pt solid #bbb' },
     infoColRight: { width: '35%' },
     infoRow: { flexDirection: 'row', borderBottom: '0.5pt solid #ddd', padding: 4 },
+    infoRowDelivery: { flexDirection: 'row', padding: 4 },
     infoLabel: { width: '35%', fontWeight: 'bold', color: '#333' },
     infoValue: { width: '65%', color: '#444' },
 
@@ -91,6 +93,11 @@ const styles = StyleSheet.create({
         paddingBottom: 2,
     },
     tncItem: { marginBottom: 2 },
+    tncCta: {
+        // textTransform: 'uppercase',
+        fontWeight: 'bold',
+        color: '#9C27B0',
+    },
 
     totalsBox: {
         width: '40%',
@@ -143,6 +150,20 @@ const styles = StyleSheet.create({
         fontSize: 9,
         color: '#777',
         marginTop: 2,
+    },
+    // QR Code
+    qrContainer: {
+        // position: 'absolute',
+        // bottom: 30, // Adjusted to place it near the bottom edge
+        // left: 30,   // Adjusted to place it near the left edge
+        width: 50,
+        height: 50,
+    },
+    qrImage: {
+        width: '100%',
+        height: '100%',
+        border: '1pt solid #9C27B0',
+        borderRadius: 6,
     },
 });
 
@@ -208,7 +229,9 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
 
     return (
         <Document title={`Invoice-${invoice_number}`}>
+            {/* change it to a4 if anything breaks  */}
             <Page size="A4" style={styles.page} wrap>
+                <Text style={{ fontStyle: "italic", fontSize: 9 }}>Bill Of Supply / Order Record</Text>
                 {/* GSTIN */}
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 3 }}>
                     <Text style={{ fontSize: 8, color: '#555' }}>GSTIN: {gstin}</Text>
@@ -262,10 +285,11 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                                 })}
                             </Text>
                         </View>
-                        <View style={styles.infoRow}>
+                        <View style={styles.infoRowDelivery}>
                             <Text style={styles.infoLabel}>Delivery Date:</Text>
                             <Text style={styles.infoValue}>
                                 {new Date(delivery_date).toLocaleDateString('en-IN', {
+                                    weekday: 'short', // e.g., "Sat"
                                     day: '2-digit',
                                     month: 'short',
                                     year: '2-digit',
@@ -317,10 +341,8 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                         </View>
 
                         <Text style={styles.tncTitle}>TERMS & CONDITIONS</Text>
-                        <Text style={styles.tncItem}>• Product & Care: No guarantee for color, zari, or cloth. Dry-clean only.</Text>
-                        <Text style={styles.tncItem}>• Sales Policy: Goods once sold will not be taken back or exchanged.</Text>
-                        <Text style={styles.tncItem}>• Customization & Payment: Extra charges may apply for customization. Payment due within 30 days; 18% interest applies thereafter.</Text>
-                        <Text style={styles.tncItem}>• Liability & Jurisdiction: We are not responsible for goods lost or damaged in transit. All disputes subject to Anand jurisdiction only.</Text>
+                        <Text style={styles.tncItem}>No guarantee on color, fabric, or zari; dry-clean only. Goods once sold are not returnable or exchangeable. Customizations may incur extra charges. Payment is due within 30 days; overdue payments attract 18% annual interest. We are not liable for loss or damage during transit. All disputes are subject to Anand jurisdiction only.</Text>
+                        <Text style={styles.tncCta}>For Order Pickups & Enquiries: 02692 352706</Text>
                     </View>
 
                     <View style={styles.totalsBox}>
@@ -353,6 +375,11 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                                 {remainingBalance > 0 ? formatCurrency(remainingBalance) : 'PAID'}
                             </Text>
                         </View>
+                        <View style={styles.totalRow}>
+                            <View style={styles.qrContainer}>
+                                <Image src={qr} style={styles.qrImage} />
+                            </View>
+                        </View>
 
                         {/* Payment Mode Tag */}
                         {raw_payload?.payment_method && (
@@ -373,6 +400,3 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
     );
 };
 
-
-// todo 
-// line height 
