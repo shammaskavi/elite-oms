@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     },
     tncTitle: {
         fontWeight: 'bold',
-        textAlign: 'center',
+        textAlign: 'left',
         marginVertical: 4,
         color: '#9C27B0',
         borderBottom: '0.5pt solid #9C27B0',
@@ -95,6 +95,7 @@ const styles = StyleSheet.create({
     tncItem: { marginBottom: 2 },
     tncCta: {
         // textTransform: 'uppercase',
+        fontSize: 13,
         fontWeight: 'bold',
         color: '#9C27B0',
     },
@@ -153,14 +154,13 @@ const styles = StyleSheet.create({
     },
     // QR Code
     qrContainer: {
-        // position: 'absolute',
-        // bottom: 30, // Adjusted to place it near the bottom edge
-        // left: 30,   // Adjusted to place it near the left edge
-        width: 50,
-        height: 50,
+        width: '100%',
+        height: 90,
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
     },
     qrImage: {
-        width: '100%',
+        width: "100%",
         height: '100%',
         border: '1pt solid #9C27B0',
         borderRadius: 6,
@@ -276,7 +276,7 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                             <Text style={styles.infoValue}>{invoice_number}</Text>
                         </View>
                         <View style={styles.infoRow}>
-                            <Text style={styles.infoLabel}>Date:</Text>
+                            <Text style={styles.infoLabel}>Order Date:</Text>
                             <Text style={styles.infoValue}>
                                 {new Date(date).toLocaleDateString('en-IN', {
                                     day: '2-digit',
@@ -341,8 +341,9 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                         </View>
 
                         <Text style={styles.tncTitle}>TERMS & CONDITIONS</Text>
-                        <Text style={styles.tncItem}>No guarantee on color, fabric, or zari; dry-clean only. Goods once sold are not returnable or exchangeable. Customizations may incur extra charges. Payment is due within 30 days; overdue payments attract 18% annual interest. We are not liable for loss or damage during transit. All disputes are subject to Anand jurisdiction only.</Text>
-                        <Text style={styles.tncCta}>For Order Pickups & Enquiries: 02692 352706</Text>
+                        <Text style={styles.tncItem}>No guarantee on color, fabric, or zari; dry-clean only. Goods once sold are not returnable or exchangeable. Customizations may incur extra charges. Payment is due within 30 days; overdue payments attract 18% annual interest. We are not liable for loss or damage during transit.</Text>
+                        <Text style={styles.tncItem}>All disputes are subject to Anand jurisdiction only.</Text>
+                        <Text style={styles.tncCta}>For Order Pickups & Enquiries: 02692-352706</Text>
                     </View>
 
                     <View style={styles.totalsBox}>
