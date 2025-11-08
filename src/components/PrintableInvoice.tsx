@@ -15,7 +15,7 @@ const styles = StyleSheet.create({
         flexDirection: 'column',
         padding: 25,
         fontFamily: 'Helvetica',
-        fontSize: 8.5,
+        fontSize: 11,
         border: '3pt solid #9C27B0',
         backgroundColor: '#fff',
     },
@@ -35,14 +35,14 @@ const styles = StyleSheet.create({
         paddingLeft: 5,
     },
     logo: { width: 'auto', height: 'auto', marginRight: 5 },
-    contactInfo: { width: '60%', fontSize: 7.5, lineHeight: 1.4, textAlign: 'right' },
+    contactInfo: { width: '60%', fontSize: 9.5, lineHeight: 1.4, textAlign: 'right' },
 
     // Info section
     infoSection: {
         flexDirection: 'row',
         border: '0.5pt solid #bbb',
         borderTop: 0,
-        fontSize: 8,
+        fontSize: 11,
     },
     infoColLeft: { width: '65%', borderRight: '0.5pt solid #bbb' },
     infoColRight: { width: '35%' },
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
         width: '60%',
         padding: 8,
         borderRight: '0.5pt solid #ccc',
-        fontSize: 8,
+        fontSize: 9,
         lineHeight: 1.4,
     },
     tncTitle: {
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     paymentTag: {
         marginTop: 6,
         textAlign: 'right',
-        fontSize: 8,
+        fontSize: 9,
         color: '#555',
         fontStyle: 'italic',
     },
@@ -136,11 +136,11 @@ const styles = StyleSheet.create({
     },
     signatureText: {
         fontWeight: 'bold',
-        fontSize: 9,
+        fontSize: 11,
         color: '#333',
     },
     thankText: {
-        fontSize: 7,
+        fontSize: 9,
         color: '#777',
         marginTop: 2,
     },
@@ -372,3 +372,7 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
         </Document>
     );
 };
+
+
+// todo 
+// line height 
