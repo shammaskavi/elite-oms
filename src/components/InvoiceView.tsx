@@ -60,6 +60,7 @@ export function InvoiceView({
   const invoiceDocument = useMemo(() => {
     const pdfData = {
       ...invoice,
+      delivery_date: invoice.raw_payload?.delivery_date,
       isPaid: isPaid || remainingBalance === 0,
       remainingBalance,
     };
@@ -250,6 +251,11 @@ Here is your Saree Palace Elite invoice.
             </p>
             <p className="text-sm mt-1">📞 {invoice.customers?.phone || "N/A"}</p>
             <p className="text-sm mt-1">📍 {invoice.customers?.address || "N/A"}</p>
+            <p className="text-sm mt-1">🗓️ {new Date(invoice.raw_payload.delivery_date).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: '2-digit',
+            }) || "N/A"}</p>
           </div>
 
           {/* Items (restored) */}

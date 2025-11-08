@@ -5,7 +5,7 @@ import {
     View,
     Text,
     StyleSheet,
-    Image
+    Image,
 } from '@react-pdf/renderer';
 import Logo from "../assets/logo.png";
 
@@ -174,6 +174,7 @@ interface RawPayload {
 interface InvoiceData {
     invoice_number: string;
     date: string;
+    delivery_date?: string;
     total: number;
     subtotal: number;
     tax: number;
@@ -189,6 +190,7 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
     const {
         invoice_number,
         date,
+        delivery_date,
         total,
         subtotal,
         tax,
@@ -219,7 +221,7 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                     </View>
                     <View style={styles.contactInfo}>
                         <Text>Opp: G.P.O., City Point, Near Old Bus Stop, Anand - 388 001</Text>
-                        <Text>Ph: 02692-251003 (Store) | 02692-244043 (Home) | 99250 41003</Text>
+                        <Text>Ph: 02692-3527056 (Store) | 99250 41003</Text>
                         <Text>email: sareepalaceanand@gmail.com | www.sareepalaceelite.com</Text>
                     </View>
                 </View>
@@ -254,6 +256,16 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                             <Text style={styles.infoLabel}>Date:</Text>
                             <Text style={styles.infoValue}>
                                 {new Date(date).toLocaleDateString('en-IN', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: '2-digit',
+                                })}
+                            </Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Delivery Date:</Text>
+                            <Text style={styles.infoValue}>
+                                {new Date(delivery_date).toLocaleDateString('en-IN', {
                                     day: '2-digit',
                                     month: 'short',
                                     year: '2-digit',
@@ -305,13 +317,10 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                         </View>
 
                         <Text style={styles.tncTitle}>TERMS & CONDITIONS</Text>
-                        <Text style={styles.tncItem}>• No Guarantee for Color, Zari & Cloth.</Text>
-                        <Text style={styles.tncItem}>• Strictly Advised to Dry-Clean Only.</Text>
-                        <Text style={styles.tncItem}>• Goods once sold will not be taken back or exchanged.</Text>
-                        <Text style={styles.tncItem}>• Extra charges for customization may incur.</Text>
-                        <Text style={styles.tncItem}>• Payment to be collected within 30 days; thereafter, 18% interest will be charged.</Text>
-                        <Text style={styles.tncItem}>• We are not responsible for any lost or damaged goods in transit.</Text>
-                        <Text style={styles.tncItem}>• Subject to Anand Jurisdiction only.</Text>
+                        <Text style={styles.tncItem}>• Product & Care: No guarantee for color, zari, or cloth. Dry-clean only.</Text>
+                        <Text style={styles.tncItem}>• Sales Policy: Goods once sold will not be taken back or exchanged.</Text>
+                        <Text style={styles.tncItem}>• Customization & Payment: Extra charges may apply for customization. Payment due within 30 days; 18% interest applies thereafter.</Text>
+                        <Text style={styles.tncItem}>• Liability & Jurisdiction: We are not responsible for goods lost or damaged in transit. All disputes subject to Anand jurisdiction only.</Text>
                     </View>
 
                     <View style={styles.totalsBox}>
