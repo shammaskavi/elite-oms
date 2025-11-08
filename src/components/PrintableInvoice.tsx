@@ -149,8 +149,8 @@ const styles = StyleSheet.create({
 // ---------------- HELPER ----------------
 const formatCurrency = (amount: number | string, decimals = 2): string => {
     const num = parseFloat(String(amount));
-    if (isNaN(num)) return `₹0.00`;
-    return `₹${num.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+    if (isNaN(num)) return `Rs 0.00`;
+    return `Rs ${num.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
 // ---------------- INTERFACES ----------------
