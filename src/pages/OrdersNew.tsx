@@ -57,6 +57,7 @@ export default function OrdersNew() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("orders")
+        // add delivery date 
         .select(`
           *,
           customers(name),
@@ -420,8 +421,12 @@ export default function OrdersNew() {
                             <p className="font-semibold text-sm">{createdDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                           </div>
                           <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Age</p>
-                            <p className="font-semibold text-sm">{daysOld} {daysOld === 1 ? 'day' : 'days'}</p>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Delivery Date</p>
+                            <p className="font-semibold text-sm">
+                              {order.metadata?.delivery_date
+                                ? new Date(order.metadata.delivery_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                                : '-'}
+                            </p>
                           </div>
                           <div className="space-y-1">
                             <p className="text-xs text-muted-foreground uppercase tracking-wide">Amount</p>
@@ -523,7 +528,7 @@ export default function OrdersNew() {
                               </div>
 
                               <p className="text-xs font-medium truncate">
-                                {order.metadata?.item?.name || order.metadata?.item?.sku || "Order"}
+                                {order.metadata?.item_name || "Order Item"}
                               </p>
 
                               <div className="text-xs space-y-1">
