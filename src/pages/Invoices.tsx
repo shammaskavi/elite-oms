@@ -47,6 +47,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { format } from "date-fns";
+
 
 export default function Invoices() {
   const [open, setOpen] = useState(false);
@@ -1145,7 +1147,7 @@ export default function Invoices() {
                       </div>
                     </TableCell>
                     <TableCell>{invoice.customers?.name || "-"}</TableCell>
-                    <TableCell>{new Date(invoice.date).toLocaleDateString()}</TableCell>
+                    <TableCell>{format(new Date(invoice.date), "dd/MM/yyyy")}</TableCell>
                     <TableCell>₹{invoice.total}</TableCell>
                     <TableCell>
                       {isDraft ? (
