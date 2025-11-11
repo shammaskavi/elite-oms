@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -19,13 +19,29 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 export default function Customers() {
   const [open, setOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<any>(null);
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState("all");
+
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -34,57 +50,88 @@ export default function Customers() {
     dob: "",
     anniversary: "",
   });
+
   const queryClient = useQueryClient();
 
+  // 🧭 Fetch customers with related invoices
   const { data: customers, isLoading } = useQuery({
-    queryKey: ["customers"],
+    queryKey: ["customers-with-invoices"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customers")
-        .select("*")
+        .select(`
+          *,
+          invoices (
+            id,
+            total,
+            payment_status
+          )
+        `)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
   });
 
+  // ➕ Create customer
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const { error } = await supabase.from("customers").insert([data]);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["customers-with-invoices"] });
       toast.success("Customer created");
       setOpen(false);
       resetForm();
     },
   });
 
+  // ✏️ Update customer
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: any) => {
       const { error } = await supabase.from("customers").update(data).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["customers-with-invoices"] });
       toast.success("Customer updated");
       setOpen(false);
       resetForm();
     },
   });
 
+  // ❌ Delete customer with dependency check
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("customers").delete().eq("id", id);
+      const { data: relatedInvoices, error } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("customer_id", id);
+
       if (error) throw error;
+
+      if (relatedInvoices?.length > 0) {
+        throw new Error(`Cannot delete: Customer has ${relatedInvoices.length} invoice(s).`);
+      }
+
+      const { error: deleteError } = await supabase.from("customers").delete().eq("id", id);
+      if (deleteError) throw deleteError;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["customers-with-invoices"] });
       toast.success("Customer deleted");
+      setDeleteDialogOpen(false);
+      setCustomerToDelete(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete customer");
+      setDeleteDialogOpen(false);
+      setCustomerToDelete(null);
     },
   });
 
+  // 🧹 Reset form
   const resetForm = () => {
     setFormData({ name: "", phone: "", email: "", address: "", dob: "", anniversary: "" });
     setEditingCustomer(null);
@@ -121,8 +168,32 @@ export default function Customers() {
     setOpen(true);
   };
 
+  // 🧮 Filter & search customers
+  const filteredCustomers = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+
+    return customers
+      ?.filter((c: any) => {
+        const matchesSearch =
+          c.name?.toLowerCase().includes(q) || c.phone?.toLowerCase().includes(q);
+
+        const hasInvoices = c.invoices && c.invoices.length > 0;
+        const hasPending = c.invoices?.some((inv: any) => inv.payment_status !== "paid");
+        const allPaid =
+          hasInvoices && c.invoices.every((inv: any) => inv.payment_status === "paid");
+
+        if (filterType === "pending") return hasPending && matchesSearch;
+        if (filterType === "paid") return allPaid && matchesSearch;
+        if (filterType === "no-invoices") return !hasInvoices && matchesSearch;
+
+        return matchesSearch; // "all"
+      })
+      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [customers, searchQuery, filterType]);
+
   return (
     <div className="space-y-6">
+      {/* 🧾 Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Customers</h1>
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetForm(); }}>
@@ -197,6 +268,35 @@ export default function Customers() {
         </Dialog>
       </div>
 
+      {/* 🔍 Search & Filter (Tabs Style) */}
+      <Card className="p-6">
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Search className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-xl font-semibold">Search & Filter Customers</h2>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-4">
+            <Input
+              placeholder="Search by name or phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1"
+            />
+
+            <Tabs value={filterType} onValueChange={setFilterType} className="w-full md:w-auto">
+              <TabsList className="grid grid-cols-4 w-full md:w-auto">
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="pending">Pending</TabsTrigger>
+                <TabsTrigger value="paid">Paid</TabsTrigger>
+                <TabsTrigger value="no-invoices">No Invoices</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
+      </Card>
+
+      {/* 🧍 Customers Table */}
       <Card>
         <Table>
           <TableHeader>
@@ -205,40 +305,45 @@ export default function Customers() {
               <TableHead>Phone</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Address</TableHead>
+              {/* <TableHead>Invoices</TableHead> */}
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={6} className="text-center">Loading...</TableCell>
               </TableRow>
-            ) : customers?.length === 0 ? (
+            ) : filteredCustomers?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">No customers found</TableCell>
+                <TableCell colSpan={6} className="text-center">No customers found</TableCell>
               </TableRow>
             ) : (
-              customers?.map((customer) => (
+              filteredCustomers?.map((customer: any) => (
                 <TableRow key={customer.id}>
                   <TableCell className="font-medium">{customer.name}</TableCell>
                   <TableCell>{customer.phone || "-"}</TableCell>
                   <TableCell>{customer.email || "-"}</TableCell>
                   <TableCell>{customer.address || "-"}</TableCell>
+                  {/* <TableCell>
+                    {customer.invoices?.length > 0
+                      ? `${customer.invoices.length} invoice(s)`
+                      : "—"}
+                  </TableCell> */}
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(customer)}
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(customer)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => deleteMutation.mutate(customer.id)}
+                        onClick={() => {
+                          setCustomerToDelete(customer);
+                          setDeleteDialogOpen(true);
+                        }}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4 text-destructive" />
                       </Button>
                     </div>
                   </TableCell>
@@ -248,6 +353,29 @@ export default function Customers() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* ⚠️ Delete Confirmation */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-semibold">{customerToDelete?.name}</span>?<br />
+              This action cannot be undone. If this customer has invoices, deletion will be blocked.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white"
+              onClick={() => deleteMutation.mutate(customerToDelete.id)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

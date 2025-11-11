@@ -14,6 +14,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 import {
   Dialog,
   DialogContent,
@@ -39,6 +51,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 export default function Invoices() {
   const [open, setOpen] = useState(false);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<string>("all");
@@ -554,16 +568,104 @@ export default function Invoices() {
     return matchesSearch && matchesPayment && matchesDate;
   });
 
+  // const deleteMutation = useMutation({
+  //   mutationFn: async (id: string) => {
+  //     const { error } = await (supabase as any).from("invoices").delete().eq("id", id);
+  //     if (error) throw error;
+  //   },
+  //   onSuccess: () => {
+  //     queryClient.invalidateQueries({ queryKey: ["invoices"] });
+  //     toast.success("Invoice deleted");
+  //   },
+  // });
+
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (supabase as any).from("invoices").delete().eq("id", id);
-      if (error) throw error;
+    mutationFn: async (invoiceId: string) => {
+      const toastId = toast.loading("Deleting invoice and related data...");
+
+      try {
+        // Fetch related orders
+        const { data: relatedOrders, error: ordersFetchError } = await supabase
+          .from("orders")
+          .select("id")
+          .eq("invoice_id", invoiceId);
+
+        if (ordersFetchError) {
+          toast.error(`Fetch error on orders: ${ordersFetchError.message}`);
+          throw ordersFetchError;
+        }
+
+        console.log("Related orders:", relatedOrders);
+
+        // Delete order stages if any
+        if (relatedOrders?.length) {
+          const orderIds = relatedOrders.map((o) => o.id);
+
+          const { error: stageError } = await supabase
+            .from("order_stages")
+            .delete()
+            .in("order_id", orderIds);
+
+          if (stageError) {
+            toast.error(`RLS or delete error on order_stages: ${stageError.message}`);
+            console.error("Stage delete failed:", stageError);
+            throw stageError;
+          }
+
+          // Delete orders
+          const { error: ordersError } = await supabase
+            .from("orders")
+            .delete()
+            .in("id", orderIds);
+
+          if (ordersError) {
+            toast.error(`RLS or delete error on orders: ${ordersError.message}`);
+            console.error("Orders delete failed:", ordersError);
+            throw ordersError;
+          }
+        }
+
+        // Delete invoice items
+        const { error: itemsError } = await supabase
+          .from("invoice_items")
+          .delete()
+          .eq("invoice_id", invoiceId);
+
+        if (itemsError) {
+          toast.error(`RLS or delete error on invoice_items: ${itemsError.message}`);
+          console.error("Invoice items delete failed:", itemsError);
+          throw itemsError;
+        }
+
+        // Delete invoice
+        const { error: invoiceError } = await supabase
+          .from("invoices")
+          .delete()
+          .eq("id", invoiceId);
+
+        if (invoiceError) {
+          toast.error(`RLS or delete error on invoices: ${invoiceError.message}`);
+          console.error("Invoice delete failed:", invoiceError);
+          throw invoiceError;
+        }
+
+        toast.success("Invoice and related data deleted successfully");
+      } catch (error: any) {
+        console.error("Full delete trace:", error);
+        toast.error(error.message || "Delete failed - check console for details");
+        throw error;
+      } finally {
+        toast.dismiss(toastId);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      toast.success("Invoice deleted");
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      setDeleteDialogOpen(false);
+      setInvoiceToDelete(null);
     },
   });
+
 
   return (
     <div className="space-y-6 p-4 md:p-0">
@@ -1070,10 +1172,15 @@ export default function Invoices() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => deleteMutation.mutate(invoice.id)}
+                          onClick={() => {
+                            setInvoiceToDelete(invoice);
+                            setDeleteDialogOpen(true);
+                          }}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
+
+
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1083,6 +1190,35 @@ export default function Invoices() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* 🔥 Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Invoice</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete invoice{" "}
+              <b>{invoiceToDelete?.invoice_number}</b>? <br />
+              This will also permanently delete related{" "}
+              <b>orders</b>, <b>order stages</b>, and <b>invoice items</b>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => {
+                if (invoiceToDelete) {
+                  deleteMutation.mutate(invoiceToDelete.id);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       {selectedInvoice && (
         <InvoiceView

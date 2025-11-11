@@ -514,6 +514,9 @@ export default function OrdersNew() {
                       stageOrders.map((order: any) => {
                         const currentStageIndex = STAGES.indexOf(stage);
                         const nextStage = STAGES[currentStageIndex + 1];
+                        // get vendor name
+                        const currentKanbanStageEntry = order.order_stages?.find((s: any) => s.stage_name === stage);
+                        const vendorName = currentKanbanStageEntry?.vendor_name;
 
                         return (
                           <Card key={order.id} className={`p-3 hover:shadow-md transition-shadow ${getCardClassName(order.order_status)}`}>
@@ -531,6 +534,12 @@ export default function OrdersNew() {
                                 {order.metadata?.item_name || "Order Item"}
                               </p>
 
+                              {/* DISPLAY VENDOR NAME using the stage entry */}
+                              {vendorName && (
+                                <p className="text-sm font-semibold text-primary/80">
+                                  <span className="font-medium text-muted-foreground">Vendor:</span> {vendorName}
+                                </p>
+                              )}
                               <div className="text-xs space-y-1">
                                 <p className="text-muted-foreground">
                                   <span className="font-medium">Customer:</span> {order.customers?.name || "-"}
