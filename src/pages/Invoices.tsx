@@ -77,7 +77,7 @@ export default function Invoices() {
     total: "0",
     payment_method: "cash",
     payment_status: "unpaid",
-    paid_amount: "0",
+    paid_amount: "",
   });
   const [newCustomer, setNewCustomer] = useState({
     name: "",
@@ -86,7 +86,7 @@ export default function Invoices() {
     address: "",
   });
   const [items, setItems] = useState<any[]>([
-    { name: "", qty: "1", unit_price: "0", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" },
+    { name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" },
   ]);
   const queryClient = useQueryClient();
 
@@ -494,9 +494,9 @@ export default function Invoices() {
       total: "0",
       payment_method: "cash",
       payment_status: "unpaid",
-      paid_amount: "0",
+      paid_amount: "",
     });
-    setItems([{ name: "", qty: "1", unit_price: "0", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
+    setItems([{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -537,7 +537,7 @@ export default function Invoices() {
   };
 
   const addItem = () => {
-    setItems([...items, { name: "", qty: "1", unit_price: "0", num_products: "1", delivery_date: formData.delivery_date, reference_name: "" }]);
+    setItems([...items, { name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: formData.delivery_date, reference_name: "" }]);
   };
 
   const removeItem = (index: number) => {
@@ -808,15 +808,16 @@ export default function Invoices() {
                               min="1"
                               className="h-8"
                             />
+                            {/* updated with no zersos */}
                           </TableCell>
                           <TableCell className="p-2">
                             <Input
-                              type="number"
-                              step="0.01"
+                              type="text"
+                              inputMode="decimal"
                               value={item.unit_price}
-                              onChange={(e) => updateItem(index, "unit_price", e.target.value)}
+                              onChange={(e) => updateItem(index, "unit_price", e.target.value.replace(/[^\d.]/g, ""))}
                               required
-                              placeholder="500.00"
+                              placeholder="Enter Price"
                               className="h-8"
                             />
                           </TableCell>
@@ -981,20 +982,31 @@ export default function Invoices() {
                       </SelectContent>
                     </Select>
                     <Input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={formData.paid_amount}
                       onChange={(e) => {
-                        const paidAmount = parseFloat(e.target.value) || 0;
-                        const total = parseFloat(formData.total) || 0;
-                        const status = paidAmount >= total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+                        // Allow only numbers and decimal points
+                        const rawValue = e.target.value.replace(/[^\d.]/g, "");
+
+                        // Convert empty string safely to 0 for calculation
+                        const paidAmount = parseFloat(rawValue || "0");
+                        const total = parseFloat(formData.total || "0");
+
+                        const status =
+                          paidAmount >= total
+                            ? "paid"
+                            : paidAmount > 0
+                              ? "partial"
+                              : "unpaid";
+
                         setFormData({
                           ...formData,
-                          paid_amount: e.target.value,
-                          payment_status: status
+                          paid_amount: rawValue, // keep actual typed value (even "")
+                          payment_status: status,
                         });
                       }}
-                      placeholder="0.00"
+                      placeholder="Enter Advance"
                       className="h-8 w-32 text-right"
                     />
                     <span className="font-medium min-w-[100px] text-right">₹{parseFloat(formData.paid_amount || "0").toFixed(2)}</span>
@@ -1251,7 +1263,7 @@ export default function Invoices() {
               payment_status: invoice.payment_status || "unpaid",
               paid_amount: invoice.raw_payload?.paid_amount || "0",
             });
-            setItems(invoice.raw_payload?.items || [{ name: "", qty: "1", unit_price: "0", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
+            setItems(invoice.raw_payload?.items || [{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
             setSelectedInvoice(null);
             setOpen(true);
           }}
