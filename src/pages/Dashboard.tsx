@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Dashboard() {
-  const [timePeriod, setTimePeriod] = useState<string>("month");
+  const [timePeriod, setTimePeriod] = useState<string>("today");
   const [stats, setStats] = useState({
     totalOrders: 0,
     pendingOrders: 0,
@@ -171,12 +171,20 @@ export default function Dashboard() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending (This Month)</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending {timePeriod === "today" ? "Today" :
+              timePeriod === "week" ? "This week" :
+                timePeriod === "month" ? "This month" :
+                  timePeriod === "quarter" ? "This quarter" :
+                    timePeriod === "year" ? "This year" : "All time"}</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.pendingOrders}</div>
-            <p className="text-xs text-muted-foreground mt-1">Active orders this month</p>
+            <p className="text-xs text-muted-foreground mt-1">Active orders {timePeriod === "today" ? "Today" :
+              timePeriod === "week" ? "This week" :
+                timePeriod === "month" ? "This month" :
+                  timePeriod === "quarter" ? "This quarter" :
+                    timePeriod === "year" ? "This year" : "All time"}</p>
           </CardContent>
         </Card>
         <Card>
@@ -190,7 +198,11 @@ export default function Dashboard() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenue (30d)</CardTitle>
+            <CardTitle className="text-sm font-medium">Revenue {timePeriod === "today" ? "Today" :
+              timePeriod === "week" ? "This week" :
+                timePeriod === "month" ? "This month" :
+                  timePeriod === "quarter" ? "This quarter" :
+                    timePeriod === "year" ? "This year" : "All time"}</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
