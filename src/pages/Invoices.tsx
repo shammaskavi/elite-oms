@@ -205,6 +205,7 @@ export default function Invoices() {
           qty: parseFloat(item.qty),
           unit_price: parseFloat(item.unit_price),
           total: parseFloat(item.qty) * parseFloat(item.unit_price),
+          reference_name: item.reference_name ?? null, // ← added
         }));
 
         const { error: itemsError } = await (supabase as any)
@@ -251,6 +252,8 @@ export default function Invoices() {
           qty: parseFloat(item.qty),
           unit_price: parseFloat(item.unit_price),
           total: parseFloat(item.qty) * parseFloat(item.unit_price),
+          reference_name: item.reference_name ?? null, // ✅ added
+
         }));
 
         const { error: itemsError } = await (supabase as any)
@@ -355,6 +358,8 @@ export default function Invoices() {
         qty: parseFloat(item.qty),
         unit_price: parseFloat(item.unit_price),
         total: parseFloat(item.qty) * parseFloat(item.unit_price),
+        reference_name: item.reference_name ?? null, // ✅ added
+
       }));
 
       const { error: itemsError } = await (supabase as any)
@@ -686,7 +691,7 @@ export default function Invoices() {
               Create Invoice
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-6xl max-h-[100vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingDraftId ? "Edit Draft Invoice" : "Create Invoice"}</DialogTitle>
             </DialogHeader>

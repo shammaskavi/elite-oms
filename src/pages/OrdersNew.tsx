@@ -29,15 +29,16 @@ import { toast } from "sonner";
 
 const STAGES = [
   "Ordered",
+  "Fabric",
   "Dyeing",
   "Polishing",
   "Embroidery",
   "Stitching",
-  "Dangling",
-  "Inward",
+  "Dangling / Jhalar",
+  "Fall & beading",
   "Packed",
   "Dispatched",
-  "Delivered",
+  "Delivered"
 ];
 
 export default function OrdersNew() {

@@ -25,18 +25,49 @@ import { toast } from "sonner";
 import { ArrowLeft, ChevronDown, Trash2 } from "lucide-react";
 import { OrderTimeline } from "@/components/OrderTimeline";
 
-const STAGES = [
-    "Ordered",
-    "Dyeing",
-    "Polishing",
-    "Embroidery",
-    "Stitching",
-    "Dangling",
-    "Inward",
-    "Packed",
-    "Dispatched",
-    "Delivered",
+export const STAGES = [
+    {
+        name: "Ordered",
+        vendors: ["Sri Om Fabrics", "Hariom Fabrics", "Jhalak", "Others"],
+    },
+    {
+        name: "Dyeing",
+        vendors: ["Vijay", "Ali"],
+    },
+    {
+        name: "Polishing",
+        vendors: ["Sobi", "Nadeem"],
+    },
+    {
+        name: "Embroidery",
+        vendors: ["Bashar", "Jawed", "Sajjad", "Manish"],
+    },
+    {
+        name: "Stitching",
+        vendors: ["Master", "Rajni", "Jayesh", "Chetan", "Shoaib", "Anees"],
+    },
+    {
+        name: "Dangling / Jhalar",
+        vendors: ["Home", "Chachi"],
+    },
+    {
+        name: "Fall & Beading",
+        vendors: ["Chachi", "Munni"],
+    },
+    {
+        name: "Packed",
+        vendors: [],
+    },
+    {
+        name: "Dispatched",
+        vendors: ["Tirupati", "Par Courier", "Charotar"],
+    },
+    {
+        name: "Delivered",
+        vendors: [],
+    },
 ];
+
 
 export default function OrderDetailNew() {
     const { id } = useParams();

@@ -1,3 +1,5 @@
+// obselete
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useParams, useNavigate } from "react-router-dom";
@@ -308,7 +310,7 @@ export default function OrderDetail() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Start New Stage</DialogTitle>
+                <DialogTitle>Start New Stage nigga</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
