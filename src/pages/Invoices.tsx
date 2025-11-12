@@ -174,7 +174,7 @@ export default function Invoices() {
             tax: parseFloat(data.tax),
             total: parseFloat(data.total),
             payment_method: data.payment_method,
-            payment_status: "unpaid",
+            payment_status: data.payment_status,
             raw_payload: {
               items: data.items,
               discount: data.discount,
@@ -227,7 +227,7 @@ export default function Invoices() {
             tax: parseFloat(data.tax),
             total: parseFloat(data.total),
             payment_method: data.payment_method,
-            payment_status: "unpaid",
+            payment_status: data.payment_status,
             uploaded_by: profile?.id,
             raw_payload: {
               items: data.items,
@@ -506,8 +506,22 @@ export default function Invoices() {
 
   const handleSaveDraft = (e: React.FormEvent) => {
     e.preventDefault();
-    saveDraftMutation.mutate({ ...formData, items });
+
+    // Recalculate payment status before saving
+    const paidAmount = parseFloat(formData.paid_amount || "0");
+    const total = parseFloat(formData.total || "0");
+
+    const payment_status =
+      paidAmount >= total
+        ? "paid"
+        : paidAmount > 0
+          ? "partial"
+          : "unpaid";
+
+    // Pass corrected value to the mutation
+    saveDraftMutation.mutate({ ...formData, items, payment_status });
   };
+
 
   const updateTotals = (updatedItems: any[], discountValue?: string, discountTypeValue?: string) => {
     const subtotal = updatedItems.reduce(
