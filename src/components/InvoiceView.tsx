@@ -48,7 +48,7 @@ export function InvoiceView({
   const [isEditingPayment, setIsEditingPayment] = useState(false);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
 
-  const isPaid = invoice.orders?.every((o: any) => o.payment_status === "paid");
+  const isPaid = invoice.payment_status === "paid";
   const isDraft = invoice.status === "draft";
 
   const remainingBalance = useMemo(() => {
@@ -149,29 +149,43 @@ Here is your Saree Palace Elite invoice.
   // Mark paid/unpaid
   const updatePaymentMutation = useMutation({
     mutationFn: async (status: "paid" | "unpaid") => {
-      const { error } = await supabase
+      const newPaidAmount = status === "paid" ? parseFloat(invoice.total) : 0;
+
+      // Update all orders linked to this invoice
+      const { error: orderError } = await supabase
         .from("orders")
         .update({ payment_status: status })
         .eq("invoice_id", invoice.id);
-      if (error) throw error;
+      if (orderError) throw orderError;
 
+      // Update invoice (both top-level + raw_payload)
       const { error: invoiceError } = await supabase
         .from("invoices")
         .update({
+          payment_status: status, // ✅ top-level status update
           raw_payload: {
             ...invoice.raw_payload,
             payment_status: status,
-            paid_amount: status === "paid" ? invoice.total : 0,
+            paid_amount: newPaidAmount,
           },
         })
         .eq("id", invoice.id);
+
       if (invoiceError) throw invoiceError;
     },
     onSuccess: (_, status) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      toast.success(`Payment status updated to ${status}`);
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success(
+        status === "paid" ? "Marked as Paid successfully" : "Marked as Unpaid successfully"
+      );
+    },
+    onError: (error) => {
+      console.error("Error updating payment status:", error);
+      toast.error("Failed to update payment status. Check console for details.");
     },
   });
+
 
   // Partial payment mutation
   const updatePartialPaymentMutation = useMutation({

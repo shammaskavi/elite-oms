@@ -575,7 +575,19 @@ export default function Invoices() {
       invoice.customers?.name.toLowerCase().includes(searchQuery.toLowerCase());
 
     const isDraft = invoice.status === "draft";
-    const isPaid = invoice.orders?.every((o: any) => o.payment_status === "paid");
+
+    // Determine payment status
+    const paymentStatus =
+      invoice.payment_status ||
+      invoice.raw_payload?.payment_status ||
+      (invoice.orders?.every((o: any) => o.payment_status === "paid") ? "paid" : "unpaid");
+
+    // Derived flags
+    const isPaid = paymentStatus === "paid";
+    const isPartial = paymentStatus === "partial";
+    const isUnpaid = paymentStatus === "unpaid";
+
+
 
     const matchesPayment =
       paymentFilter === "all" ||
@@ -588,17 +600,6 @@ export default function Invoices() {
 
     return matchesSearch && matchesPayment && matchesDate;
   });
-
-  // const deleteMutation = useMutation({
-  //   mutationFn: async (id: string) => {
-  //     const { error } = await (supabase as any).from("invoices").delete().eq("id", id);
-  //     if (error) throw error;
-  //   },
-  //   onSuccess: () => {
-  //     queryClient.invalidateQueries({ queryKey: ["invoices"] });
-  //     toast.success("Invoice deleted");
-  //   },
-  // });
 
   const deleteMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
@@ -1163,8 +1164,18 @@ export default function Invoices() {
               </TableRow>
             ) : (
               filteredInvoices?.map((invoice: any) => {
-                const isPaid = invoice.orders?.every((o: any) => o.payment_status === "paid");
                 const isDraft = invoice.status === "draft";
+
+                // Determine payment status safely (top-level → raw_payload → orders)
+                const paymentStatus =
+                  invoice.payment_status ||
+                  invoice.raw_payload?.payment_status ||
+                  (invoice.orders?.every((o: any) => o.payment_status === "paid") ? "paid" : "unpaid");
+
+                // Derived flags
+                const isPaid = paymentStatus === "paid";
+                const isPartial = paymentStatus === "partial";
+                const isUnpaid = paymentStatus === "unpaid";
                 return (
                   <TableRow
                     key={invoice.id}
@@ -1183,12 +1194,15 @@ export default function Invoices() {
                     <TableCell>
                       {isDraft ? (
                         <Badge variant="secondary">Draft</Badge>
+                      ) : isPaid ? (
+                        <Badge variant="success">Paid</Badge>
+                      ) : isPartial ? (
+                        <Badge variant="info">Partial</Badge>
                       ) : (
-                        <Badge variant={isPaid ? "success" : "warning"}>
-                          {isPaid ? "Paid" : "Unpaid"}
-                        </Badge>
+                        <Badge variant="warning">Unpaid</Badge>
                       )}
                     </TableCell>
+
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-2">
                         {!isDraft && invoice.orders?.[0]?.id && (
