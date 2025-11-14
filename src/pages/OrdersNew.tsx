@@ -382,107 +382,142 @@ export default function OrdersNew() {
                 const daysOld = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
 
                 return (
-                  <Card key={order.id} className={`p-5 hover:shadow-lg transition-all border-l-4 ${getCardClassName(order.order_status)}`}
-                    style={{ borderLeftColor: order.order_status === "delivered" ? "hsl(var(--success))" : "hsl(var(--warning))" }}>
-                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                      <div className="space-y-3 flex-1">
-
-                        {/* Title Row */}
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h3 className="font-bold text-xl">
-                            #{order.order_code}
-                          </h3>
-                          <Badge className={`${getStatusColor(order.order_status)} uppercase text-xs font-semibold px-3 py-1`}>
+                  // this is the start of order card
+                  <Card
+                    key={order.id}
+                    className={`p-4 rounded-xl border-l-4 hover:shadow-md transition-all ${getCardClassName(order.order_status)}`}
+                    style={{
+                      borderLeftColor:
+                        order.order_status === "delivered"
+                          ? "hsl(var(--success))"
+                          : "hsl(var(--warning))",
+                    }}
+                  >
+                    {/* --- Top Row --- */}
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center flex-wrap gap-2">
+                          <h3 className="font-semibold text-base sm:text-lg">#{order.order_code}</h3>
+                          <Badge
+                            className={`${getStatusColor(order.order_status)} text-[10px] px-2 py-0.5`}
+                          >
                             {order.order_status}
                           </Badge>
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="outline" className="text-[10px] px-2 py-0.5">
                             {currentStage}
                           </Badge>
                         </div>
 
-                        {/* Item Info */}
-                        <div className="space-y-1">
-                          <div className="text-base font-medium text-foreground">
-                            {order.metadata?.item_name || "Order Item"}
-                          </div>
-                          {order.metadata?.reference_name && (
-                            <div className="text-sm text-muted-foreground">
-                              Ref: {order.metadata.reference_name}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Key Information Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
-                          <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Customer</p>
-                            <p className="font-semibold text-sm">{order.customers?.name || "-"}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Order Date</p>
-                            <p className="font-semibold text-sm">{createdDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Delivery Date</p>
-                            <p className="font-semibold text-sm">
-                              {order.metadata?.delivery_date
-                                ? new Date(order.metadata.delivery_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                                : '-'}
-                            </p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wide">Amount</p>
-                            <p className="font-semibold text-sm">₹{order.total_amount || 0}</p>
-                          </div>
-                        </div>
-
-                        {/* Progress Indicator */}
-                        <div className="flex items-center gap-2 pt-2">
-                          <div className="flex gap-1">
-                            {STAGES.map((stage, idx) => {
-                              const currentIdx = STAGES.indexOf(currentStage);
-                              const isDelivered = order.order_status === "delivered";
-                              const isCompleted = isDelivered ? true : idx <= currentIdx;
-                              return (
-                                <div
-                                  key={stage}
-                                  className={`w-8 h-1.5 rounded-full transition-colors ${isCompleted ? 'bg-success' : 'bg-muted'
-                                    }`}
-                                  title={stage}
-                                />
-                              );
-                            })}
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {order.order_status === "delivered" ? STAGES.length : STAGES.indexOf(currentStage) + 1}/{STAGES.length}
-                          </span>
-                        </div>
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {order.metadata?.item_name || "Order Item"}
+                        </p>
+                        {order.metadata?.reference_name && (
+                          <p className="text-xs text-muted-foreground">Ref: {order.metadata.reference_name}</p>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setConfirmDialog({ open: true, orderId: order.id, action: "delivered" })}>
-                              Mark as Delivered
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setConfirmDialog({ open: true, orderId: order.id, action: "cancelled" })}>
-                              Mark as Cancelled
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link to={`/orders/${order.id}`} className="w-full">
-                                View Details
-                              </Link>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link to={`/orders/${order.id}`} className="w-full">
+                              View Details
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setConfirmDialog({
+                                open: true,
+                                orderId: order.id,
+                                action: "delivered",
+                              })
+                            }
+                          >
+                            Mark as Delivered
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setConfirmDialog({
+                                open: true,
+                                orderId: order.id,
+                                action: "cancelled",
+                              })
+                            }
+                          >
+                            Mark as Cancelled
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    {/* --- Compact Info Row --- */}
+                    <div className="mt-3 flex flex-wrap justify-between text-sm text-muted-foreground">
+                      <div className="flex flex-col">
+                        <span className="text-[11px] uppercase tracking-wide">Customer</span>
+                        <span className="font-semibold text-foreground">
+                          {order.customers?.name || "-"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col text-right">
+                        <span className="text-[11px] uppercase tracking-wide">Amount</span>
+                        <span className="font-semibold text-foreground">
+                          ₹{order.total_amount?.toLocaleString("en-IN") || 0}
+                        </span>
                       </div>
                     </div>
+
+                    {/* --- Date Row --- */}
+                    <div className="mt-2 flex justify-between text-xs sm:text-sm text-muted-foreground">
+                      <span>
+                        🗓️{" "}
+                        {createdDate.toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </span>
+                      <span>
+                        📦{" "}
+                        {order.metadata?.delivery_date
+                          ? new Date(order.metadata.delivery_date).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                          : "-"}
+                      </span>
+                    </div>
+
+                    {/* --- Progress Indicator --- */}
+                    <div className="mt-3 flex items-center gap-2">
+                      <div className="flex gap-[2px] flex-1">
+                        {STAGES.map((stage, idx) => {
+                          const currentIdx = STAGES.indexOf(currentStage);
+                          const isDelivered = order.order_status === "delivered";
+                          const isCompleted = isDelivered ? true : idx <= currentIdx;
+                          return (
+                            <div
+                              key={stage}
+                              className={`h-1.5 rounded-full flex-1 transition-colors ${isCompleted ? "bg-success" : "bg-muted"
+                                }`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">
+                        {order.order_status === "delivered"
+                          ? STAGES.length
+                          : STAGES.indexOf(currentStage) + 1}
+                        /{STAGES.length}
+                      </span>
+                    </div>
                   </Card>
+
+                  // this is the end of order card
                 );
               })}
             </div>
@@ -559,6 +594,11 @@ export default function OrdersNew() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
+                                    <DropdownMenuItem asChild>
+                                      <Link to={`/orders/${order.id}`} className="w-full">
+                                        View Details
+                                      </Link>
+                                    </DropdownMenuItem>
                                     {nextStage && (
                                       <DropdownMenuItem
                                         onClick={() => updateStageMutation.mutate({
@@ -574,11 +614,6 @@ export default function OrdersNew() {
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => setConfirmDialog({ open: true, orderId: order.id, action: "cancelled" })}>
                                       Mark as Cancelled
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem asChild>
-                                      <Link to={`/orders/${order.id}`} className="w-full">
-                                        View Details
-                                      </Link>
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
