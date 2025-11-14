@@ -131,12 +131,12 @@ export default function Dashboard() {
               New Invoice
             </Button>
           </Link>
-          <Link to="/invoices">
+          {/* <Link to="/invoices">
             <Button variant="outline">
               <Plus className="mr-2 h-4 w-4" />
               New Order
             </Button>
-          </Link>
+          </Link> */}
         </div>
       </div>
 
