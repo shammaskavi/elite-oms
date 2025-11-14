@@ -92,15 +92,18 @@ export default function Invoices() {
 
   // Auto-generate invoice number when dialog opens
   useEffect(() => {
-    if (open) {
+    // ✅ Only auto-generate invoice number for NEW invoices
+    if (open && !editingDraftId) {
       generateInvoiceNumber();
     }
-  }, [open]);
+  }, [open, editingDraftId]);
+
 
   const generateInvoiceNumber = async () => {
     const { data } = await (supabase as any)
       .from("invoices")
       .select("invoice_number")
+      .eq("status", "finalized") // ✅ Only finalized invoices count
       .order("created_at", { ascending: false })
       .limit(1);
 

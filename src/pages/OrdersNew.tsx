@@ -386,6 +386,7 @@ export default function OrdersNew() {
                     style={{ borderLeftColor: order.order_status === "delivered" ? "hsl(var(--success))" : "hsl(var(--warning))" }}>
                     <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                       <div className="space-y-3 flex-1">
+
                         {/* Title Row */}
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="font-bold text-xl">
