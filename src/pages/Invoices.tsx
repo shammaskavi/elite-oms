@@ -26,6 +26,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+
+
 import {
   Dialog,
   DialogContent,
@@ -41,17 +43,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Search, Eye, UserPlus, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Search, Eye, UserPlus, ChevronDown, ChevronUp, Check, ChevronsUpDown } from "lucide-react";
+import { Command } from "@/components/ui/command";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
+import { PopoverContent, Popover, PopoverTrigger } from "@/components/ui/popover";
+import { CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+
+import { cn } from "@/lib/utils";
 
 
 export default function Invoices() {
   const [open, setOpen] = useState(false);
+  const [customerComboboxOpen, setCustomerComboboxOpen] = useState(false);
+  const [customerInput, setCustomerInput] = useState("");
+
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
@@ -788,37 +798,110 @@ export default function Invoices() {
               </div>
 
               {/* Row 2: Customer dropdown with inline Add New */}
+              {/* CUSTOMER FIELD */}
               <div>
-                <Label htmlFor="customer_id" className="text-xs">Customer *</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.customer_id}
-                    onValueChange={(value) => setFormData({ ...formData, customer_id: value })}
-                    required
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Select customer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers?.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.name} {customer.phone && `(${customer.phone})`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
+                <div className="flex items-center justify-between mb-2">
+                  <Label htmlFor="customer_id">Customer *</Label>
+
+                  {/* Add New Customer Button */}
+                  {/* <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    onClick={() => setCustomerDialogOpen(true)}
-                    className="h-9 whitespace-nowrap"
+                    onClick={() => {
+                      setNewCustomer({ name: customerInput, phone: "", email: "", address: "" });
+                      setCustomerDialogOpen(true);
+                    }}
+                    className="h-auto py-1 px-2"
                   >
-                    <UserPlus className="w-4 h-4 mr-1" />
-                    Add New Customer
-                  </Button>
+                    <UserPlus className="w-3 h-3 mr-1" />
+                    Add New
+                  </Button> */}
                 </div>
+
+                <Popover open={customerComboboxOpen} onOpenChange={setCustomerComboboxOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={customerComboboxOpen}
+                      className="w-full justify-between"
+                    >
+                      {formData.customer_id
+                        ? (() => {
+                          const c = customers?.find((x) => x.id === formData.customer_id);
+                          return c ? `${c.name}${c.phone ? ` (${c.phone})` : ""}` : "Select customer...";
+                        })()
+                        : "Select customer..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+
+                  <PopoverContent className="w-[400px] p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search customers..."
+                        value={customerInput}
+                        onValueChange={(value) => {
+                          setCustomerInput(value);
+                          setFormData((prev) => ({ ...prev, customer_id: "" }));
+                        }}
+                      />
+
+                      <CommandList>
+                        <CommandEmpty>No customer found.</CommandEmpty>
+
+                        <CommandGroup>
+                          {/* MATCHING CUSTOMERS */}
+                          {customers
+                            ?.filter((customer) =>
+                              `${customer.name} ${customer.phone || ""}`
+                                .toLowerCase()
+                                .includes(customerInput.toLowerCase())
+                            )
+                            .map((customer) => (
+                              <CommandItem
+                                key={customer.id}
+                                value={`${customer.name} ${customer.phone || ""}`}
+                                onSelect={() => {
+                                  setFormData({ ...formData, customer_id: customer.id });
+                                  setCustomerInput(customer.name);
+                                  setCustomerComboboxOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    formData.customer_id === customer.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {customer.name} {customer.phone && `(${customer.phone})`}
+                              </CommandItem>
+                            ))}
+
+                          {/* CREATE NEW CUSTOMER IF NO MATCHING ITEM */}
+                          {customers?.filter((c) =>
+                            `${c.name} ${c.phone}`.toLowerCase().includes(customerInput.toLowerCase())
+                          ).length === 0 && customerInput.length > 0 && (
+                              <CommandItem
+                                value={`Create ${customerInput}`}
+                                onSelect={() => {
+                                  setNewCustomer({ name: customerInput, phone: "", email: "", address: "" });
+                                  setCustomerDialogOpen(true);
+                                }}
+                                className="text-blue-600 font-medium"
+                              >
+                                + Create new customer “{customerInput}”
+                              </CommandItem>
+                            )}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
+
+
 
               {/* Items Table */}
               <div className="space-y-2">
