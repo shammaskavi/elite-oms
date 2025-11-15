@@ -99,24 +99,51 @@ export default function Invoices() {
   }, [open, editingDraftId]);
 
 
+  // const generateInvoiceNumber = async () => {
+  //   const { data } = await (supabase as any)
+  //     .from("invoices")
+  //     .select("invoice_number")
+  //     .order("created_at", { ascending: false });
+
+  //   if (data && data.length > 0) {
+  //     // Extract numbers like 001, 002, 021
+  //     const numbers = data
+  //       .map(inv => {
+  //         const match = inv.invoice_number?.match(/INV-(\d+)/);
+  //         return match ? parseInt(match[1]) : null;
+  //       })
+  //       .filter(n => n !== null);
+
+  //     const maxNum = Math.max(...numbers);
+  //     const nextNum = maxNum + 1;
+
+  //     setFormData(prev => ({
+  //       ...prev,
+  //       invoice_number: `INV-${String(nextNum).padStart(3, "0")}`,
+  //     }));
+  //   } else {
+  //     setFormData(prev => ({ ...prev, invoice_number: "INV-001" }));
+  //   }
+  // };
+
   const generateInvoiceNumber = async () => {
-    const { data } = await (supabase as any)
+    const { data, error } = await supabase
       .from("invoices")
       .select("invoice_number")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error("Invoice number fetch error:", error);
+      setFormData(prev => ({ ...prev, invoice_number: "INV-001" }));
+      return;
+    }
 
     if (data && data.length > 0) {
-      // Extract numbers like 001, 002, 021
-      const numbers = data
-        .map(inv => {
-          const match = inv.invoice_number?.match(/INV-(\d+)/);
-          return match ? parseInt(match[1]) : null;
-        })
-        .filter(n => n !== null);
+      const last = data[0].invoice_number;
+      const match = last.match(/INV-(\d+)/);
 
-      const maxNum = Math.max(...numbers);
-      const nextNum = maxNum + 1;
-
+      const nextNum = match ? parseInt(match[1]) + 1 : 1;
       setFormData(prev => ({
         ...prev,
         invoice_number: `INV-${String(nextNum).padStart(3, "0")}`,
