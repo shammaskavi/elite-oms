@@ -17,6 +17,7 @@ import {
   Printer,
   Loader2,
   AlertTriangle,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePDF, pdf } from "@react-pdf/renderer";
@@ -416,7 +417,6 @@ Here is your Saree Palace Elite invoice.
           )}
 
           {/* Actions */}
-          {/* Actions */}
           <div className="flex flex-wrap gap-3">
             {isDraft ? (
               <>
@@ -424,8 +424,14 @@ Here is your Saree Palace Elite invoice.
                   <p className="text-sm font-medium mb-2">
                     This invoice is currently a draft. You can continue editing it before finalizing.
                   </p>
-                  <Button onClick={() => onEditDraft?.(invoice)} className="w-full">
+                  <Button onClick={() => onEditDraft?.(invoice)} className="mr-2" >
+                    <Pencil className="w-4 h-4 mr-2" />
                     Continue Editing
+                  </Button>
+
+                  <Button onClick={handlePrint} variant="outline">
+                    <Printer className="w-4 h-4 mr-2" />
+                    Print Invoice
                   </Button>
                 </div>
               </>
@@ -450,13 +456,13 @@ Here is your Saree Palace Elite invoice.
                   )}
                 </Button>
 
-                <Button
+                {/* <Button
                   onClick={() => updatePaymentMutation.mutate(isPaid ? "unpaid" : "paid")}
                   variant={isPaid ? "outline" : "default"}
                 >
                   <DollarSign className="w-4 h-4 mr-2" />
                   Mark as {isPaid ? "Unpaid" : "Paid"}
-                </Button>
+                </Button> */}
               </>
             )}
           </div>

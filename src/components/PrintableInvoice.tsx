@@ -124,6 +124,20 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#333',
     },
+
+    discountLabel: {
+        width: '55%',
+        textAlign: 'right',
+        paddingRight: 5,
+        fontWeight: 'bold',
+        color: "#9C27B0"
+    },
+    discountValue: {
+        width: '45%',
+        textAlign: 'right',
+        fontWeight: 'bold',
+        color: "#9C27B0"
+    },
     balanceValue: { color: 'red' },
 
     remarksBox: { padding: 4, marginTop: 4, fontSize: 8, minHeight: 40 },
@@ -189,6 +203,7 @@ interface RawPayload {
     items: InvoiceItem[];
     payment_method?: string;
     paid_amount?: number;
+    discount?: number;
     remarks?: string;
 }
 interface InvoiceData {
@@ -223,6 +238,7 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
 
     const items = raw_payload?.items || [];
     const paidAmount = parseFloat(String(raw_payload?.paid_amount || 0));
+    const discount = parseFloat(String(raw_payload?.discount || 0));
     const finalTotal = parseFloat(String(total || subtotal || 0));
     const fillerCount = Math.max(0, 12 - items.length);
 
@@ -349,6 +365,10 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                         <View style={styles.totalRow}>
                             <Text style={styles.totalLabel}>SUBTOTAL</Text>
                             <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
+                        </View>
+                        <View style={styles.totalRow}>
+                            <Text style={styles.discountLabel}>DISCOUNT</Text>
+                            <Text style={styles.discountValue}>{formatCurrency(discount)}</Text>
                         </View>
                         {tax > 0 && (
                             <View style={styles.totalRow}>
