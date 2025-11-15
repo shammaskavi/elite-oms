@@ -103,26 +103,29 @@ export default function Invoices() {
     const { data } = await (supabase as any)
       .from("invoices")
       .select("invoice_number")
-      .eq("status", "finalized") // ✅ Only finalized invoices count
-      .order("created_at", { ascending: false })
-      .limit(1);
+      .order("created_at", { ascending: false });
 
     if (data && data.length > 0) {
-      const lastNumber = data[0].invoice_number;
-      const match = lastNumber.match(/INV-(\d+)/);
-      if (match) {
-        const nextNum = parseInt(match[1]) + 1;
-        setFormData(prev => ({
-          ...prev,
-          invoice_number: `INV-${nextNum.toString().padStart(3, '0')}`
-        }));
-      } else {
-        setFormData(prev => ({ ...prev, invoice_number: "INV-001" }));
-      }
+      // Extract numbers like 001, 002, 021
+      const numbers = data
+        .map(inv => {
+          const match = inv.invoice_number?.match(/INV-(\d+)/);
+          return match ? parseInt(match[1]) : null;
+        })
+        .filter(n => n !== null);
+
+      const maxNum = Math.max(...numbers);
+      const nextNum = maxNum + 1;
+
+      setFormData(prev => ({
+        ...prev,
+        invoice_number: `INV-${String(nextNum).padStart(3, "0")}`,
+      }));
     } else {
       setFormData(prev => ({ ...prev, invoice_number: "INV-001" }));
     }
   };
+
 
   const { data: invoices, isLoading } = useQuery({
     queryKey: ["invoices"],
@@ -509,6 +512,7 @@ export default function Invoices() {
 
   const handleSaveDraft = (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
 
     // Recalculate payment status before saving
     const paidAmount = parseFloat(formData.paid_amount || "0");
@@ -521,9 +525,10 @@ export default function Invoices() {
           ? "partial"
           : "unpaid";
 
-    // Pass corrected value to the mutation
+    // Correct mutation (THIS WAS WRONG BEFORE)
     saveDraftMutation.mutate({ ...formData, items, payment_status });
   };
+
 
 
   const updateTotals = (updatedItems: any[], discountValue?: string, discountTypeValue?: string) => {
