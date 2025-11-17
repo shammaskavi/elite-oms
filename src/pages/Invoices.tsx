@@ -319,6 +319,7 @@ export default function Invoices() {
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
+      // fetch profile
       const { data: profile } = await (supabase as any)
         .from("profiles")
         .select("id")
@@ -327,8 +328,9 @@ export default function Invoices() {
 
       let invoice;
 
+      // ------- CREATE or FINALIZE INVOICE -------
       if (editingDraftId) {
-        // Finalize existing draft
+        // Finalize existing draft invoice
         const { data: updatedInvoice, error: invoiceError } = await (supabase as any)
           .from("invoices")
           .update({
@@ -354,14 +356,22 @@ export default function Invoices() {
           .select()
           .single();
 
-        if (invoiceError) throw invoiceError;
+        if (invoiceError) {
+          console.error("Invoice update error:", invoiceError);
+          throw invoiceError;
+        }
         invoice = updatedInvoice;
 
-        // Delete existing items and re-insert
-        await (supabase as any)
+        // Delete and re-insert invoice_items for the draft (keeps items in sync)
+        const { error: delItemsError } = await (supabase as any)
           .from("invoice_items")
           .delete()
           .eq("invoice_id", editingDraftId);
+
+        if (delItemsError) {
+          console.error("Failed to delete previous invoice_items:", delItemsError);
+          throw delItemsError;
+        }
       } else {
         // Create new invoice
         const { data: newInvoice, error: invoiceError } = await (supabase as any)
@@ -390,10 +400,20 @@ export default function Invoices() {
           .select()
           .single();
 
-        if (invoiceError) throw invoiceError;
+        if (invoiceError) {
+          console.error("Invoice create error:", invoiceError);
+          throw invoiceError;
+        }
         invoice = newInvoice;
       }
 
+      // Sanity check: invoice must exist
+      if (!invoice || !invoice.id) {
+        console.error("Invoice creation/update returned no id. invoice:", invoice);
+        throw new Error("Invoice not created — aborting order creation.");
+      }
+
+      // ------- INSERT invoice_items -------
       const itemsData = data.items.map((item: any) => ({
         invoice_id: invoice.id,
         sku: item.name,
@@ -401,20 +421,44 @@ export default function Invoices() {
         qty: parseFloat(item.qty),
         unit_price: parseFloat(item.unit_price),
         total: parseFloat(item.qty) * parseFloat(item.unit_price),
-        reference_name: item.reference_name ?? null, // ✅ added
-
+        reference_name: item.reference_name ?? null,
       }));
 
       const { error: itemsError } = await (supabase as any)
         .from("invoice_items")
         .insert(itemsData);
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error("invoice_items insert error:", itemsError);
+        throw itemsError;
+      }
 
-      // Create ONE order per invoice item (not per qty)
+      // ------- ORDERS: avoid duplicates when finalizing a draft -------
+      // If we are finalizing a draft (editingDraftId) then check if orders already exist.
+      const { data: existingOrders, error: existingOrdersError } = await (supabase as any)
+        .from("orders")
+        .select("id")
+        .eq("invoice_id", invoice.id)
+        .limit(1);
+
+      if (existingOrdersError) {
+        console.error("Error checking existing orders:", existingOrdersError);
+        throw existingOrdersError;
+      }
+
+      const shouldCreateOrders = !existingOrders || existingOrders.length === 0;
+
+      if (!shouldCreateOrders) {
+        // Orders already exist for this invoice — skip creating them again.
+        console.info("Orders already exist for invoice, skipping orders creation. invoice.id=", invoice.id);
+        return invoice;
+      }
+
+      // ------- CREATE ORDERS -------
       const ordersToInsert: any[] = [];
       data.items.forEach((item: any, itemIndex: number) => {
-        const orderCode = `${data.invoice_number}-${item.name.substring(0, 3).toUpperCase()}`;
+        const orderCode = `${data.invoice_number}-${item.name.substring(0, 3).toUpperCase()}-${itemIndex + 1}`;
+
         ordersToInsert.push({
           order_code: orderCode,
           invoice_id: invoice.id,
@@ -440,13 +484,15 @@ export default function Invoices() {
         .insert(ordersToInsert)
         .select();
 
-      if (orderError) throw orderError;
+      if (orderError) {
+        console.error("orders insert error:", orderError);
+        throw orderError;
+      }
 
-      // Create initial "Ordered" stages for each product in each order
+      // ------- CREATE order_stages for each product in each order -------
       const stagesToInsert: any[] = [];
-      newOrders.forEach((order: any) => {
+      (newOrders || []).forEach((order: any) => {
         const numProducts = parseInt(order.metadata?.num_products || 1);
-
         for (let productNum = 1; productNum <= numProducts; productNum++) {
           stagesToInsert.push({
             order_id: order.id,
@@ -467,20 +513,11 @@ export default function Invoices() {
         const { error: stagesError } = await (supabase as any)
           .from("order_stages")
           .insert(stagesToInsert);
-        if (stagesError) throw stagesError;
-      }
 
-      // Create initial "Ordered" stage for each order
-      if (newOrders) {
-        const stagesToInsert = newOrders.map((order: any) => ({
-          order_id: order.id,
-          stage_name: "Ordered",
-          status: "done",
-          start_ts: data.date,
-          end_ts: data.date,
-        }));
-
-        await (supabase as any).from("order_stages").insert(stagesToInsert);
+        if (stagesError) {
+          console.error("order_stages insert error:", stagesError);
+          throw stagesError;
+        }
       }
 
       return invoice;
@@ -544,6 +581,11 @@ export default function Invoices() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Require a customer before finalizing invoice
+    if (!formData.customer_id) {
+      toast.error("Please select a customer before creating the invoice.");
+      return;
+    }
     createMutation.mutate({ ...formData, items });
   };
 
