@@ -366,6 +366,16 @@ Here is your Saree Palace Elite invoice.
             )}
           </div>
 
+          {/* Remarks */}
+          {invoice.raw_payload?.remarks && invoice.raw_payload.remarks.trim() !== "" && (
+            <div className="border rounded-lg p-4 bg-muted/50">
+              <h3 className="font-semibold mb-2">Remarks</h3>
+              <p className="text-sm whitespace-pre-line text-muted-foreground">
+                {invoice.raw_payload.remarks}
+              </p>
+            </div>
+          )}
+
           {/* Partial Payment Section */}
           {!isPaid && (
             <div className="border rounded-lg p-4 bg-muted/30">

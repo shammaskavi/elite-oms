@@ -88,6 +88,7 @@ export default function Invoices() {
     payment_method: "cash",
     payment_status: "unpaid",
     paid_amount: "",
+    remarks: "",
   });
   const [newCustomer, setNewCustomer] = useState({
     name: "",
@@ -226,6 +227,7 @@ export default function Invoices() {
               offer_description: data.offer_description,
               paid_amount: data.paid_amount,
               delivery_date: data.delivery_date,
+              remarks: data.remarks || "",
             },
             status: "draft",
           })
@@ -280,6 +282,7 @@ export default function Invoices() {
               offer_description: data.offer_description,
               paid_amount: data.paid_amount,
               delivery_date: data.delivery_date,
+              remarks: data.remarks || "",
             },
             status: "draft",
           }])
@@ -349,6 +352,7 @@ export default function Invoices() {
               offer_description: data.offer_description,
               paid_amount: data.paid_amount,
               delivery_date: data.delivery_date,
+              remarks: data.remarks || "",
             },
             status: "finalized",
           })
@@ -394,6 +398,7 @@ export default function Invoices() {
               offer_description: data.offer_description,
               paid_amount: data.paid_amount,
               delivery_date: data.delivery_date,
+              remarks: data.remarks || "",
             },
             status: "finalized",
           }])
@@ -575,6 +580,7 @@ export default function Invoices() {
       payment_method: "cash",
       payment_status: "unpaid",
       paid_amount: "",
+      remarks: "",
     });
     setItems([{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
   };
@@ -1117,6 +1123,19 @@ export default function Invoices() {
                 </CollapsibleContent>
               </Collapsible>
 
+              {/* Remarks Section */}
+              <div>
+                <Label htmlFor="remarks" className="text-xs">Remarks (optional)</Label>
+                <textarea
+                  id="remarks"
+                  rows={3}
+                  value={formData.remarks}
+                  onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                  placeholder="Add any notes or special instructions..."
+                  className="w-full border rounded-md p-2 text-sm"
+                />
+              </div>
+
               {/* Totals Section */}
               <div className="border-t pt-3 space-y-1.5">
                 <div className="flex justify-between text-sm">
@@ -1450,6 +1469,7 @@ export default function Invoices() {
               payment_method: invoice.payment_method || "cash",
               payment_status: invoice.payment_status || "unpaid",
               paid_amount: invoice.raw_payload?.paid_amount || "0",
+              remarks: invoice.raw_payload?.remarks || "",
             });
             setItems(invoice.raw_payload?.items || [{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
             setSelectedInvoice(null);
