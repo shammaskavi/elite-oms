@@ -6,9 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Eye, Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, MoreVertical } from "lucide-react";
+import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, MoreVertical } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,20 +26,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
-const STAGES = [
-  "Ordered",
-  "Fabric",
-  "Dyeing",
-  "Polishing",
-  "Embroidery",
-  "Stitching",
-  "Dangling / Jhalar",
-  "Fall & beading",
-  "Packed",
-  "Dispatched",
-  "Delivered"
-];
-
 export default function OrdersNew() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -53,17 +38,17 @@ export default function OrdersNew() {
   });
   const queryClient = useQueryClient();
 
+  // --- Fetch orders (with relations) ---
   const { data: orders, isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("orders")
-        // add delivery date 
         .select(`
           *,
           customers(name),
           invoices(invoice_number),
-          order_stages(stage_name, status)
+          order_stages(*)
         `)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -71,13 +56,42 @@ export default function OrdersNew() {
     },
   });
 
+  // --- Fetch stages from DB (order by order_index) ---
+  const { data: stagesData } = useQuery({
+    queryKey: ["stages"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("stages")
+        .select("*")
+        .order("order_index", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // --- Fetch vendors (optional, handy later) ---
+  const { data: vendors } = useQuery({
+    queryKey: ["vendors"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("vendors")
+        .select("*")
+        .eq("active", true);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // build stage names array used across component
+  const STAGES = (stagesData || []).map((s: any) => s.name);
+
   // Calculate stats
   const stats = {
     total: orders?.length || 0,
     active: orders?.filter((o: any) => !["delivered", "cancelled"].includes(o.order_status)).length || 0,
     completed: orders?.filter((o: any) => o.order_status === "delivered").length || 0,
     dueSoon: orders?.filter((o: any) => {
-      // Calculate if order is due within 3 days
+      // Calculate if order is due within 3 days - placeholder logic for now
       return !["delivered", "cancelled"].includes(o.order_status);
     }).length || 0,
   };
@@ -86,14 +100,14 @@ export default function OrdersNew() {
   const activeOrders = orders?.filter((o: any) => !["delivered", "cancelled"].includes(o.order_status)) || [];
   const completedOrders = orders?.filter((o: any) => o.order_status === "delivered") || [];
 
-  // Filter orders based on selected tab
+  // Filter orders based on selected tab + search + date
   const filteredOrders = (statusFilter === "completed" ? completedOrders :
     statusFilter === "cancelled" ? orders?.filter((o: any) => o.order_status === "cancelled") :
       statusFilter === "active" ? activeOrders :
         orders)?.filter((order: any) => {
           const matchesSearch =
-            order.order_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            order.customers?.name.toLowerCase().includes(searchQuery.toLowerCase());
+            order.order_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            order.customers?.name?.toLowerCase().includes(searchQuery.toLowerCase());
 
           const matchesDate = !dateFilter ||
             new Date(order.created_at).toISOString().split("T")[0] === dateFilter;
@@ -101,29 +115,21 @@ export default function OrdersNew() {
           return matchesSearch && matchesDate;
         });
 
+  // get orders for a given stage name (kanban)
   const getOrdersByStage = (stageName: string) => {
-    // Only show active orders in kanban (exclude delivered orders)
     return activeOrders?.filter(order => {
-      const latestStage = order.order_stages?.[order.order_stages.length - 1];
-      const currentStageName = latestStage?.stage_name || "Ordered";
+      // latest stage entry by created_at (we fetched order_stages already)
+      const stagesForOrder = (order.order_stages || []).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      const latestStage = stagesForOrder[stagesForOrder.length - 1];
+      const currentStageName = latestStage?.stage_name || (STAGES.length ? STAGES[0] : "Ordered");
       return currentStageName === stageName;
     }) || [];
   };
 
+  // get the current stage name for an order object
   const getCurrentStage = (order: any) => {
-    return order.order_stages?.[order.order_stages.length - 1]?.stage_name || "Ordered";
-  };
-
-  const getStatusVariant = (status: string) => {
-    const variants: Record<string, "default" | "success" | "warning" | "info"> = {
-      pending: "warning",
-      processing: "info",
-      ready: "info",
-      dispatched: "info",
-      delivered: "success",
-      cancelled: "default",
-    };
-    return variants[status] || "default";
+    const stagesForOrder = (order.order_stages || []).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    return stagesForOrder[stagesForOrder.length - 1]?.stage_name || (STAGES.length ? STAGES[0] : "Ordered");
   };
 
   const getStatusColor = (status: string) => {
@@ -145,37 +151,57 @@ export default function OrdersNew() {
     }
   };
 
-  // Update stage mutation for kanban drag/click
+  // --- Move to stage / update logic ---
+  // Important: read current stage from DB (single source of truth), then compute the stages to insert/mark done
   const updateStageMutation = useMutation({
     mutationFn: async ({ orderId, newStage }: { orderId: string; newStage: string }) => {
-      const currentStageIndex = STAGES.indexOf(getCurrentStage(orderId));
-      const newStageIndex = STAGES.indexOf(newStage);
+      // ensure stages are available
+      const stageNames = STAGES;
+      if (!stageNames.length) throw new Error("No stages defined in DB");
 
+      // fetch latest stage for this order from DB (single source)
+      const { data: latestStageRows, error: latestErr } = await (supabase as any)
+        .from("order_stages")
+        .select("*")
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (latestErr) throw latestErr;
+
+      const currentStageName = latestStageRows && latestStageRows.length ? latestStageRows[0].stage_name : stageNames[0];
+
+      const currentStageIndex = stageNames.indexOf(currentStageName);
+      const newStageIndex = stageNames.indexOf(newStage);
+
+      if (newStageIndex === -1) throw new Error("Unknown stage");
       if (newStageIndex <= currentStageIndex) {
         throw new Error("Cannot move to a previous stage");
       }
 
-      // Mark all stages between current and new as done
-      const stagesToComplete = STAGES.slice(currentStageIndex + 1, newStageIndex + 1);
+      // stages to create between current and new (inclusive newStage)
+      const stagesToComplete = stageNames.slice(currentStageIndex + 1, newStageIndex + 1);
+      const isMovingToDelivered = stageNames[newStageIndex] === "Delivered";
 
-      // If moving to Delivered, mark all stages including Delivered as done
-      const isMovingToDelivered = newStage === "Delivered";
+      const now = new Date().toISOString();
 
-      // Insert all missing stages
+      // Build inserts
       const stagesToInsert = stagesToComplete.map(stageName => ({
         order_id: orderId,
         stage_name: stageName,
+        vendor_name: null,
         status: isMovingToDelivered ? "done" : (stageName === newStage ? "in_progress" : "done"),
-        start_ts: new Date().toISOString(),
-        end_ts: isMovingToDelivered ? new Date().toISOString() : (stageName === newStage ? null : new Date().toISOString()),
+        start_ts: now,
+        end_ts: isMovingToDelivered ? now : (stageName === newStage ? null : now),
+        metadata: null,
       }));
 
       if (stagesToInsert.length > 0) {
-        const { error } = await (supabase as any).from("order_stages").insert(stagesToInsert);
-        if (error) throw error;
+        const { error: insertError } = await (supabase as any).from("order_stages").insert(stagesToInsert);
+        if (insertError) throw insertError;
       }
 
-      // If the new stage is "Delivered", update order status
+      // if it's delivered, set order_status
       if (isMovingToDelivered) {
         const { error: orderError } = await (supabase as any)
           .from("orders")
@@ -186,13 +212,16 @@ export default function OrdersNew() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["all-order-stages"] });
       toast.success("Order stage updated successfully!");
     },
-    onError: () => {
-      toast.error("Failed to update order stage");
+    onError: (err: any) => {
+      console.error("updateStageMutation error:", err);
+      toast.error(err?.message || "Failed to update order stage");
     },
   });
 
+  // update single order status (delivered/cancelled)
   const updateOrderStatusMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: "delivered" | "cancelled" }) => {
       // Update order status
@@ -202,38 +231,37 @@ export default function OrdersNew() {
         .eq("id", orderId);
       if (orderError) throw orderError;
 
-      // If marking as delivered, mark all stages as done
+      // If delivering, mark existing stages done and insert missing ones
       if (status === "delivered") {
-        // Get all existing stages for this order
+        // existing stages for this order
         const { data: existingStages } = await (supabase as any)
           .from("order_stages")
           .select("stage_name")
           .eq("order_id", orderId);
 
-        const existingStageNames = existingStages?.map((s: any) => s.stage_name) || [];
+        const existingStageNames = (existingStages || []).map((s: any) => s.stage_name);
 
-        // Mark all existing stages as done
+        // mark existing not-done stages as done
         const { error: updateError } = await (supabase as any)
           .from("order_stages")
-          .update({
-            status: "done",
-            end_ts: new Date().toISOString()
-          })
+          .update({ status: "done", end_ts: new Date().toISOString() })
           .eq("order_id", orderId)
           .neq("status", "done");
         if (updateError) throw updateError;
 
-        // Insert any missing stages as done
+        // insert missing stages as done
         const missingStages = STAGES.filter(stage => !existingStageNames.includes(stage));
         if (missingStages.length > 0) {
-          const stagesToInsert = missingStages.map(stageName => ({
+          const now = new Date().toISOString();
+          const toInsert = missingStages.map(stageName => ({
             order_id: orderId,
             stage_name: stageName,
             status: "done",
-            start_ts: new Date().toISOString(),
-            end_ts: new Date().toISOString(),
+            start_ts: now,
+            end_ts: now,
+            vendor_name: null,
           }));
-          const { error: insertError } = await (supabase as any).from("order_stages").insert(stagesToInsert);
+          const { error: insertError } = await (supabase as any).from("order_stages").insert(toInsert);
           if (insertError) throw insertError;
         }
       }
@@ -243,8 +271,9 @@ export default function OrdersNew() {
       toast.success(`Order marked as ${status === "delivered" ? "delivered" : "cancelled"}!`);
       setConfirmDialog({ open: false, orderId: "", action: "delivered" });
     },
-    onError: () => {
-      toast.error("Failed to update order status");
+    onError: (err: any) => {
+      console.error("updateOrderStatusMutation error", err);
+      toast.error(err?.message || "Failed to update order status");
     },
   });
 
@@ -379,10 +408,8 @@ export default function OrdersNew() {
               {filteredOrders?.map((order: any) => {
                 const currentStage = getCurrentStage(order);
                 const createdDate = new Date(order.created_at);
-                const daysOld = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
 
                 return (
-                  // this is the start of order card
                   <Card
                     key={order.id}
                     className={`p-4 rounded-xl border-l-4 hover:shadow-md transition-all ${getCardClassName(order.order_status)}`}
@@ -393,7 +420,6 @@ export default function OrdersNew() {
                           : "hsl(var(--warning))",
                     }}
                   >
-                    {/* --- Top Row --- */}
                     <div className="flex items-start justify-between">
                       <div className="space-y-1">
                         <div className="flex items-center flex-wrap gap-2">
@@ -454,7 +480,6 @@ export default function OrdersNew() {
                       </DropdownMenu>
                     </div>
 
-                    {/* --- Compact Info Row --- */}
                     <div className="mt-3 flex flex-wrap justify-between text-sm text-muted-foreground">
                       <div className="flex flex-col">
                         <span className="text-[11px] uppercase tracking-wide">Customer</span>
@@ -470,7 +495,6 @@ export default function OrdersNew() {
                       </div>
                     </div>
 
-                    {/* --- Date Row --- */}
                     <div className="mt-2 flex justify-between text-xs sm:text-sm text-muted-foreground">
                       <span>
                         🗓️{" "}
@@ -492,7 +516,6 @@ export default function OrdersNew() {
                       </span>
                     </div>
 
-                    {/* --- Progress Indicator --- */}
                     <div className="mt-3 flex items-center gap-2">
                       <div className="flex gap-[2px] flex-1">
                         {STAGES.map((stage, idx) => {
@@ -516,8 +539,6 @@ export default function OrdersNew() {
                       </span>
                     </div>
                   </Card>
-
-                  // this is the end of order card
                 );
               })}
             </div>
@@ -551,11 +572,12 @@ export default function OrdersNew() {
                       stageOrders.map((order: any) => {
                         const currentStageIndex = STAGES.indexOf(stage);
                         const nextStage = STAGES[currentStageIndex + 1];
-                        // get vendor name
-                        const currentKanbanStageEntry = order.order_stages?.find((s: any) => s.stage_name === stage);
+                        // get vendor name from the matching order_stage entry (if any)
+                        const currentKanbanStageEntry = (order.order_stages || []).find((s: any) => s.stage_name === stage);
                         const vendorName = currentKanbanStageEntry?.vendor_name;
 
                         return (
+                          // kanban card
                           <Card key={order.id} className={`p-3 hover:shadow-md transition-shadow ${getCardClassName(order.order_status)}`}>
                             <div className="space-y-2">
                               <div className="flex items-start justify-between">
@@ -571,7 +593,6 @@ export default function OrdersNew() {
                                 {order.metadata?.item_name || "Order Item"}
                               </p>
 
-                              {/* DISPLAY VENDOR NAME using the stage entry */}
                               {vendorName && (
                                 <p className="text-sm font-semibold text-primary/80">
                                   <span className="font-medium text-muted-foreground">Vendor:</span> {vendorName}
@@ -585,6 +606,19 @@ export default function OrdersNew() {
                                   <span className="font-medium">Amount:</span> ₹{order.total_amount}
                                 </p>
                               </div>
+                              <div className="text-xs space-y-1">
+                                <span>
+                                  📦{" "}
+                                  {order.metadata?.delivery_date
+                                    ? new Date(order.metadata.delivery_date).toLocaleDateString("en-IN", {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                    })
+                                    : "-"}
+                                </span>
+                              </div>
+
 
                               <div className="flex gap-1">
                                 <DropdownMenu>

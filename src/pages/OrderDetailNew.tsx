@@ -1,3 +1,4 @@
+// src/pages/OrderDetailNew.tsx  (or wherever you keep it)
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useParams, useNavigate } from "react-router-dom";
@@ -25,56 +26,13 @@ import { toast } from "sonner";
 import { ArrowLeft, ChevronDown, Trash2 } from "lucide-react";
 import { OrderTimeline } from "@/components/OrderTimeline";
 
-export const STAGES = [
-    {
-        name: "Ordered",
-        vendors: ["Sri Om Fabrics", "Hariom Fabrics", "Jhalak", "Others"],
-    },
-    {
-        name: "Dyeing",
-        vendors: ["Vijay", "Ali"],
-    },
-    {
-        name: "Polishing",
-        vendors: ["Sobi", "Nadeem"],
-    },
-    {
-        name: "Embroidery",
-        vendors: ["Bashar", "Jawed", "Sajjad", "Manish"],
-    },
-    {
-        name: "Stitching",
-        vendors: ["Master", "Rajni", "Jayesh", "Chetan", "Shoaib", "Anees"],
-    },
-    {
-        name: "Dangling / Jhalar",
-        vendors: ["Home", "Chachi"],
-    },
-    {
-        name: "Fall & Beading",
-        vendors: ["Chachi", "Munni"],
-    },
-    {
-        name: "Packed",
-        vendors: [],
-    },
-    {
-        name: "Dispatched",
-        vendors: ["Tirupati", "Par Courier", "Charotar"],
-    },
-    {
-        name: "Delivered",
-        vendors: [],
-    },
-];
-
-
 export default function OrderDetailNew() {
     const { id } = useParams();
     const navigate = useNavigate();
     const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: "delivered" | "cancelled" | "delete" }>({ open: false, action: "delivered" });
     const queryClient = useQueryClient();
 
+    // --- invoice (by order id) ---
     const { data: invoice } = useQuery({
         queryKey: ["invoice-by-order", id],
         queryFn: async () => {
@@ -96,6 +54,7 @@ export default function OrderDetailNew() {
         },
     });
 
+    // --- orders for invoice ---
     const { data: orders } = useQuery({
         queryKey: ["invoice-orders", invoice?.id],
         queryFn: async () => {
@@ -111,11 +70,12 @@ export default function OrderDetailNew() {
         enabled: !!invoice?.id,
     });
 
+    // --- all order_stages for these orders ---
     const { data: allStages } = useQuery({
         queryKey: ["all-order-stages", invoice?.id],
         queryFn: async () => {
             if (!invoice?.id || !orders) return [];
-            const orderIds = orders.map(o => o.id);
+            const orderIds = orders.map((o: any) => o.id);
             const { data, error } = await (supabase as any)
                 .from("order_stages")
                 .select("*")
@@ -127,7 +87,20 @@ export default function OrderDetailNew() {
         enabled: !!invoice?.id && !!orders,
     });
 
-    // Real-time subscriptions
+    // --- NEW: fetch canonical workflow stages from DB (ordered by order_index) ---
+    const { data: stagesList } = useQuery({
+        queryKey: ["workflow-stages"],
+        queryFn: async () => {
+            const { data, error } = await (supabase as any)
+                .from("stages")
+                .select("*")
+                .order("order_index", { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+    });
+
+    // Real-time subscriptions (same as before)
     useEffect(() => {
         if (!invoice?.id || !orders) return;
 
@@ -171,6 +144,7 @@ export default function OrderDetailNew() {
         };
     }, [invoice?.id, orders, queryClient]);
 
+    // --- update status / delete logic unchanged, except we keep using DB stages for missing stage inserts ---
     const updateOrderStatusMutation = useMutation({
         mutationFn: async (status: "delivered" | "cancelled") => {
             if (!orders) return;
@@ -200,7 +174,12 @@ export default function OrderDetailNew() {
                         .neq("status", "done");
                     if (updateError) throw updateError;
 
-                    const missingStages = STAGES.filter(stage => !existingStageNames.includes(stage));
+                    // Use stagesList from DB (if available) otherwise fall back to previous hardcoded set
+                    const canonicalStageNames = (stagesList || []).map((s: any) => s.name);
+                    const fallback = ["Fabric", "Dyeing", "Polishing", "Embroidery", "Stitching", "Dangling / Jhalar", "Fall & Beading", "Packed", "Dispatched", "Delivered"];
+                    const referenceStages = canonicalStageNames.length ? canonicalStageNames : fallback;
+
+                    const missingStages = referenceStages.filter(stage => !existingStageNames.includes(stage));
                     if (missingStages.length > 0) {
                         const stagesToInsert = missingStages.map(stageName => ({
                             order_id: order.id,
@@ -232,7 +211,6 @@ export default function OrderDetailNew() {
             if (!orders) return;
 
             for (const order of orders) {
-                // Delete order stages first
                 const { error: stagesError } = await (supabase as any)
                     .from("order_stages")
                     .delete()
@@ -240,7 +218,6 @@ export default function OrderDetailNew() {
 
                 if (stagesError) throw stagesError;
 
-                // Delete order
                 const { error } = await (supabase as any)
                     .from("orders")
                     .delete()
@@ -358,14 +335,14 @@ export default function OrderDetailNew() {
                     return totalTimelines > 3 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1';
                 })()}`}>
                     {orders?.map((order) => {
-                        const orderStages = allStages?.filter(s => s.order_id === order.id) || [];
+                        const orderStages = allStages?.filter((s: any) => s.order_id === order.id) || [];
                         const numProducts = parseInt(order.metadata?.num_products || 1);
 
                         // Create timeline for each product
                         const productTimelines = [];
                         for (let i = 1; i <= numProducts; i++) {
                             const productStages = orderStages.filter(
-                                s => s.metadata?.product_number === i
+                                (s: any) => s.metadata?.product_number === i
                             );
                             const itemName = order.metadata?.item_name || "Order Item";
                             const displayName = numProducts > 1 ? `${itemName} - Product ${i}` : itemName;
@@ -375,6 +352,7 @@ export default function OrderDetailNew() {
                                     key={`${order.id}-${i}`}
                                     order={order}
                                     stages={productStages}
+                                    stagesList={stagesList || []}     // <-- pass DB stages here
                                     productNumber={i}
                                     productName={displayName}
                                     onStageUpdate={() => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,31 +16,22 @@ import { toast } from "sonner";
 import { CheckCircle2, MoveRight, Loader2, Edit2, Info } from "lucide-react";
 import { ActivityLog } from "./ActivityLog";
 
-const STAGES = [
-    "Ordered",
-    "Dyeing",
-    "Polishing",
-    "Embroidery",
-    "Stitching",
-    "Dangling",
-    "Fall & Beading",
-    "Packed",
-    "Dispatched",
-    "Delivered",
-];
+/**
+ * OrderTimeline (DB-driven)
+ *
+ * - Uses `stages` table (id, name, order_index, active)
+ * - Uses `vendors` table (id, name, stage_id, active)
+ * - Only allows moving forward in the canonical stage order (no backward moves)
+ *
+ * Props:
+ * - order: order row
+ * - stages: order_stages rows for this product (array)
+ * - stagesList: optional array of stage rows passed from parent (prefer parent to fetch all stages)
+ * - productNumber, productName
+ * - onStageUpdate callback
+ */
 
-const VENDORS_BY_STAGE: Record<string, string[]> = {
-    "Ordered": ["Sri Om Fabrics", "Hariom Fabrics", "Jhalak", "Others"],
-    "Dyeing": ["Vijay", "Ali"],
-    "Polishing": ["Sobi", "Nadeem"],
-    "Embroidery": ["Bashar", "Jawed", "Sajjad", "Manish"],
-    "Stitching": ["Master", "Rajni", "Jayesh", "Chetan", "Shoaib", "Anees"],
-    "Dangling": ["Home", "Chachi"],
-    "Fall & Beading": ["Chachi", "Munni"],
-    "Dispatched": ["Tirupati", "Par Courier", "Charotar"],
-};
-
-export function OrderTimeline({ order, stages, productNumber, productName, onStageUpdate }: any) {
+export function OrderTimeline({ order, stages, stagesList = [], productNumber, productName, onStageUpdate }: any) {
     const queryClient = useQueryClient();
     const [open, setOpen] = useState(false);
     const [selectedStage, setSelectedStage] = useState("");
@@ -54,47 +45,133 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
         setProductNotes(order.metadata?.product_notes?.[productNumber || 0] || "");
     }, [order.metadata, productNumber]);
 
-    const currentStage = stages?.find((s) => s.status === "in_progress");
-    const completedStages = stages?.filter((s) => s.status === "done").map((s) => s.stage_name) || [];
+    // Fetch canonical stages from DB if parent didn't pass them
+    const { data: stagesFromDb = [], isLoading: stagesLoading } = useQuery({
+        queryKey: ["stages-list"],
+        queryFn: async () => {
+            // select active stages ordered by order_index
+            const { data, error } = await supabase
+                .from("stages")
+                .select("*")
+                .order("order_index", { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: stagesList.length === 0, // only if parent didn't provide
+    });
+
+    // Use parent stagesList if provided, otherwise DB result
+    const canonicalStageRows = (stagesList && stagesList.length > 0) ? stagesList.slice().sort((a: any, b: any) => {
+        return Number(a.order_index ?? 0) - Number(b.order_index ?? 0);
+    }) : (stagesFromDb || []).slice().sort((a: any, b: any) => {
+        return Number(a.order_index ?? 0) - Number(b.order_index ?? 0);
+    });
+
+    // Map of stage name -> order_index for quick lookups
+    const stageOrderIndexMap: Record<string, number> = {};
+    canonicalStageRows.forEach((s: any) => {
+        stageOrderIndexMap[s.name] = Number(s.order_index ?? 0);
+    });
+
+    const canonicalStages = canonicalStageRows.map((s: any) => s.name);
+
+    // current & completed for this product (these come from order_stages rows passed as 'stages' prop)
+    const currentStage = (stages || []).find((s: any) => s.status === "in_progress");
+    const completedStages = (stages || []).filter((s: any) => s.status === "done").map((s: any) => s.stage_name) || [];
     const currentStageName = currentStage?.stage_name;
 
-    // --- Move to Stage Mutation ---
+    // selected stage row and id (to fetch vendors)
+    const selectedStageRow = canonicalStageRows.find((s: any) => s.name === selectedStage);
+    const selectedStageId = selectedStageRow?.id || null;
+
+    // vendors for the selected stage (fetched live)
+    const { data: stageVendors = [] } = useQuery({
+        queryKey: ["vendors-by-stage", selectedStageId],
+        queryFn: async () => {
+            if (!selectedStageId) return [];
+            const { data, error } = await supabase
+                .from("vendors")
+                .select("*")
+                .eq("stage_id", selectedStageId)
+                .order("name", { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!selectedStageId,
+    });
+
+    // --- Move to Stage Mutation (forward-only) ---
     const moveToStageMutation = useMutation({
         mutationFn: async () => {
+            // Validate forward move
+            const currentIndex = currentStageName ? (stageOrderIndexMap[currentStageName] ?? -1) : -1;
+            const selectedIndex = stageOrderIndexMap[selectedStage] ?? null;
+
+            if (selectedIndex === null || selectedIndex === undefined) {
+                throw new Error("Selected stage is not recognized in canonical stages.");
+            }
+
+            if (selectedIndex <= currentIndex) {
+                // disallow moving backward or to same stage
+                throw new Error("Can only move forward to later stages.");
+            }
+
+            // If there is a current in_progress stage for this product, mark it done
             if (currentStage) {
-                await supabase
+                const { error: markDoneErr } = await supabase
                     .from("order_stages")
                     .update({ status: "done", end_ts: new Date().toISOString() })
                     .eq("id", currentStage.id);
+                if (markDoneErr) throw markDoneErr;
             }
 
-            const { error } = await supabase.from("order_stages").insert([
+            // prefer storing vendor_id if vendor exists in vendors table
+            let vendor_id = null;
+            if (selectedVendor && stageVendors && stageVendors.length) {
+                const found = stageVendors.find((v: any) => v.name === selectedVendor);
+                if (found) vendor_id = found.id;
+            }
+
+            // Insert the new in_progress stage row
+            const { error: insertErr } = await supabase.from("order_stages").insert([
                 {
                     order_id: order.id,
                     stage_name: selectedStage,
                     vendor_name: selectedVendor || null,
+                    vendor_id: vendor_id,
                     status: "in_progress",
                     start_ts: new Date().toISOString(),
                     metadata: { product_number: productNumber, product_name: productName },
                 },
             ]);
-            if (error) throw error;
+            if (insertErr) throw insertErr;
 
-            if (selectedStage === "Delivered") {
-                await supabase.from("orders").update({ order_status: "delivered" }).eq("id", order.id);
+            // If the selected stage is the final "Delivered" stage, update order status as well
+            // We treat "Delivered" by name; if your DB has a different final stage name, adapt accordingly.
+            if (selectedStage.toLowerCase() === "delivered") {
+                const { error: orderErr } = await supabase
+                    .from("orders")
+                    .update({ order_status: "delivered" })
+                    .eq("id", order.id);
+                if (orderErr) throw orderErr;
             }
         },
         onSuccess: () => {
             toast.success(`Moved to ${selectedStage}`);
             queryClient.invalidateQueries({ queryKey: ["order-stages", order.id] });
+            queryClient.invalidateQueries({ queryKey: ["all-order-stages"] });
+            queryClient.invalidateQueries({ queryKey: ["orders"] });
+            queryClient.invalidateQueries({
+                queryKey: ["order-stages-log", order.id, productNumber]
+            });
             onStageUpdate?.();
             setOpen(false);
             setSelectedStage("");
             setSelectedVendor("");
         },
-        onError: (err) => {
-            toast.error("Failed to move stage");
-            console.error(err);
+        onError: (err: any) => {
+            console.error("Move stage failed:", err);
+            toast.error(err?.message || "Failed to move stage. Make sure you're moving forward only.");
         },
     });
 
@@ -122,6 +199,10 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
             setEditingNotes(false);
             onStageUpdate?.();
         },
+        onError: (err: any) => {
+            console.error("Failed to update product notes:", err);
+            toast.error("Failed to update product notes");
+        },
     });
 
     const currentVendor = currentStage?.vendor_name;
@@ -135,9 +216,9 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
 
     const isSameStageSelected = selectedStage === currentStageName;
 
+    // Render
     return (
         <Card className="p-6 space-y-6 border-l-4 border-primary/40 shadow-sm">
-            {/* --- Product Stage Summary --- */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h3 className="text-lg font-semibold mb-1">
@@ -158,7 +239,6 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
                     )}
                 </div>
 
-                {/* Move Stage Button */}
                 <Dialog open={open} onOpenChange={setOpen}>
                     <DialogTrigger asChild>
                         <Button size="sm" variant="outline" className="mt-3 sm:mt-0">
@@ -171,7 +251,6 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
                         </DialogHeader>
 
                         <div className="space-y-3 mt-2">
-                            {/* Stage Select */}
                             <div>
                                 <Label>Stage</Label>
                                 <select
@@ -183,16 +262,15 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
                                     }}
                                 >
                                     <option value="">Select stage...</option>
-                                    {STAGES.map((stage) => (
-                                        <option key={stage} value={stage}>
-                                            {stage}
+                                    {canonicalStages.map((stageName: string) => (
+                                        <option key={stageName} value={stageName}>
+                                            {stageName}
                                         </option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Vendor Select */}
-                            {selectedStage && VENDORS_BY_STAGE[selectedStage] && (
+                            {selectedStage && stageVendors && stageVendors.length > 0 && (
                                 <div>
                                     <Label>Vendor</Label>
                                     <select
@@ -201,21 +279,20 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
                                         onChange={(e) => setSelectedVendor(e.target.value)}
                                     >
                                         <option value="">Select vendor...</option>
-                                        {VENDORS_BY_STAGE[selectedStage].map((v) => (
-                                            <option key={v} value={v}>
-                                                {v}
+                                        {stageVendors.map((v: any) => (
+                                            <option key={v.id} value={v.name}>
+                                                {v.name}
                                             </option>
                                         ))}
                                     </select>
                                 </div>
                             )}
 
-                            {/* Confirm Button */}
                             <Button
                                 className="w-full mt-2"
                                 disabled={
                                     !selectedStage ||
-                                    moveToStageMutation.isPending ||
+                                    moveToStageMutation.isLoading ||
                                     isSameStageSelected
                                 }
                                 onClick={() => moveToStageMutation.mutate()}
@@ -224,7 +301,7 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
                                     <>
                                         <Info className="h-4 w-4 mr-2" /> Already in this stage
                                     </>
-                                ) : moveToStageMutation.isPending ? (
+                                ) : moveToStageMutation.isLoading ? (
                                     <>
                                         <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Moving...
                                     </>
@@ -239,9 +316,10 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
                 </Dialog>
             </div>
 
-            {/* --- Progress Tracker --- */}
             <div className="flex items-center gap-2 flex-wrap">
-                {STAGES.map((stage, i) => {
+                {(canonicalStages.length ? canonicalStages : [
+                    "Fabric", "Dyeing", "Polishing", "Embroidery", "Stitching", "Dangling", "Fall & Beading", "Packed", "Dispatched", "Delivered"
+                ]).map((stage: string, i: number) => {
                     const isDone = completedStages.includes(stage);
                     const isActive = currentStageName === stage;
                     return (
@@ -257,13 +335,12 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
                             >
                                 {stage}
                             </span>
-                            {i < STAGES.length - 1 && <span className="mx-2 text-muted-foreground">›</span>}
+                            {i < (canonicalStages.length ? canonicalStages.length : 10) - 1 && <span className="mx-2 text-muted-foreground">›</span>}
                         </div>
                     );
                 })}
             </div>
 
-            {/* --- Product Notes --- */}
             <div className="pt-3 border-t">
                 <div className="flex items-center justify-between mb-2">
                     <Label className="text-sm font-medium">Product Notes</Label>
@@ -311,7 +388,6 @@ export function OrderTimeline({ order, stages, productNumber, productName, onSta
                 )}
             </div>
 
-            {/* --- Activity Log --- */}
             <div className="pt-2 border-t">
                 <ActivityLog orderId={order.id} productNumber={productNumber} />
             </div>
