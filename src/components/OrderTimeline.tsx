@@ -16,40 +16,47 @@ import { toast } from "sonner";
 import { CheckCircle2, MoveRight, Loader2, Edit2, Info } from "lucide-react";
 import { ActivityLog } from "./ActivityLog";
 
-/**
- * OrderTimeline (DB-driven)
- *
- * - Uses `stages` table (id, name, order_index, active)
- * - Uses `vendors` table (id, name, stage_id, active)
- * - Only allows moving forward in the canonical stage order (no backward moves)
- *
- * Props:
- * - order: order row
- * - stages: order_stages rows for this product (array)
- * - stagesList: optional array of stage rows passed from parent (prefer parent to fetch all stages)
- * - productNumber, productName
- * - onStageUpdate callback
- */
-
-export function OrderTimeline({ order, stages, stagesList = [], productNumber, productName, onStageUpdate }: any) {
+export function OrderTimeline({
+    order,
+    stages,
+    stagesList = [],
+    productNumber,
+    productName,
+    onStageUpdate
+}: any) {
     const queryClient = useQueryClient();
+
     const [open, setOpen] = useState(false);
     const [selectedStage, setSelectedStage] = useState("");
     const [selectedVendor, setSelectedVendor] = useState("");
-    const [editingNotes, setEditingNotes] = useState(false);
-    const [productNotes, setProductNotes] = useState(
-        order.metadata?.product_notes?.[productNumber || 0] || ""
-    );
 
+    const [editingNotes, setEditingNotes] = useState(false);
+    const [productNotes, setProductNotes] = useState(order.metadata?.product_notes?.[productNumber] || "");
+
+    const [editingProductName, setEditingProductName] = useState(false);
+    const [localProductName, setLocalProductName] = useState(productName || "");
+
+    /* -----------------------------------------------------------
+       🔥 FIX #1 — Sync localProductName with metadata change
+       ----------------------------------------------------------- */
     useEffect(() => {
-        setProductNotes(order.metadata?.product_notes?.[productNumber || 0] || "");
+        const updated =
+            order.metadata?.product_names?.[productNumber] ||
+            productName ||
+            "";
+
+        setLocalProductName(updated);
+    }, [order.metadata, productName, productNumber]);
+
+    // Sync notes too
+    useEffect(() => {
+        setProductNotes(order.metadata?.product_notes?.[productNumber] || "");
     }, [order.metadata, productNumber]);
 
-    // Fetch canonical stages from DB if parent didn't pass them
-    const { data: stagesFromDb = [], isLoading: stagesLoading } = useQuery({
+    /* --------- Fetch stages if not provided ----------- */
+    const { data: stagesFromDb = [] } = useQuery({
         queryKey: ["stages-list"],
         queryFn: async () => {
-            // select active stages ordered by order_index
             const { data, error } = await supabase
                 .from("stages")
                 .select("*")
@@ -57,34 +64,34 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
             if (error) throw error;
             return data || [];
         },
-        enabled: stagesList.length === 0, // only if parent didn't provide
+        enabled: stagesList.length === 0,
     });
 
-    // Use parent stagesList if provided, otherwise DB result
-    const canonicalStageRows = (stagesList && stagesList.length > 0) ? stagesList.slice().sort((a: any, b: any) => {
-        return Number(a.order_index ?? 0) - Number(b.order_index ?? 0);
-    }) : (stagesFromDb || []).slice().sort((a: any, b: any) => {
-        return Number(a.order_index ?? 0) - Number(b.order_index ?? 0);
-    });
+    const canonicalStageRows =
+        stagesList.length > 0
+            ? [...stagesList].sort((a, b) => a.order_index - b.order_index)
+            : [...stagesFromDb].sort((a, b) => a.order_index - b.order_index);
 
-    // Map of stage name -> order_index for quick lookups
+    const canonicalStages = canonicalStageRows.map((s) => s.name);
+
     const stageOrderIndexMap: Record<string, number> = {};
-    canonicalStageRows.forEach((s: any) => {
-        stageOrderIndexMap[s.name] = Number(s.order_index ?? 0);
+    canonicalStageRows.forEach((s) => {
+        stageOrderIndexMap[s.name] = s.order_index;
     });
 
-    const canonicalStages = canonicalStageRows.map((s: any) => s.name);
+    const currentStage = stages?.find((s: any) => s.status === "in_progress");
+    const completedStages = (stages || [])
+        .filter((s: any) => s.status === "done")
+        .map((s: any) => s.stage_name);
 
-    // current & completed for this product (these come from order_stages rows passed as 'stages' prop)
-    const currentStage = (stages || []).find((s: any) => s.status === "in_progress");
-    const completedStages = (stages || []).filter((s: any) => s.status === "done").map((s: any) => s.stage_name) || [];
     const currentStageName = currentStage?.stage_name;
 
-    // selected stage row and id (to fetch vendors)
-    const selectedStageRow = canonicalStageRows.find((s: any) => s.name === selectedStage);
+    const selectedStageRow = canonicalStageRows.find(
+        (s) => s.name === selectedStage
+    );
     const selectedStageId = selectedStageRow?.id || null;
 
-    // vendors for the selected stage (fetched live)
+    /* ---------------- Vendors for stage ---------------- */
     const { data: stageVendors = [] } = useQuery({
         queryKey: ["vendors-by-stage", selectedStageId],
         queryFn: async () => {
@@ -100,108 +107,125 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
         enabled: !!selectedStageId,
     });
 
-    // --- Move to Stage Mutation (forward-only) ---
+    /* ---------------- Move to Stage Mutation ------------- */
     const moveToStageMutation = useMutation({
         mutationFn: async () => {
-            // Validate forward move
-            const currentIndex = currentStageName ? (stageOrderIndexMap[currentStageName] ?? -1) : -1;
-            const selectedIndex = stageOrderIndexMap[selectedStage] ?? null;
+            const currentIndex =
+                currentStageName != null
+                    ? stageOrderIndexMap[currentStageName]
+                    : -1;
 
-            if (selectedIndex === null || selectedIndex === undefined) {
-                throw new Error("Selected stage is not recognized in canonical stages.");
-            }
+            const selectedIndex = stageOrderIndexMap[selectedStage];
 
             if (selectedIndex <= currentIndex) {
-                // disallow moving backward or to same stage
-                throw new Error("Can only move forward to later stages.");
+                throw new Error("Can only move forward to a later stage.");
             }
 
-            // If there is a current in_progress stage for this product, mark it done
+            // mark current stage as done
             if (currentStage) {
-                const { error: markDoneErr } = await supabase
+                await supabase
                     .from("order_stages")
-                    .update({ status: "done", end_ts: new Date().toISOString() })
+                    .update({
+                        status: "done",
+                        end_ts: new Date().toISOString(),
+                    })
                     .eq("id", currentStage.id);
-                if (markDoneErr) throw markDoneErr;
             }
 
-            // prefer storing vendor_id if vendor exists in vendors table
             let vendor_id = null;
-            if (selectedVendor && stageVendors && stageVendors.length) {
-                const found = stageVendors.find((v: any) => v.name === selectedVendor);
+            if (selectedVendor && stageVendors.length) {
+                const found = stageVendors.find((v) => v.name === selectedVendor);
                 if (found) vendor_id = found.id;
             }
 
-            // Insert the new in_progress stage row
-            const { error: insertErr } = await supabase.from("order_stages").insert([
+            await supabase.from("order_stages").insert([
                 {
                     order_id: order.id,
                     stage_name: selectedStage,
+                    vendor_id,
                     vendor_name: selectedVendor || null,
-                    vendor_id: vendor_id,
                     status: "in_progress",
                     start_ts: new Date().toISOString(),
-                    metadata: { product_number: productNumber, product_name: productName },
+                    metadata: {
+                        product_number: productNumber,
+                        product_name: localProductName,
+                    },
                 },
             ]);
-            if (insertErr) throw insertErr;
 
-            // If the selected stage is the final "Delivered" stage, update order status as well
-            // We treat "Delivered" by name; if your DB has a different final stage name, adapt accordingly.
             if (selectedStage.toLowerCase() === "delivered") {
-                const { error: orderErr } = await supabase
+                await supabase
                     .from("orders")
                     .update({ order_status: "delivered" })
                     .eq("id", order.id);
-                if (orderErr) throw orderErr;
             }
         },
         onSuccess: () => {
             toast.success(`Moved to ${selectedStage}`);
-            queryClient.invalidateQueries({ queryKey: ["order-stages", order.id] });
-            queryClient.invalidateQueries({ queryKey: ["all-order-stages"] });
             queryClient.invalidateQueries({ queryKey: ["orders"] });
+            queryClient.invalidateQueries({ queryKey: ["order-stages", order.id] });
             queryClient.invalidateQueries({
-                queryKey: ["order-stages-log", order.id, productNumber]
+                queryKey: ["order-stages-log", order.id, productNumber],
             });
             onStageUpdate?.();
             setOpen(false);
-            setSelectedStage("");
-            setSelectedVendor("");
-        },
-        onError: (err: any) => {
-            console.error("Move stage failed:", err);
-            toast.error(err?.message || "Failed to move stage. Make sure you're moving forward only.");
         },
     });
 
-    // --- Product Notes Mutation ---
+    /* ---------------- Update Product Notes ------------- */
     const updateProductNotesMutation = useMutation({
         mutationFn: async (notes: string) => {
-            const currentProductNotes = order.metadata?.product_notes || {};
-            const { error } = await supabase
+            const current = order.metadata?.product_notes || {};
+
+            await supabase
                 .from("orders")
                 .update({
                     metadata: {
                         ...order.metadata,
                         product_notes: {
-                            ...currentProductNotes,
-                            [productNumber || 0]: notes,
+                            ...current,
+                            [productNumber]: notes,
                         },
                     },
                 })
                 .eq("id", order.id);
-            if (error) throw error;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["order", order.id] });
             toast.success("Product notes updated");
             setEditingNotes(false);
-            onStageUpdate?.();
+            queryClient.invalidateQueries({ queryKey: ["order", order.id] });
         },
-        onError: (err: any) => {
-            console.error("Failed to update product notes:", err);
-            toast.error("Failed to update product notes");
+    });
+
+    /* ---------------- Update Product Name (FIXED) ------------- */
+    const updateProductNameMutation = useMutation({
+        mutationFn: async (newName: string) => {
+            const currentNames = order.metadata?.product_names || {};
+
+            await supabase
+                .from("orders")
+                .update({
+                    metadata: {
+                        ...order.metadata,
+                        product_names: {
+                            ...currentNames,
+                            [productNumber]: newName,
+                        },
+                    },
+                })
+                .eq("id", order.id);
+        },
+
+        onSuccess: (_, newName) => {
+            toast.success("Product name updated");
+
+            // Update local UI instantly
+            setLocalProductName(newName);
+
+            // Refresh order
+            queryClient.invalidateQueries({ queryKey: ["order", order.id] });
+
+            setEditingProductName(false);
         },
     });
 
@@ -216,38 +240,106 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
 
     const isSameStageSelected = selectedStage === currentStageName;
 
-    // Render
+    /* -------------------- RENDER ----------------------- */
     return (
         <Card className="p-6 space-y-6 border-l-4 border-primary/40 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h3 className="text-lg font-semibold mb-1">
-                        {productName || "Product"} —{" "}
-                        {currentStageName ? (
-                            <span className="text-primary">{currentStageName}</span>
+                    {/* ------------ PRODUCT NAME (EDITABLE) ----------- */}
+                    <div className="flex items-center gap-2 mb-1">
+                        {editingProductName ? (
+                            <>
+                                <input
+                                    className="border rounded px-2 py-1 text-sm"
+                                    value={localProductName}
+                                    onChange={(e) =>
+                                        setLocalProductName(e.target.value)
+                                    }
+                                    autoFocus
+                                />
+                                <Button
+                                    size="sm"
+                                    onClick={() =>
+                                        updateProductNameMutation.mutate(localProductName)
+                                    }
+                                >
+                                    Save
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setEditingProductName(false);
+                                        // restore last saved value
+                                        setLocalProductName(
+                                            order.metadata?.product_names?.[productNumber] ||
+                                            productName ||
+                                            ""
+                                        );
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                            </>
                         ) : (
-                            <span className="text-muted-foreground italic">Not started</span>
+                            <>
+                                <h3 className="text-lg font-semibold">
+                                    {localProductName || "Product"}
+                                </h3>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => setEditingProductName(true)}
+                                >
+                                    <Edit2 className="h-4 w-4" />
+                                </Button>
+                            </>
                         )}
-                    </h3>
+                    </div>
+
+                    {currentStageName ? (
+                        <span className="text-primary text-sm">
+                            {currentStageName}
+                        </span>
+                    ) : (
+                        <span className="text-muted-foreground italic text-sm">
+                            Not started
+                        </span>
+                    )}
+
                     {currentVendor && (
                         <p className="text-sm text-muted-foreground">
-                            Vendor: <span className="font-medium text-foreground">{currentVendor}</span>
+                            Vendor:{" "}
+                            <span className="font-medium text-foreground">
+                                {currentVendor}
+                            </span>
                         </p>
                     )}
+
                     {currentStageDate && (
-                        <p className="text-xs text-muted-foreground">Started on {currentStageDate}</p>
+                        <p className="text-xs text-muted-foreground">
+                            Started on {currentStageDate}
+                        </p>
                     )}
                 </div>
 
+                {/* ----------- Move to Stage Button -------------- */}
                 <Dialog open={open} onOpenChange={setOpen}>
                     <DialogTrigger asChild>
-                        <Button size="sm" variant="outline" className="mt-3 sm:mt-0">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-3 sm:mt-0"
+                        >
                             <MoveRight className="h-4 w-4 mr-1" /> Move to Stage
                         </Button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Move Product to Another Stage</DialogTitle>
+                            <DialogTitle>
+                                Move Product to Another Stage
+                            </DialogTitle>
                         </DialogHeader>
 
                         <div className="space-y-3 mt-2">
@@ -262,7 +354,7 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
                                     }}
                                 >
                                     <option value="">Select stage...</option>
-                                    {canonicalStages.map((stageName: string) => (
+                                    {canonicalStages.map((stageName) => (
                                         <option key={stageName} value={stageName}>
                                             {stageName}
                                         </option>
@@ -270,23 +362,35 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
                                 </select>
                             </div>
 
-                            {selectedStage && stageVendors && stageVendors.length > 0 && (
-                                <div>
-                                    <Label>Vendor</Label>
-                                    <select
-                                        className="w-full border rounded-md px-3 py-2"
-                                        value={selectedVendor}
-                                        onChange={(e) => setSelectedVendor(e.target.value)}
-                                    >
-                                        <option value="">Select vendor...</option>
-                                        {stageVendors.map((v: any) => (
-                                            <option key={v.id} value={v.name}>
-                                                {v.name}
+                            {/* Vendor list if available */}
+                            {selectedStage &&
+                                stageVendors &&
+                                stageVendors.length > 0 && (
+                                    <div>
+                                        <Label>Vendor</Label>
+                                        <select
+                                            className="w-full border rounded-md px-3 py-2"
+                                            value={selectedVendor}
+                                            onChange={(e) =>
+                                                setSelectedVendor(
+                                                    e.target.value
+                                                )
+                                            }
+                                        >
+                                            <option value="">
+                                                Select vendor...
                                             </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
+                                            {stageVendors.map((v) => (
+                                                <option
+                                                    key={v.id}
+                                                    value={v.name}
+                                                >
+                                                    {v.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                             <Button
                                 className="w-full mt-2"
@@ -295,19 +399,24 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
                                     moveToStageMutation.isLoading ||
                                     isSameStageSelected
                                 }
-                                onClick={() => moveToStageMutation.mutate()}
+                                onClick={() =>
+                                    moveToStageMutation.mutate()
+                                }
                             >
-                                {isSameStageSelected ? (
+                                {moveToStageMutation.isLoading ? (
                                     <>
-                                        <Info className="h-4 w-4 mr-2" /> Already in this stage
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
+                                        Moving...
                                     </>
-                                ) : moveToStageMutation.isLoading ? (
+                                ) : isSameStageSelected ? (
                                     <>
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Moving...
+                                        <Info className="h-4 w-4 mr-2" /> Already
+                                        in this stage
                                     </>
                                 ) : (
                                     <>
-                                        <CheckCircle2 className="h-4 w-4 mr-2" /> Confirm Move
+                                        <CheckCircle2 className="h-4 w-4 mr-2" />{" "}
+                                        Confirm Move
                                     </>
                                 )}
                             </Button>
@@ -316,34 +425,45 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
                 </Dialog>
             </div>
 
+            {/* ---------- Stage Pills Row ---------- */}
             <div className="flex items-center gap-2 flex-wrap">
-                {(canonicalStages.length ? canonicalStages : [
-                    "Fabric", "Dyeing", "Polishing", "Embroidery", "Stitching", "Dangling", "Fall & Beading", "Packed", "Dispatched", "Delivered"
-                ]).map((stage: string, i: number) => {
+                {canonicalStages.map((stage, i) => {
                     const isDone = completedStages.includes(stage);
                     const isActive = currentStageName === stage;
                     return (
                         <div key={stage} className="flex items-center">
                             <div
-                                className={`w-3 h-3 rounded-full mr-1 ${isDone ? "bg-green-500" : isActive ? "bg-blue-500" : "bg-gray-300"
+                                className={`w-3 h-3 rounded-full mr-1 ${isDone
+                                        ? "bg-green-500"
+                                        : isActive
+                                            ? "bg-blue-500"
+                                            : "bg-gray-300"
                                     }`}
-                                title={stage}
                             />
                             <span
-                                className={`text-xs ${isActive ? "text-primary font-semibold" : "text-muted-foreground"
+                                className={`text-xs ${isActive
+                                        ? "text-primary font-semibold"
+                                        : "text-muted-foreground"
                                     }`}
                             >
                                 {stage}
                             </span>
-                            {i < (canonicalStages.length ? canonicalStages.length : 10) - 1 && <span className="mx-2 text-muted-foreground">›</span>}
+                            {i < canonicalStages.length - 1 && (
+                                <span className="mx-2 text-muted-foreground">
+                                    ›
+                                </span>
+                            )}
                         </div>
                     );
                 })}
             </div>
 
+            {/* ---------- Notes ---------- */}
             <div className="pt-3 border-t">
                 <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm font-medium">Product Notes</Label>
+                    <Label className="text-sm font-medium">
+                        Product Notes
+                    </Label>
                     {!editingNotes && (
                         <Button
                             variant="ghost"
@@ -356,21 +476,32 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
                         </Button>
                     )}
                 </div>
+
                 {!editingNotes ? (
                     <p className="text-sm text-muted-foreground">
-                        {productNotes || "No notes added yet. Click Edit to add notes about this product."}
+                        {productNotes ||
+                            "No notes added yet. Click Edit to add notes about this product."}
                     </p>
                 ) : (
                     <div className="space-y-2">
                         <Textarea
                             value={productNotes}
-                            onChange={(e) => setProductNotes(e.target.value)}
+                            onChange={(e) =>
+                                setProductNotes(e.target.value)
+                            }
                             placeholder="Add notes about this product..."
                             className="min-h-[80px]"
                             autoFocus
                         />
                         <div className="flex gap-2">
-                            <Button size="sm" onClick={() => updateProductNotesMutation.mutate(productNotes)}>
+                            <Button
+                                size="sm"
+                                onClick={() =>
+                                    updateProductNotesMutation.mutate(
+                                        productNotes
+                                    )
+                                }
+                            >
                                 Save
                             </Button>
                             <Button
@@ -378,7 +509,11 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
                                 variant="outline"
                                 onClick={() => {
                                     setEditingNotes(false);
-                                    setProductNotes(order.metadata?.product_notes?.[productNumber || 0] || "");
+                                    setProductNotes(
+                                        order.metadata?.product_notes?.[
+                                        productNumber
+                                        ] || ""
+                                    );
                                 }}
                             >
                                 Cancel
@@ -388,8 +523,12 @@ export function OrderTimeline({ order, stages, stagesList = [], productNumber, p
                 )}
             </div>
 
+            {/* ---------- Activity Log ---------- */}
             <div className="pt-2 border-t">
-                <ActivityLog orderId={order.id} productNumber={productNumber} />
+                <ActivityLog
+                    orderId={order.id}
+                    productNumber={productNumber}
+                />
             </div>
         </Card>
     );
