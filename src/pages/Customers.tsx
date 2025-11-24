@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 export default function Customers() {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState<any>(null);
@@ -320,7 +322,9 @@ export default function Customers() {
               </TableRow>
             ) : (
               filteredCustomers?.map((customer: any) => (
-                <TableRow key={customer.id}>
+                <TableRow key={customer.id}
+                  onClick={() => navigate(`/customers/${customer.id}`)}
+                >
                   <TableCell className="font-medium">{customer.name}</TableCell>
                   <TableCell>{customer.phone || "-"}</TableCell>
                   <TableCell>{customer.email || "-"}</TableCell>
