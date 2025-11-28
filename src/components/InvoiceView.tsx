@@ -49,7 +49,10 @@ export function InvoiceView({
   const [isEditingPayment, setIsEditingPayment] = useState(false);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
 
-  const isPaid = invoice.payment_status === "paid";
+  // const isPaid = invoice.payment_status === "paid";
+  const isPaid =
+    invoice.raw_payload?.payment_status === "paid" ||
+    parseFloat(invoice.raw_payload?.paid_amount || 0) >= parseFloat(invoice.total);
   const isDraft = invoice.status === "draft";
 
   const remainingBalance = useMemo(() => {
@@ -377,7 +380,7 @@ Here is your Saree Palace Elite invoice.
           )}
 
           {/* Partial Payment Section */}
-          {!isPaid && (
+          {!isPaid && remainingBalance > 0 && (
             <div className="border rounded-lg p-4 bg-muted/30">
               <h3 className="font-semibold mb-3">Update Payment</h3>
               {!isEditingPayment ? (
