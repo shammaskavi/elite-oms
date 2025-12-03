@@ -369,10 +369,13 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                             <Text style={styles.totalLabel}>SUBTOTAL</Text>
                             <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
                         </View>
-                        <View style={styles.totalRow}>
-                            <Text style={styles.discountLabel}>DISCOUNT</Text>
-                            <Text style={styles.discountValue}>{formatCurrency(discount)}</Text>
-                        </View>
+                        {/* DISCOUNT — show only when discount > 0 */}
+                        {discount > 0 && (
+                            <View style={styles.totalRow}>
+                                <Text style={styles.discountLabel}>DISCOUNT</Text>
+                                <Text style={styles.discountValue}>{formatCurrency(discount)}</Text>
+                            </View>
+                        )}
                         {tax > 0 && (
                             <View style={styles.totalRow}>
                                 <Text style={styles.totalLabel}>TAX</Text>
