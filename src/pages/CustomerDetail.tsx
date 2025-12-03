@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -65,6 +66,24 @@ export default function CustomerDetail() {
         enabled: !!id,
     });
 
+
+    // ---- invoice payments (true payment history) ----
+    const { data: invoicePayments } = useQuery({
+        queryKey: ["invoice-payments", id],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from("invoice_payments")
+                .select("*, invoices(invoice_number, customer_id)")
+                .eq("invoices.customer_id", id)
+                .order("date", { ascending: false });
+
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!id,
+    });
+
+
     // ---- orders ----
     const { data: orders } = useQuery({
         queryKey: ["customer-orders", id],
@@ -90,65 +109,43 @@ export default function CustomerDetail() {
         return sum + (isNaN(n) ? 0 : n);
     }, 0);
 
-    // total paid (uses payload.payment_status / paid_amount) — defend against string payload
-    const totalPaid = (invoices || []).reduce((sum, inv) => {
-        const payload = safeParsePayload(inv.raw_payload);
-        const paidAmountRaw = payload?.paid_amount ?? 0;
-        const paidAmount = parseFloat(String(paidAmountRaw || 0));
-        const status = payload?.payment_status;
-        if (status === "paid") {
-            const t = parseFloat(String(inv.total ?? 0));
-            return sum + (isNaN(t) ? 0 : t);
-        }
-        if (status === "partial") {
-            return sum + (isNaN(paidAmount) ? 0 : paidAmount);
-        }
-        return sum;
-    }, 0);
 
-    const outstandingBalance = Math.max(0, totalBilled - totalPaid);
+    const [invoicesWithStatus, setInvoicesWithStatus] = useState<any[]>([]);
+    useEffect(() => {
+        if (!invoices) return;
 
-    const hasUnpaidInvoices = (invoices || []).some(inv => {
-        const payload = safeParsePayload(inv.raw_payload);
-        return payload?.payment_status !== "paid";
-    });
+        const loadStatuses = async () => {
+            const enriched = await Promise.all(
+                invoices.map(async inv => ({
+                    ...inv,
+                    __payment: await derivePaymentStatus(inv)
+                }))
+            );
 
-    // payment entries for Payments tab
-    const payments = (invoices || []).flatMap(inv => {
-        const payload = safeParsePayload(inv.raw_payload);
-        const status = payload?.payment_status;
-        const paidAmount = parseFloat(String(payload?.paid_amount || 0));
-        const paymentMethod = inv.payment_method || "N/A";
-        const invoiceNumber = inv.invoice_number || "N/A";
-        const invoiceDate = inv.date || inv.created_at || null;
+            setInvoicesWithStatus(enriched);
+        };
 
-        if (status === "paid") {
-            const amt = parseFloat(String(inv.total ?? 0));
-            if (isNaN(amt) || !invoiceDate) return [];
-            return [{
-                invoice_number: invoiceNumber,
-                date: invoiceDate,
-                amount: amt,
-                method: paymentMethod,
-            }];
-        }
-        if (status === "partial" && paidAmount > 0) {
-            if (!invoiceDate) return [];
-            return [{
-                invoice_number: invoiceNumber,
-                date: invoiceDate,
-                amount: paidAmount,
-                method: paymentMethod,
-            }];
-        }
-        return [];
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        loadStatuses();
+    }, [invoices]);
+
+    const totalPaid = invoicesWithStatus.reduce((sum, inv) => sum + inv.__payment.paid, 0);
+    const outstandingBalance = invoicesWithStatus.reduce((sum, inv) => sum + inv.__payment.remaining, 0);
+    const hasUnpaidInvoices = invoicesWithStatus.some(inv => inv.__payment.status !== "paid");
+
+
+    // ---- payment history ----
+    const payments = (invoicePayments || []).map((p: any) => ({
+        id: p.id,
+        date: p.date,
+        invoice_number: p.invoices?.invoice_number || "N/A",
+        method: p.method || "N/A",
+        amount: parseFloat(String(p.amount || 0)),
+    }));
 
     const getPaymentStatusBadge = (invoice: any) => {
-        const payload = safeParsePayload(invoice.raw_payload);
-        const status = payload?.payment_status || "unpaid";
+        const status = invoice.__payment.status;
         if (status === "paid") return <Badge variant="success">PAID</Badge>;
-        if (status === "partial") return <Badge variant="warning">PARTIALLY PAID</Badge>;
+        if (status === "partial") return <Badge variant="warning">PARTIAL</Badge>;
         return <Badge variant="destructive">UNPAID</Badge>;
     };
 
@@ -338,21 +335,17 @@ export default function CustomerDetail() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {invoices?.map((invoice) => {
-                                            const payload = safeParsePayload(invoice.raw_payload);
+                                        {invoicesWithStatus.map((invoice) => {
+                                            const { status, paid, remaining } = invoice.__payment;
                                             const total = parseFloat(String(invoice.total ?? 0)) || 0;
-                                            const paidAmount = payload?.payment_status === "paid"
-                                                ? total
-                                                : parseFloat(String(payload?.paid_amount || 0)) || 0;
-                                            const balance = Math.max(0, total - paidAmount);
                                             return (
                                                 <TableRow key={invoice.id}>
                                                     <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                                                     <TableCell>{invoice.date ? new Date(invoice.date).toLocaleDateString() : "-"}</TableCell>
                                                     <TableCell>{getPaymentStatusBadge(invoice)}</TableCell>
                                                     <TableCell className="text-right">₹{total.toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right">₹{paidAmount.toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right">₹{balance.toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right">₹{paid.toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right">₹{remaining.toFixed(2)}</TableCell>
                                                     <TableCell>
                                                         <Button variant="ghost" size="sm" onClick={() => {
                                                             // invoice now includes customers thanks to the select() join above
@@ -442,14 +435,16 @@ export default function CustomerDetail() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {payments.length > 0 ? payments.map((payment, idx) => (
-                                            <TableRow key={idx}>
-                                                <TableCell>{payment.date ? new Date(payment.date).toLocaleDateString() : "-"}</TableCell>
-                                                <TableCell className="font-medium">{payment.invoice_number}</TableCell>
-                                                <TableCell>{payment.method}</TableCell>
-                                                <TableCell className="text-right">₹{(payment.amount || 0).toFixed(2)}</TableCell>
-                                            </TableRow>
-                                        )) : (
+                                        {payments.length > 0 ? (
+                                            payments.map(payment => (
+                                                <TableRow key={payment.id}>
+                                                    <TableCell>{payment.date ? new Date(payment.date).toLocaleDateString() : "-"}</TableCell>
+                                                    <TableCell className="font-medium">{payment.invoice_number}</TableCell>
+                                                    <TableCell>{payment.method}</TableCell>
+                                                    <TableCell className="text-right">₹{payment.amount.toFixed(2)}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
                                             <TableRow>
                                                 <TableCell colSpan={4} className="text-center text-muted-foreground">
                                                     No payments found

@@ -218,6 +218,8 @@ interface InvoiceData {
     gstin?: string;
     isPaid?: boolean;
     remainingBalance?: number;
+    paidAmount?: number;       // 👈 ADD THIS
+
 }
 
 // ---------------- COMPONENT ----------------
@@ -237,7 +239,8 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
     } = data;
 
     const items = raw_payload?.items || [];
-    const paidAmount = parseFloat(String(raw_payload?.paid_amount || 0));
+    // const paidAmount = parseFloat(String(raw_payload?.paid_amount || 0));
+    const paidAmount = Number(data.paidAmount ?? raw_payload?.paid_amount ?? 0);
     const discount = parseFloat(String(raw_payload?.discount || 0));
     const finalTotal = parseFloat(String(total || subtotal || 0));
     const fillerCount = Math.max(0, 12 - items.length);

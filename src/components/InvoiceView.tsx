@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -19,10 +19,13 @@ import {
   AlertTriangle,
   Pencil,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
 import { toast } from "sonner";
 import { usePDF, pdf } from "@react-pdf/renderer";
 import { PrintableInvoice } from "./PrintableInvoice";
 import axios from "axios";
+
 
 const WA_WEBHOOK_URL =
   "https://app.wanotifier.com/api/v1/notifications/PNZmRBoX2G?key=A9DK378ZaegHsE4ER7r9LQNC0IdbpH";
@@ -33,6 +36,7 @@ interface InvoiceViewProps {
   onOpenChange: (open: boolean) => void;
   onEditDraft?: (invoice: any) => void;
 }
+
 
 const formatCurrency = (value: any) =>
   `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
@@ -49,29 +53,62 @@ export function InvoiceView({
   const [isEditingPayment, setIsEditingPayment] = useState(false);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
 
-  // const isPaid = invoice.payment_status === "paid";
-  const isPaid =
-    invoice.raw_payload?.payment_status === "paid" ||
-    parseFloat(invoice.raw_payload?.paid_amount || 0) >= parseFloat(invoice.total);
-  const isDraft = invoice.status === "draft";
+  const { data: paymentInfo, isLoading: statusLoading } = useQuery({
+    queryKey: ["invoice-payment-status", invoice.id],
+    queryFn: () => derivePaymentStatus(invoice),
+  });
 
-  const remainingBalance = useMemo(() => {
-    const total = parseFloat(invoice.total || 0);
-    const paidAmount = parseFloat(invoice.raw_payload?.paid_amount || 0);
-    return Math.max(0, total - paidAmount);
-  }, [invoice]);
+  const paidAmount =
+    paymentInfo?.paid ??
+    parseFloat(invoice.raw_payload?.paid_amount || 0);
+
+  const remaining =
+    paymentInfo?.remaining ??
+    Math.max(0, invoice.total - paidAmount);
+
+  const status =
+    paymentInfo?.status ??
+    (invoice.raw_payload?.payment_status || "unpaid");
+
+  // const isPaid =
+  //   invoice.raw_payload?.payment_status === "paid" ||
+  //   parseFloat(invoice.raw_payload?.paid_amount || 0) >= parseFloat(invoice.total);
+  // const isDraft = invoice.status === "draft";
+  const isPaid = status === "paid";
+  const isDraft = invoice.status === "draft"; // ✅ RESTOREDF
+
+  // const remainingBalance = useMemo(() => {
+  //   const total = parseFloat(invoice.total || 0);
+  //   const paidAmount = parseFloat(invoice.raw_payload?.paid_amount || 0);
+  //   return Math.max(0, total - paidAmount);
+  // }, [invoice]);
+  const remainingBalance = remaining;
+
+  // const invoiceDocument = useMemo(() => {
+  //   const pdfData = {
+  //     ...invoice,
+  //     delivery_date: invoice.raw_payload?.delivery_date,
+  //     isPaid: isPaid || remainingBalance === 0,
+  //     remainingBalance,
+  //   };
+  //   return <PrintableInvoice data={pdfData} />;
+  // }, [invoice, isPaid, remainingBalance]);
 
   const invoiceDocument = useMemo(() => {
     const pdfData = {
       ...invoice,
       delivery_date: invoice.raw_payload?.delivery_date,
-      isPaid: isPaid || remainingBalance === 0,
-      remainingBalance,
+      isPaid: status === "paid",
+      paidAmount,        // 👈 NEW
+      remainingBalance: remaining,
     };
     return <PrintableInvoice data={pdfData} />;
-  }, [invoice, isPaid, remainingBalance]);
+  }, [invoice, status, paidAmount, remaining]);
 
   const [instance, updateInstance] = usePDF({ document: invoiceDocument });
+  useEffect(() => {
+    updateInstance(invoiceDocument);
+  }, [invoiceDocument]);
 
   // Print (opens PDF and triggers print dialog)
   const handlePrint = () => {
@@ -192,36 +229,72 @@ Here is your Saree Palace Elite invoice.
 
 
   // Partial payment mutation
-  const updatePartialPaymentMutation = useMutation({
+  // const updatePartialPaymentMutation = useMutation({
+  //   mutationFn: async (amount: number) => {
+  //     const total = parseFloat(invoice.total);
+  //     const newPaidAmount = Math.min(amount, total);
+  //     const newStatus =
+  //       newPaidAmount >= total ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid";
+
+  //     const { error: invoiceError } = await supabase
+  //       .from("invoices")
+  //       .update({
+  //         raw_payload: {
+  //           ...invoice.raw_payload,
+  //           payment_status: newStatus,
+  //           paid_amount: newPaidAmount,
+  //         },
+  //       })
+  //       .eq("id", invoice.id);
+  //     if (invoiceError) throw invoiceError;
+
+  //     const { error: ordersError } = await supabase
+  //       .from("orders")
+  //       .update({ payment_status: newStatus === "paid" ? "paid" : "unpaid" })
+  //       .eq("invoice_id", invoice.id);
+  //     if (ordersError) throw ordersError;
+  //   },
+  //   onSuccess: () => {
+  //     queryClient.invalidateQueries({ queryKey: ["invoices"] });
+  //     setIsEditingPayment(false);
+  //     setPartialPaymentAmount("");
+  //     toast.success("Partial payment updated successfully");
+  //   },
+  // });
+
+  // updated 
+  // NEW — Add Payment Mutation
+  const addPaymentMutation = useMutation({
     mutationFn: async (amount: number) => {
-      const total = parseFloat(invoice.total);
-      const newPaidAmount = Math.min(amount, total);
-      const newStatus =
-        newPaidAmount >= total ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid";
+      if (!invoice.id) throw new Error("Missing invoice id");
 
-      const { error: invoiceError } = await supabase
-        .from("invoices")
-        .update({
-          raw_payload: {
-            ...invoice.raw_payload,
-            payment_status: newStatus,
-            paid_amount: newPaidAmount,
-          },
-        })
-        .eq("id", invoice.id);
-      if (invoiceError) throw invoiceError;
+      // 1️⃣ Insert new payment record
+      const { error: insertErr } = await supabase
+        .from("invoice_payments")
+        .insert({
+          invoice_id: invoice.id,
+          amount,
+          method: invoice.payment_method || "other",
+          date: new Date().toISOString(),
+        });
 
-      const { error: ordersError } = await supabase
-        .from("orders")
-        .update({ payment_status: newStatus === "paid" ? "paid" : "unpaid" })
-        .eq("invoice_id", invoice.id);
-      if (ordersError) throw ordersError;
+      if (insertErr) throw insertErr;
+
+      // 2️⃣ Do NOT update raw_payload anymore — legacy stays for reference only
+      // derivePaymentStatus will now pick up DB payments
+
+      return true;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["invoice-payments"] });
+      toast.success("Payment added successfully");
       setIsEditingPayment(false);
       setPartialPaymentAmount("");
-      toast.success("Partial payment updated successfully");
+    },
+    onError: (err) => {
+      console.error("Payment insert failed:", err);
+      toast.error("Failed to add payment");
     },
   });
 
@@ -243,7 +316,7 @@ Here is your Saree Palace Elite invoice.
                 {new Date(invoice.date).toLocaleDateString()}
               </p>
             </div>
-            <Badge
+            {/* <Badge
               variant={
                 isPaid
                   ? "success"
@@ -256,6 +329,22 @@ Here is your Saree Palace Elite invoice.
               {isPaid
                 ? "PAID"
                 : invoice.raw_payload?.payment_status === "partial"
+                  ? "PARTIALLY PAID"
+                  : "UNPAID"}
+            </Badge> */}
+            <Badge
+              variant={
+                status === "paid"
+                  ? "success"
+                  : status === "partial"
+                    ? "warning"
+                    : "destructive"
+              }
+              className="text-lg px-4 py-2"
+            >
+              {status === "paid"
+                ? "PAID"
+                : status === "partial"
                   ? "PARTIALLY PAID"
                   : "UNPAID"}
             </Badge>
@@ -344,9 +433,7 @@ Here is your Saree Palace Elite invoice.
               <>
                 <div className="flex justify-between text-success border-t pt-2">
                   <span>Paid Amount:</span>
-                  <span className="font-medium">
-                    {formatCurrency(invoice.raw_payload?.paid_amount || 0)}
-                  </span>
+                  <span className="font-medium">{formatCurrency(paidAmount)}</span>
                 </div>
                 <div className="flex justify-between text-destructive font-semibold">
                   <span>Remaining:</span>
@@ -386,7 +473,7 @@ Here is your Saree Palace Elite invoice.
               {!isEditingPayment ? (
                 <Button onClick={() => setIsEditingPayment(true)} variant="outline" size="sm">
                   <DollarSign className="w-4 h-4 mr-2" />
-                  Update Partial Payment
+                  Add Payment
                 </Button>
               ) : (
                 <div className="space-y-3">
@@ -397,28 +484,37 @@ Here is your Saree Palace Elite invoice.
                       type="number"
                       step="0.01"
                       min="0"
-                      max={parseFloat(invoice.total) - parseFloat(invoice.raw_payload?.paid_amount || 0)}
+                      // max={parseFloat(invoice.total) - parseFloat(invoice.raw_payload?.paid_amount || 0)}
+                      max={parseFloat(invoice.total) - paidAmount}
+
                       value={partialPaymentAmount}
                       onChange={(e) => setPartialPaymentAmount(e.target.value)}
                       placeholder="Enter amount"
                     />
                     <p className="text-sm text-muted-foreground mt-1">
-                      Current: {formatCurrency(invoice.raw_payload?.paid_amount || 0)} | Remaining: {formatCurrency(remainingBalance)}
+                      {/* Current: {formatCurrency(invoice.raw_payload?.paid_amount || 0)} | Remaining: {formatCurrency(remainingBalance)} */}
+                      Current: {formatCurrency(paidAmount)} | Remaining: {formatCurrency(remainingBalance)}
                     </p>
                   </div>
                   <div className="flex gap-2">
                     <Button
                       onClick={() => {
-                        const currentPaid = parseFloat(invoice.raw_payload?.paid_amount || 0);
-                        const additionalAmount = parseFloat(partialPaymentAmount);
-                        if (additionalAmount > 0) {
-                          updatePartialPaymentMutation.mutate(currentPaid + additionalAmount);
+                        const amount = parseFloat(partialPaymentAmount);
+                        // ensure valid amount and does not exceed remaining
+                        if (isNaN(amount) || amount <= 0) {
+                          toast.error("Enter a valid amount");
+                          return;
                         }
+                        if (amount > remainingBalance) {
+                          toast.error("Amount exceeds remaining balance");
+                          return;
+                        }
+                        addPaymentMutation.mutate(amount);
                       }}
                       disabled={!partialPaymentAmount || parseFloat(partialPaymentAmount) <= 0}
                       size="sm"
                     >
-                      Update Payment
+                      Add Payment
                     </Button>
                     <Button onClick={() => { setIsEditingPayment(false); setPartialPaymentAmount(""); }} variant="outline" size="sm">
                       Cancel

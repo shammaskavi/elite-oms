@@ -438,7 +438,7 @@ export default function Invoices() {
                     <DialogTrigger asChild>
                         <Button>
                             <Plus className="w-4 h-4 mr-2" />
-                            Create Invoice
+                            Demo Create Invoice
                         </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
