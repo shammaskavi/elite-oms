@@ -55,6 +55,7 @@ import { PopoverContent, Popover, PopoverTrigger } from "@/components/ui/popover
 import { CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 import { cn } from "@/lib/utils";
+import { InvoiceRow } from "@/components/InvoiceRow";
 
 
 export default function Invoices() {
@@ -1342,76 +1343,23 @@ export default function Invoices() {
                 <TableCell colSpan={6} className="text-center">No invoices found</TableCell>
               </TableRow>
             ) : (
-              filteredInvoices?.map((invoice: any) => {
-                const isDraft = invoice.status === "draft";
-
-                // Determine payment status safely (top-level → raw_payload → orders)
-                const paymentStatus =
-                  invoice.payment_status ||
-                  invoice.raw_payload?.payment_status ||
-                  (invoice.orders?.every((o: any) => o.payment_status === "paid") ? "paid" : "unpaid");
-
-                // Derived flags
-                const isPaid = paymentStatus === "paid";
-                const isPartial = paymentStatus === "partial";
-                const isUnpaid = paymentStatus === "unpaid";
-                return (
-                  <TableRow
-                    key={invoice.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => setSelectedInvoice(invoice)}
-                  >
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {invoice.invoice_number}
-                        {isDraft && <Badge variant="outline" className="text-xs">Draft</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell>{invoice.customers?.name || "-"}</TableCell>
-                    <TableCell>{format(new Date(invoice.date), "dd/MM/yyyy")}</TableCell>
-                    <TableCell>₹{invoice.total}</TableCell>
-                    <TableCell>
-                      {isDraft ? (
-                        <Badge variant="secondary">Draft</Badge>
-                      ) : isPaid ? (
-                        <Badge variant="success">Paid</Badge>
-                      ) : isPartial ? (
-                        <Badge variant="info">Partial</Badge>
-                      ) : (
-                        <Badge variant="warning">Unpaid</Badge>
-                      )}
-                    </TableCell>
-
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex gap-2">
-                        {!isDraft && invoice.orders?.[0]?.id && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              navigate(`/orders/${invoice.orders[0].id}`);
-                            }}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setInvoiceToDelete(invoice);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-
-
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
+              filteredInvoices?.map((invoice: any) => (
+                <InvoiceRow
+                  key={invoice.id}
+                  invoice={invoice}
+                  onRowClick={() => setSelectedInvoice(invoice)}
+                  onViewOrder={
+                    // !invoice.status === "draft" && invoice.orders?.[0]?.id
+                    invoice.status !== "draft" && invoice.orders?.[0]?.id
+                      ? () => navigate(`/orders/${invoice.orders[0].id}`)
+                      : undefined
+                  }
+                  onDelete={() => {
+                    setInvoiceToDelete(invoice);
+                    setDeleteDialogOpen(true);
+                  }}
+                />
+              ))
             )}
           </TableBody>
         </Table>
