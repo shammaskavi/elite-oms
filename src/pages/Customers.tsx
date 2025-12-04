@@ -336,13 +336,20 @@ export default function Customers() {
                   </TableCell> */}
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(customer)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();           // ⛔ don't trigger row click
+                          handleEdit(customer);
+                        }}>
                         <Pencil className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();           // ⛔ don't trigger row click
                           setCustomerToDelete(customer);
                           setDeleteDialogOpen(true);
                         }}
