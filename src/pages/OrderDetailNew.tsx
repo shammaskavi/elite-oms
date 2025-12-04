@@ -32,59 +32,113 @@ export default function OrderDetailNew() {
     const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: "delivered" | "cancelled" | "delete" }>({ open: false, action: "delivered" });
     const queryClient = useQueryClient();
 
-    // --- invoice (by order id) ---
-    const { data: invoice } = useQuery({
-        queryKey: ["invoice-by-order", id],
+    // --- get current order by id ---
+    const { data: currentOrder } = useQuery({
+        queryKey: ["order", id],
         queryFn: async () => {
-            const { data: order } = await (supabase as any)
+            const { data, error } = await (supabase as any)
                 .from("orders")
-                .select("invoice_id")
+                .select("*")
                 .eq("id", id)
                 .single();
 
-            if (!order?.invoice_id) return null;
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!id,
+    });
+
+    // --- invoice (by order id) --- new 
+    const { data: invoice } = useQuery({
+        queryKey: ["invoice-by-order", currentOrder?.invoice_id],
+        queryFn: async () => {
+            if (!currentOrder?.invoice_id) return null;
 
             const { data, error } = await (supabase as any)
                 .from("invoices")
                 .select("*, customers(name)")
-                .eq("id", order.invoice_id)
+                .eq("id", currentOrder.invoice_id)
                 .single();
-            if (error) throw error;
-            return data;
-        },
-    });
 
-    // --- orders for invoice ---
-    const { data: orders } = useQuery({
-        queryKey: ["invoice-orders", invoice?.id],
-        queryFn: async () => {
-            if (!invoice?.id) return [];
-            const { data, error } = await (supabase as any)
-                .from("orders")
-                .select("*")
-                .eq("invoice_id", invoice.id)
-                .order("created_at", { ascending: true });
             if (error) throw error;
             return data;
         },
-        enabled: !!invoice?.id,
+        enabled: !!currentOrder?.invoice_id,
     });
+    // --- invoice (by order id) --- old 
+    // const { data: invoice } = useQuery({
+    //     queryKey: ["invoice-by-order", id],
+    //     queryFn: async () => {
+    //         const { data: order } = await (supabase as any)
+    //             .from("orders")
+    //             .select("invoice_id")
+    //             .eq("id", id)
+    //             .single();
+
+    //         if (!order?.invoice_id) return null;
+
+    //         const { data, error } = await (supabase as any)
+    //             .from("invoices")
+    //             .select("*, customers(name)")
+    //             .eq("id", order.invoice_id)
+    //             .single();
+    //         if (error) throw error;
+    //         return data;
+    //     },
+    // });
+
+    // --- orders for invoice --- old 
+    // const { data: orders } = useQuery({
+    //     queryKey: ["invoice-orders", invoice?.id],
+    //     queryFn: async () => {
+    //         if (!invoice?.id) return [];
+    //         const { data, error } = await (supabase as any)
+    //             .from("orders")
+    //             .select("*")
+    //             .eq("invoice_id", invoice.id)
+    //             .order("created_at", { ascending: true });
+    //         if (error) throw error;
+    //         return data;
+    //     },
+    //     enabled: !!invoice?.id,
+    // });
+
+    // --- orders for invoice --- new 
+    // --- orders for this page (just the current order) ---
+    const orders = currentOrder ? [currentOrder] : [];
 
     // --- all order_stages for these orders ---
+    // const { data: allStages } = useQuery({
+    //     queryKey: ["all-order-stages", invoice?.id],
+    //     queryFn: async () => {
+    //         if (!invoice?.id || !orders) return [];
+    //         const orderIds = orders.map((o: any) => o.id);
+    //         const { data, error } = await (supabase as any)
+    //             .from("order_stages")
+    //             .select("*")
+    //             .in("order_id", orderIds)
+    //             .order("created_at", { ascending: true });
+    //         if (error) throw error;
+    //         return data;
+    //     },
+    //     enabled: !!invoice?.id && !!orders,
+    // });
+    // --- order_stages for this single order ---
+    // --- order_stages for this single order ---
     const { data: allStages } = useQuery({
-        queryKey: ["all-order-stages", invoice?.id],
+        queryKey: ["order-stages", id],
         queryFn: async () => {
-            if (!invoice?.id || !orders) return [];
-            const orderIds = orders.map((o: any) => o.id);
+            if (!id) return [];
             const { data, error } = await (supabase as any)
                 .from("order_stages")
                 .select("*")
-                .in("order_id", orderIds)
+                .eq("order_id", id)
                 .order("created_at", { ascending: true });
+
             if (error) throw error;
             return data;
         },
-        enabled: !!invoice?.id && !!orders,
+        enabled: !!id,
     });
 
     // --- NEW: fetch canonical workflow stages from DB (ordered by order_index) ---
@@ -257,7 +311,7 @@ export default function OrderDetailNew() {
             <div className="flex items-center justify-between">
                 <Button variant="ghost" size="sm" onClick={() => navigate("/orders")}>
                     <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Orders
+                    Back to Orders jao bhai
                 </Button>
                 <div className="flex gap-2">
                     <DropdownMenu>

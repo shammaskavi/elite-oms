@@ -434,16 +434,16 @@ export function OrderTimeline({
                         <div key={stage} className="flex items-center">
                             <div
                                 className={`w-3 h-3 rounded-full mr-1 ${isDone
-                                        ? "bg-green-500"
-                                        : isActive
-                                            ? "bg-blue-500"
-                                            : "bg-gray-300"
+                                    ? "bg-green-500"
+                                    : isActive
+                                        ? "bg-blue-500"
+                                        : "bg-gray-300"
                                     }`}
                             />
                             <span
                                 className={`text-xs ${isActive
-                                        ? "text-primary font-semibold"
-                                        : "text-muted-foreground"
+                                    ? "text-primary font-semibold"
+                                    : "text-muted-foreground"
                                     }`}
                             >
                                 {stage}
