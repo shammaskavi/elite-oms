@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { FileText, Package, TrendingUp, DollarSign, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { InvoiceView } from "@/components/InvoiceView";
+
 
 export default function Dashboard() {
   const [timePeriod, setTimePeriod] = useState<string>("today");
@@ -18,6 +20,9 @@ export default function Dashboard() {
   });
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([]);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
+  const navigate = useNavigate();
+  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -119,6 +124,7 @@ export default function Dashboard() {
     };
     return <Badge variant={variants[status] || "default"}>{status}</Badge>;
   };
+
 
   return (
     <div className="space-y-8">
@@ -228,14 +234,26 @@ export default function Dashboard() {
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-4">
                 {pendingInvoices.map((invoice) => (
-                  <div key={invoice.id} className="flex items-center justify-between">
+                  <div
+                    key={invoice.id}
+                    className="flex items-center justify-between p-2 rounded-lg cursor-pointer hover:bg-muted transition"
+                    onClick={() => {
+                      setSelectedInvoice(invoice);
+                      setInvoiceModalOpen(true);
+                    }}
+                  >
                     <div>
                       <p className="font-medium">{invoice.invoice_number}</p>
-                      <p className="text-sm text-muted-foreground">{invoice.customers?.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {invoice.customers?.name}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="font-medium">₹{invoice.total}</p>
-                      <Badge variant={invoice.payment_status === "partial" ? "info" : "warning"} className="text-xs">
+                      <Badge
+                        variant={invoice.payment_status === "partial" ? "info" : "warning"}
+                        className="text-xs"
+                      >
                         {invoice.payment_status === "partial" ? "Partial" : "Unpaid"}
                       </Badge>
                     </div>
@@ -273,6 +291,17 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-    </div>
+
+      {selectedInvoice && (
+        <InvoiceView
+          invoice={selectedInvoice}
+          open={invoiceModalOpen}
+          onOpenChange={(open) => {
+            setInvoiceModalOpen(open);
+            if (!open) setSelectedInvoice(null);
+          }}
+        />
+      )}
+    </div >
   );
 }
