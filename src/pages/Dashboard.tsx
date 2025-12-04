@@ -275,7 +275,11 @@ export default function Dashboard() {
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-4">
                 {pendingOrders.map((order) => (
-                  <div key={order.id} className="flex items-center justify-between">
+                  <div
+                    key={order.id}
+                    className="flex items-center justify-between p-2 rounded-lg cursor-pointer hover:bg-muted transition"
+                    onClick={() => navigate(`/orders/${order.id}`)}
+                  >
                     <div>
                       <p className="font-medium">{order.order_code}</p>
                       <p className="text-sm text-muted-foreground">{order.customers?.name}</p>
