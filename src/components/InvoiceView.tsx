@@ -94,21 +94,42 @@ export function InvoiceView({
   //   return <PrintableInvoice data={pdfData} />;
   // }, [invoice, isPaid, remainingBalance]);
 
+  const { data: invoicePayments = [] } = useQuery({
+    queryKey: ["invoice-payments-for-invoice", invoice.id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("invoice_payments")
+        .select("*")
+        .eq("invoice_id", invoice.id)
+        .order("date", { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!invoice?.id,   // only run when invoice.id exists
+  });
+
+
   const invoiceDocument = useMemo(() => {
     const pdfData = {
       ...invoice,
       delivery_date: invoice.raw_payload?.delivery_date,
       isPaid: status === "paid",
-      paidAmount,        // 👈 NEW
+      paidAmount,              // already there
       remainingBalance: remaining,
     };
-    return <PrintableInvoice data={pdfData} />;
-  }, [invoice, status, paidAmount, remaining]);
+    return (
+      <PrintableInvoice
+        data={pdfData}
+        payments={invoicePayments}   // 👈 pass payments here
+      />
+    );
+  }, [invoice, status, paidAmount, remaining, invoicePayments]);
 
   const [instance, updateInstance] = usePDF({ document: invoiceDocument });
   useEffect(() => {
     updateInstance(invoiceDocument);
-  }, [invoiceDocument]);
+  }, [invoiceDocument, invoicePayments]);
 
   // Print (opens PDF and triggers print dialog)
   const handlePrint = () => {

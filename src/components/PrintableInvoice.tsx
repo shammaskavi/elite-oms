@@ -140,8 +140,45 @@ const styles = StyleSheet.create({
     },
     balanceValue: { color: 'red' },
 
+    paymentInfoLabel: {
+        fontSize: 8,
+        width: '55%',
+        textAlign: 'right',
+        paddingRight: 5,
+        fontWeight: 'normal',
+    },
+
+    paymentInfoValue: {
+        fontSize: 8,
+        width: '45%',
+        textAlign: 'right',
+        fontWeight: 'normal',
+    },
+
     remarksBox: { padding: 4, marginTop: 4, fontSize: 8, minHeight: 40 },
     remarksLabel: { fontWeight: 'bold', marginBottom: 2, color: '#9C27B0' },
+
+    paymentHistoryBox: {
+        marginTop: 10,
+        padding: 6,
+        border: '0.5pt solid #9C27B0',
+    },
+    paymentHistoryTitle: {
+        fontWeight: 'bold',
+        color: '#9C27B0',
+        marginBottom: 4,
+        borderBottom: '0.5pt solid #9C27B0',
+        paddingBottom: 2,
+    },
+    paymentRow: {
+        flexDirection: 'row',
+        borderBottom: '0.5pt solid #eee',
+        paddingVertical: 2,
+        fontSize: 9
+    },
+    paymentColDate: { width: '35%' },
+    paymentColMethod: { width: '35%' },
+    paymentColAmount: { width: '30%', textAlign: 'right' },
 
     // Payment Mode Tag
     paymentTag: {
@@ -223,7 +260,7 @@ interface InvoiceData {
 }
 
 // ---------------- COMPONENT ----------------
-export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
+export const PrintableInvoice: React.FC<{ data: InvoiceData, payments?: any[] }> = ({ data, payments = [] }) => {
     const {
         invoice_number,
         date,
@@ -386,6 +423,54 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                             <Text style={styles.totalLabel}>TOTAL</Text>
                             <Text style={styles.totalValue}>{formatCurrency(finalTotal)}</Text>
                         </View>
+
+
+                        {/* PAYMENT BREAKUP */}
+                        {payments.length > 0 && (
+                            <View
+                                style={{
+                                    // borderTop: '0.5pt solid #ddd',
+                                    paddingVertical: 4,
+                                    paddingHorizontal: 4,
+                                    marginTop: 4,
+                                }}
+                            >
+                                {payments.map((p, i) => (
+                                    <View
+                                        key={i}
+                                        style={{
+                                            flexDirection: 'row',
+                                            justifyContent: 'space-between',
+                                            paddingVertical: 1,
+                                            borderBottom: i === payments.length - 1 ? '0pt' : '0.5pt solid #eee',
+                                        }}
+                                    >
+                                        {/* <Text style={{ fontSize: 8 }}>
+                                            {new Date(p.date).toLocaleDateString('en-IN', {
+                                                day: '2-digit',
+                                                month: 'short',
+                                                year: '2-digit',
+                                            })}
+                                        </Text> */}
+                                        <Text style={styles.paymentInfoLabel}>
+                                            {new Date(p.date).toLocaleDateString('en-IN', {
+                                                day: '2-digit',
+                                                month: 'short',
+                                                year: '2-digit',
+                                            })}{' '}
+                                            - {p.method?.toUpperCase() || 'N/A'}
+                                        </Text>
+                                        <Text
+                                            style={styles.paymentInfoValue}
+                                        >
+                                            {formatCurrency(p.amount)}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+
+
                         <View style={styles.totalRow}>
                             <Text style={styles.totalLabel}>PAID</Text>
                             <Text style={styles.totalValue}>{formatCurrency(paidAmount)}</Text>
@@ -415,7 +500,6 @@ export const PrintableInvoice: React.FC<{ data: InvoiceData }> = ({ data }) => {
                         )}
                     </View>
                 </View>
-
                 {/* Signature */}
                 <View style={styles.signatureContainer}>
                     <Text style={styles.signatureText}>For Saree Palace Elite</Text>

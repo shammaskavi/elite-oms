@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InvoiceView } from "@/components/InvoiceView";
+import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
 
 
 export default function Dashboard() {
@@ -92,14 +93,41 @@ export default function Dashboard() {
     });
 
     // Load pending invoices (unpaid or partial paid)
+    // const { data: invoicesData } = await (supabase as any)
+    //   .from("invoices")
+    //   .select("*, customers(name)")
+    //   .in("payment_status", ["unpaid", "partial"])
+    //   .order("created_at", { ascending: false })
+    //   .limit(10);
+
+    // setPendingInvoices(invoicesData || []);
+
+    // ----
+
+    // Load recent invoices (we'll derive pending status from payments)
     const { data: invoicesData } = await (supabase as any)
       .from("invoices")
       .select("*, customers(name)")
-      .in("payment_status", ["unpaid", "partial"])
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(30); // get a bit more, we'll filter in JS
 
-    setPendingInvoices(invoicesData || []);
+    const enrichedInvoices =
+      (invoicesData && invoicesData.length > 0)
+        ? await Promise.all(
+          invoicesData.map(async (inv: any) => ({
+            ...inv,
+            __payment: await derivePaymentStatus(inv),
+          }))
+        )
+        : [];
+
+    // Only keep invoices that are NOT fully paid
+    const pending = enrichedInvoices.filter(
+      (inv: any) => inv.__payment?.status !== "paid"
+    );
+
+    // Optional: keep newest 10
+    setPendingInvoices(pending.slice(0, 10));
 
     // Load pending orders (not delivered or cancelled)
     const { data: ordersDataPending } = await (supabase as any)

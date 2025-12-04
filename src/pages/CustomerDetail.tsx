@@ -68,17 +68,30 @@ export default function CustomerDetail() {
 
 
     // ---- invoice payments (true payment history) ----
+    // ---- invoice payments (true payment history) ----
     const { data: invoicePayments } = useQuery({
         queryKey: ["invoice-payments", id],
         queryFn: async () => {
-            const { data, error } = await supabase
+            const { data, error } = await (supabase as any)
                 .from("invoice_payments")
-                .select("*, invoices(invoice_number, customer_id)")
-                .eq("invoices.customer_id", id)
+                .select(
+                    `
+                id,
+                date,
+                amount,
+                method,
+                invoices!inner (
+                    id,
+                    invoice_number,
+                    customer_id
+                )
+                `
+                )
+                .eq("invoices.customer_id", id)     // only this customer's invoices
                 .order("date", { ascending: false });
 
             if (error) throw error;
-            return data || [];
+            return data ?? [];
         },
         enabled: !!id,
     });
