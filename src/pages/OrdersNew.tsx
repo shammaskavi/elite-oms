@@ -29,7 +29,7 @@ import { toast } from "sonner";
 
 export default function OrdersNew() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("active");
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [dateFilter, setDateFilter] = useState<string>("");
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; orderId: string; action: "delivered" | "cancelled" }>({
@@ -414,6 +414,7 @@ export default function OrdersNew() {
                   <Card
                     key={order.id}
                     className={`p-4 rounded-xl border-l-4 hover:shadow-md transition-all ${getCardClassName(order.order_status)}`}
+                    onClick={() => window.location.href = `/orders/${order.id}`}
                     style={{
                       borderLeftColor:
                         order.order_status === "delivered"
@@ -443,7 +444,7 @@ export default function OrdersNew() {
                         )}
                       </div>
 
-                      <DropdownMenu>
+                      {/* <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8">
                             <MoreVertical className="h-4 w-4" />
@@ -478,7 +479,7 @@ export default function OrdersNew() {
                             Mark as Cancelled
                           </DropdownMenuItem>
                         </DropdownMenuContent>
-                      </DropdownMenu>
+                      </DropdownMenu> */}
                     </div>
 
                     <div className="mt-3 flex flex-wrap justify-between text-sm text-muted-foreground">
@@ -579,7 +580,8 @@ export default function OrdersNew() {
 
                         return (
                           // kanban card
-                          <Card key={order.id} className={`p-3 hover:shadow-md transition-shadow ${getCardClassName(order.order_status)}`}>
+                          <Card key={order.id} className={`p-3 hover:shadow-md transition-shadow ${getCardClassName(order.order_status)}`}
+                            onClick={() => window.location.href = `/orders/${order.id}`}>
                             <div className="space-y-2">
                               <div className="flex items-start justify-between">
                                 <h4 className="font-semibold text-sm">
@@ -621,7 +623,7 @@ export default function OrdersNew() {
                               </div>
 
 
-                              <div className="flex gap-1">
+                              {/* <div className="flex gap-1">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="sm" className="w-full">
@@ -652,7 +654,7 @@ export default function OrdersNew() {
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
-                              </div>
+                              </div> */}
                             </div>
                           </Card>
                         );

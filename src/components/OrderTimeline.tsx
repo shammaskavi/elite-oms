@@ -524,7 +524,7 @@ export function OrderTimeline({
             </div>
 
             {/* ---------- Activity Log ---------- */}
-            <div className="pt-2 border-t">
+            <div className="pt-2">
                 <ActivityLog
                     orderId={order.id}
                     productNumber={productNumber}
