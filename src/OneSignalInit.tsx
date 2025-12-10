@@ -2,16 +2,15 @@ import { useEffect } from "react";
 import OneSignal from "react-onesignal";
 import { supabase } from "./integrations/supabase/client";
 
+
 async function savePlayerId() {
-    const id = await OneSignal.User.getId();
+    const id = OneSignal.User?.onesignalId;
     if (!id) return;
 
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase
+    await (supabase as any)
         .from("user_push_devices")
         .upsert(
             {
@@ -28,6 +27,9 @@ async function savePlayerId() {
 export function OneSignalInit() {
     useEffect(() => {
         async function init() {
+            // OneSignal.getUserId().then(id => console.log("📌 Existing ID:", id));
+            // OneSignal.User.getId().then(id => console.log("📌 Existing Player ID:", id));
+            console.log("Existing ID:", OneSignal.User.onesignalId)
             console.log("🚀 OneSignal init starting...");
 
             await OneSignal.init({
@@ -35,23 +37,27 @@ export function OneSignalInit() {
                 allowLocalhostAsSecureOrigin: false,
             });
 
+            // Always show permission prompt (OneSignal handles dedupe)
             await OneSignal.Slidedown.promptPush();
-            console.log("⏳ Waiting for OneSignal Player ID...");
 
+            console.log("⏳ Waiting for OneSignal ID...");
+
+            // 🔁 Poll until SDK exposes the onesignalId
             const poll = setInterval(async () => {
-                const id = await OneSignal.User.getId();
-                const subscribed = OneSignal.User.PushSubscription.optedIn;
+                const id = OneSignal.User?.onesignalId;
+                const subscribed = OneSignal.User?.PushSubscription?.optedIn;
 
                 if (id && subscribed) {
                     clearInterval(poll);
-                    console.log("🆔 OneSignal Player ID detected:", id);
+                    console.log("🆔 OneSignal ID detected:", id);
                     await savePlayerId();
                 }
             }, 500);
 
-            OneSignal.User.PushSubscription.addEventListener("change", async (e: any) => {
+            // 🔄 Detect subscription change after first load
+            OneSignal.User?.PushSubscription?.addEventListener("change", async (e: any) => {
                 if (e?.current?.optedIn) {
-                    console.log("🆕 Subscription changed — saving Player ID");
+                    console.log("🆕 Subscription changed — saving ID");
                     await savePlayerId();
                 }
             });
