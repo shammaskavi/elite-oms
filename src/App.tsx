@@ -16,12 +16,14 @@ import OrdersNew from "./pages/OrdersNew";
 import OrderDetailNew from "./pages/OrderDetailNew";
 import NotFound from "./pages/NotFound";
 import CustomerDetail from "./pages/CustomerDetail";
+import { OneSignalInit } from "./OneSignalInit";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <OneSignalInit />
       <Toaster />
       <Sonner />
       <BrowserRouter>
