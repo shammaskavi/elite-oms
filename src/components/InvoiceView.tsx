@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Send,
   DollarSign,
@@ -52,6 +53,10 @@ export function InvoiceView({
   const [sendProgress, setSendProgress] = useState("");
   const [isEditingPayment, setIsEditingPayment] = useState(false);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentDate, setPaymentDate] = useState(
+    () => new Date().toISOString().split("T")[0]
+  );
 
   const { data: paymentInfo, isLoading: statusLoading } = useQuery({
     queryKey: ["invoice-payment-status", invoice.id],
@@ -283,20 +288,21 @@ Here is your Saree Palace Elite invoice.
   //   },
   // });
 
-  // updated 
+  // updated
   // NEW — Add Payment Mutation
+
   const addPaymentMutation = useMutation({
     mutationFn: async (amount: number) => {
       if (!invoice.id) throw new Error("Missing invoice id");
 
       // 1️⃣ Insert new payment record
-      const { error: insertErr } = await supabase
+      const { error: insertErr } = await (supabase as any)
         .from("invoice_payments")
         .insert({
           invoice_id: invoice.id,
           amount,
-          method: invoice.payment_method || "other",
-          date: new Date().toISOString(),
+          method: paymentMethod,
+          date: paymentDate,
         });
 
       if (insertErr) throw insertErr;
@@ -516,6 +522,34 @@ Here is your Saree Palace Elite invoice.
                       {/* Current: {formatCurrency(invoice.raw_payload?.paid_amount || 0)} | Remaining: {formatCurrency(remainingBalance)} */}
                       Current: {formatCurrency(paidAmount)} | Remaining: {formatCurrency(remainingBalance)}
                     </p>
+                  </div>
+                  {/* date section & payment type */}
+                  <div>
+                    <Label className="text-sm">Payment Method</Label>
+                    <Select
+                      value={paymentMethod}
+                      onValueChange={setPaymentMethod}
+                    >
+                      <SelectTrigger className="h-9 mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="card">Card</SelectItem>
+                        <SelectItem value="upi">UPI</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="payment_date" className="text-sm">Payment Date</Label>
+                    <Input
+                      id="payment_date"
+                      type="date"
+                      className="h-9 mt-1"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                    />
                   </div>
                   <div className="flex gap-2">
                     <Button

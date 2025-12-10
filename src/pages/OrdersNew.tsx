@@ -413,7 +413,7 @@ export default function OrdersNew() {
                 return (
                   <Card
                     key={order.id}
-                    className={`p-4 rounded-xl border-l-4 hover:shadow-md transition-all ${getCardClassName(order.order_status)}`}
+                    className={`p-4 rounded-xl border-l-4 hover:shadow-md transition-all cursor-pointer ${getCardClassName(order.order_status)}`}
                     onClick={() => window.location.href = `/orders/${order.id}`}
                     style={{
                       borderLeftColor:
@@ -580,7 +580,7 @@ export default function OrdersNew() {
 
                         return (
                           // kanban card
-                          <Card key={order.id} className={`p-3 hover:shadow-md transition-shadow ${getCardClassName(order.order_status)}`}
+                          <Card key={order.id} className={`p-3 hover:shadow-md transition-all cursor-pointer ${getCardClassName(order.order_status)}`}
                             onClick={() => window.location.href = `/orders/${order.id}`}>
                             <div className="space-y-2">
                               <div className="flex items-start justify-between">

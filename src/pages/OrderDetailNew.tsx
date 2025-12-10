@@ -313,7 +313,7 @@ export default function OrderDetailNew() {
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Orders jao bhai
                 </Button>
-                <div className="flex gap-2">
+                {/* <div className="flex gap-2">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline">
@@ -337,7 +337,7 @@ export default function OrderDetailNew() {
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete All Orders
                     </Button>
-                </div>
+                </div> */}
             </div>
 
             <div>
