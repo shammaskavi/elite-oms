@@ -27,11 +27,14 @@ async function savePlayerId() {
 export function OneSignalInit() {
     useEffect(() => {
         async function init() {
+            // OneSignal.getUserId().then(id => console.log("📌 Existing ID:", id));
+            // OneSignal.User.getId().then(id => console.log("📌 Existing Player ID:", id));
+            // console.log("Existing ID:", OneSignal.User.onesignalId)
             console.log("🚀 OneSignal init starting...");
 
             await OneSignal.init({
                 appId: import.meta.env.VITE_ONESIGNAL_APP_ID!,
-                allowLocalhostAsSecureOrigin: true,
+                allowLocalhostAsSecureOrigin: false,
             });
 
             // Always show permission prompt (OneSignal handles dedupe)
