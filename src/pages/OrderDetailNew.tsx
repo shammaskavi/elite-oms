@@ -311,7 +311,7 @@ export default function OrderDetailNew() {
             <div className="flex items-center justify-between">
                 <Button variant="ghost" size="sm" onClick={() => navigate("/orders")}>
                     <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Orders jao bhai
+                    Back to Orders
                 </Button>
                 {/* <div className="flex gap-2">
                     <DropdownMenu>
