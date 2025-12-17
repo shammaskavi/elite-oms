@@ -43,11 +43,12 @@ serve(async () => {
             const message = `❌ ${order.order_code} is overdue — ${order["metadata->>item_name"]}`;
             console.log("📤 Sending push:", message);
 
-            const res = await fetch("https://api.onesignal.com/v1/notifications", {
+
+            const res = await fetch("https://onesignal.com/api/v1/notifications", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json; charset=utf-8",
-                    Authorization: `Basic ${ONESIGNAL_REST_API_KEY}`,
+                    Authorization: `Bearer ${ONESIGNAL_REST_API_KEY}`,
                 },
                 body: JSON.stringify({
                     app_id: ONESIGNAL_APP_ID,
@@ -56,8 +57,13 @@ serve(async () => {
                 }),
             });
 
-            const result = await res.json();
-            console.log("📨 OneSignal Response:", result);
+            const text = await res.text();
+            try {
+                const json = JSON.parse(text);
+                console.log("📨 OneSignal Response:", json);
+            } catch {
+                console.error("❌ OneSignal HTML error:", text.slice(0, 200));
+            }
         }
 
         console.log("🎉 Notifications sent!");

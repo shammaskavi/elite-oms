@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, MoreVertical } from "lucide-react";
+import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, AlertTriangle } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
@@ -37,6 +37,7 @@ export default function OrdersNew() {
     orderId: "",
     action: "delivered"
   });
+  const [quickFilter, setQuickFilter] = useState<"overdue" | "dueSoon" | null>(null);
   const queryClient = useQueryClient();
 
   // --- Fetch orders (with relations) ---
@@ -86,35 +87,109 @@ export default function OrdersNew() {
   // build stage names array used across component
   const STAGES = (stagesData || []).map((s: any) => s.name);
 
+  // --- Date helpers ---
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const isOverdue = (order: any) => {
+    if (["delivered", "cancelled"].includes(order.order_status)) return false;
+    if (!order.metadata?.delivery_date) return false;
+
+    const deliveryDate = new Date(order.metadata.delivery_date);
+    return deliveryDate < todayStart;
+  };
+
+  // console.log("Overdue orders:", orders?.filter(isOverdue));
+
   // Calculate stats
   const stats = {
     total: orders?.length || 0,
     active: orders?.filter((o: any) => !["delivered", "cancelled"].includes(o.order_status)).length || 0,
     completed: orders?.filter((o: any) => o.order_status === "delivered").length || 0,
-    dueSoon: orders?.filter((o: any) => {
-      // Calculate if order is due within 3 days - placeholder logic for now
-      return !["delivered", "cancelled"].includes(o.order_status);
-    }).length || 0,
+    overdue: orders?.filter(isOverdue).length || 0,
+    dueSoon:
+      orders?.filter((o: any) => {
+        if (["delivered", "cancelled"].includes(o.order_status)) return false;
+        if (!o.metadata?.delivery_date) return false;
+
+        const deliveryDate = new Date(o.metadata.delivery_date);
+        deliveryDate.setHours(0, 0, 0, 0);
+
+        const diffDays =
+          (deliveryDate.getTime() - todayStart.getTime()) /
+          (1000 * 60 * 60 * 24);
+
+        return diffDays >= 0 && diffDays <= 3 && !isOverdue(o);
+      }).length || 0,
+
+
+    // dueSoon: orders?.filter((o: any) => {
+    //   // Calculate if order is due within 3 days - placeholder logic for now
+    //   return !["delivered", "cancelled"].includes(o.order_status);
+    // }).length || 0,
+
+
   };
+
+  const upcoming = orders?.filter(o => {
+    if (["delivered", "cancelled"].includes(o.order_status)) return false;
+    if (!o.metadata?.delivery_date) return true;
+
+    const d = new Date(o.metadata.delivery_date);
+    d.setHours(0, 0, 0, 0);
+
+    const diff =
+      (d.getTime() - todayStart.getTime()) /
+      (1000 * 60 * 60 * 24);
+
+    return diff > 3;
+  });
+
+  console.log("Upcoming orders:", upcoming?.length);
 
   // Separate active and completed orders
   const activeOrders = orders?.filter((o: any) => !["delivered", "cancelled"].includes(o.order_status)) || [];
   const completedOrders = orders?.filter((o: any) => o.order_status === "delivered") || [];
 
-  // Filter orders based on selected tab + search + date
-  const filteredOrders = (statusFilter === "completed" ? completedOrders :
-    statusFilter === "cancelled" ? orders?.filter((o: any) => o.order_status === "cancelled") :
-      statusFilter === "active" ? activeOrders :
-        orders)?.filter((order: any) => {
-          const matchesSearch =
-            order.order_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            order.customers?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+  // Filter orders based on selected tab + search + date + quickFilter
+  const baseOrders =
+    statusFilter === "completed"
+      ? completedOrders
+      : statusFilter === "cancelled"
+        ? orders?.filter((o: any) => o.order_status === "cancelled")
+        : statusFilter === "active"
+          ? activeOrders
+          : orders;
 
-          const matchesDate = !dateFilter ||
-            new Date(order.created_at).toISOString().split("T")[0] === dateFilter;
+  const filteredOrders = baseOrders
+    ?.filter((order: any) => {
+      if (quickFilter === "overdue") return isOverdue(order);
+      if (quickFilter === "dueSoon") {
+        if (["delivered", "cancelled"].includes(order.order_status)) return false;
+        if (!order.metadata?.delivery_date) return false;
 
-          return matchesSearch && matchesDate;
-        });
+        const deliveryDate = new Date(order.metadata.delivery_date);
+        deliveryDate.setHours(0, 0, 0, 0);
+
+        const diffDays =
+          (deliveryDate.getTime() - todayStart.getTime()) /
+          (1000 * 60 * 60 * 24);
+
+        return diffDays >= 0 && diffDays <= 3 && !isOverdue(order);
+      }
+      return true;
+    })
+    .filter((order: any) => {
+      const matchesSearch =
+        order.order_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        order.customers?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesDate =
+        !dateFilter ||
+        new Date(order.created_at).toISOString().split("T")[0] === dateFilter;
+
+      return matchesSearch && matchesDate;
+    });
 
   // get orders for a given stage name (kanban)
   const getOrdersByStage = (stageName: string) => {
@@ -281,7 +356,7 @@ export default function OrdersNew() {
   return (
     <div className="space-y-6 p-4 md:p-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -295,7 +370,13 @@ export default function OrdersNew() {
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card
+          className="p-6 cursor-pointer hover:shadow-md"
+          onClick={() => {
+            setStatusFilter("active");
+            setQuickFilter(null);
+          }}
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Active Orders</p>
@@ -308,7 +389,13 @@ export default function OrdersNew() {
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card
+          className="p-6 cursor-pointer hover:shadow-md"
+          onClick={() => {
+            setStatusFilter("completed");
+            setQuickFilter(null);
+          }}
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Completed</p>
@@ -321,7 +408,36 @@ export default function OrdersNew() {
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card
+          className="p-6 border border-destructive/40 bg-destructive/5 cursor-pointer hover:shadow-md"
+          onClick={() => {
+            setStatusFilter("active");
+            setQuickFilter("overdue");
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Overdue</p>
+              <h3 className="text-3xl font-bold mt-2 text-destructive">
+                {stats.overdue}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Past delivery date
+              </p>
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-destructive/15 flex items-center justify-center">
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+            </div>
+          </div>
+        </Card>
+
+        <Card
+          className="p-6 cursor-pointer hover:shadow-md"
+          onClick={() => {
+            setStatusFilter("active");
+            setQuickFilter("dueSoon");
+          }}
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Due Soon</p>
@@ -388,6 +504,54 @@ export default function OrdersNew() {
             </Tabs>
           </div>
         </div>
+        {/* Active Filters */}
+        {(statusFilter !== "all" || quickFilter) && (
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <span className="text-xs text-muted-foreground">Active filters:</span>
+
+            {statusFilter !== "all" && (
+              <Badge
+                variant="secondary"
+                className="cursor-pointer"
+                onClick={() => setStatusFilter("all")}
+              >
+                Status: {statusFilter} ✕
+              </Badge>
+            )}
+
+            {quickFilter === "overdue" && (
+              <Badge
+                variant="destructive"
+                className="cursor-pointer"
+                onClick={() => setQuickFilter(null)}
+              >
+                Overdue ✕
+              </Badge>
+            )}
+
+            {quickFilter === "dueSoon" && (
+              <Badge
+                variant="secondary"
+                className="cursor-pointer"
+                onClick={() => setQuickFilter(null)}
+              >
+                Due Soon ✕
+              </Badge>
+            )}
+
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              onClick={() => {
+                setStatusFilter("all");
+                setQuickFilter(null);
+              }}
+            >
+              Clear all
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* Orders View */}
@@ -413,11 +577,15 @@ export default function OrdersNew() {
                 return (
                   <Card
                     key={order.id}
-                    className={`p-4 rounded-xl border-l-4 hover:shadow-md transition-all cursor-pointer ${getCardClassName(order.order_status)}`}
+                    className={`p-4 rounded-xl border-l-4 hover:shadow-md transition-all cursor-pointer
+                      ${getCardClassName(order.order_status)}
+                      ${isOverdue(order) ? "border-destructive bg-destructive/5 ring-1 ring-destructive/30" : ""}
+                    `}
                     onClick={() => window.location.href = `/orders/${order.id}`}
                     style={{
-                      borderLeftColor:
-                        order.order_status === "delivered"
+                      borderLeftColor: isOverdue(order)
+                        ? "hsl(var(--destructive))"
+                        : order.order_status === "delivered"
                           ? "hsl(var(--success))"
                           : "hsl(var(--warning))",
                     }}
@@ -434,6 +602,14 @@ export default function OrdersNew() {
                           <Badge variant="outline" className="text-[10px] px-2 py-0.5">
                             {currentStage}
                           </Badge>
+                          {isOverdue(order) && (
+                            <Badge
+                              variant="destructive"
+                              className="text-[10px] px-2 py-0.5"
+                            >
+                              Overdue
+                            </Badge>
+                          )}
                         </div>
 
                         <p className="text-sm font-medium text-foreground truncate">
