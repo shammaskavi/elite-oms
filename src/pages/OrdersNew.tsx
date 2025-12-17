@@ -373,25 +373,6 @@ export default function OrdersNew() {
         <Card
           className="p-6 cursor-pointer hover:shadow-md"
           onClick={() => {
-            setStatusFilter("active");
-            setQuickFilter(null);
-          }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Active Orders</p>
-              <h3 className="text-3xl font-bold mt-2">{stats.active}</h3>
-              <p className="text-xs text-muted-foreground mt-1">Currently in progress</p>
-            </div>
-            <div className="h-12 w-12 rounded-lg bg-warning/10 flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-warning" />
-            </div>
-          </div>
-        </Card>
-
-        <Card
-          className="p-6 cursor-pointer hover:shadow-md"
-          onClick={() => {
             setStatusFilter("completed");
             setQuickFilter(null);
           }}
@@ -404,6 +385,25 @@ export default function OrdersNew() {
             </div>
             <div className="h-12 w-12 rounded-lg bg-success/10 flex items-center justify-center">
               <CheckCircle2 className="h-6 w-6 text-success" />
+            </div>
+          </div>
+        </Card>
+
+        <Card
+          className="p-6 cursor-pointer hover:shadow-md"
+          onClick={() => {
+            setStatusFilter("active");
+            setQuickFilter(null);
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Active Orders</p>
+              <h3 className="text-3xl font-bold mt-2">{stats.active}</h3>
+              <p className="text-xs text-muted-foreground mt-1">Currently in progress</p>
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-warning/10 flex items-center justify-center">
+              <TrendingUp className="h-6 w-6 text-warning" />
             </div>
           </div>
         </Card>
