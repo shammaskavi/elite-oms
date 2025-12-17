@@ -20,9 +20,13 @@ All colors MUST be HSL.
     --popover-foreground: 222 47% 11%;
 
     /* Primary - Deep indigo for business professionalism */
-    --primary: 239 84% 67%;
+    --primary: 326 95% 41%;
+    --primary-hover: 326 95% 34%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 239 84% 60%;
+
+    /* --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 239 84% 60%; */
 
     /* Secondary - Light backgrounds */
     --secondary: 220 14% 96%;
@@ -61,7 +65,11 @@ All colors MUST be HSL.
     --radius: 0.5rem;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(239 84% 67%), hsl(250 84% 54%));
+    /* --gradient-primary: linear-gradient(135deg, hsl(239 84% 67%), hsl(250 84% 54%)); */
+    --gradient-primary: linear-gradient(135deg,
+        hsl(326 95% 46%),
+        hsl(318 95% 36%));
+
     --gradient-subtle: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 98%));
 
     /* Shadows */
@@ -122,7 +130,11 @@ All colors MUST be HSL.
     --input: 217 33% 17%;
     --ring: 239 84% 67%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(239 84% 67%), hsl(250 84% 54%));
+    /* --gradient-primary: linear-gradient(135deg, hsl(239 84% 67%), hsl(250 84% 54%)); */
+    --gradient-primary: linear-gradient(135deg,
+        hsl(326 95% 46%),
+        hsl(318 95% 36%));
+
     --gradient-subtle: linear-gradient(180deg, hsl(222 47% 11%), hsl(217 33% 17%));
 
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
