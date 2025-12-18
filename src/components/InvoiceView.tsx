@@ -58,6 +58,83 @@ export function InvoiceView({
     () => new Date().toISOString().split("T")[0]
   );
 
+
+  // helper to normalize strings
+  const normalize = (v?: string) =>
+    v?.trim().toLowerCase() ?? "";
+
+  // Fetch orders linked to this invoice (with stages)
+  const { data: invoiceOrders = [], isLoading: ordersLoading } = useQuery({
+    queryKey: ["invoice-orders-with-stages", invoice.id],
+    queryFn: async () => {
+      if (!invoice?.id) return [];
+
+      const { data, error } = await (supabase as any)
+        .from("orders")
+        .select(`
+        id,
+        order_code,
+        metadata,
+        order_stages (
+          stage_name,
+          created_at
+        )
+      `)
+        .eq("invoice_id", invoice.id);
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!invoice?.id,
+  });
+
+  // Determine current stage for each order
+  const ordersWithCurrentStage = useMemo(() => {
+    return invoiceOrders.map((order: any) => {
+      const stages = [...(order.order_stages || [])].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() -
+          new Date(b.created_at).getTime()
+      );
+
+      const currentStage =
+        stages.length > 0
+          ? stages[stages.length - 1].stage_name
+          : "Ordered";
+
+      return {
+        ...order,
+        currentStage,
+        itemIndex: order.metadata?.item_index,
+      };
+    });
+  }, [invoiceOrders]);
+
+  // Map of itemIndex to order for quick lookup
+  const orderByItemName = useMemo(() => {
+    const map = new Map<string, any>();
+    ordersWithCurrentStage.forEach((order: any) => {
+      if (order.metadata?.item_name) {
+        map.set(
+          normalize(order.metadata.item_name),
+          order
+        );
+      }
+    });
+    return map;
+  }, [ordersWithCurrentStage]);
+  const orderByItemIndex = useMemo(() => {
+    const map = new Map<number, any>();
+
+    ordersWithCurrentStage.forEach((order: any) => {
+      if (typeof order.metadata?.item_index === "number") {
+        map.set(order.metadata.item_index, order);
+      }
+    });
+
+    return map;
+  }, [ordersWithCurrentStage]);
+
   const { data: paymentInfo, isLoading: statusLoading } = useQuery({
     queryKey: ["invoice-payment-status", invoice.id],
     queryFn: () => derivePaymentStatus(invoice),
@@ -135,6 +212,12 @@ export function InvoiceView({
   useEffect(() => {
     updateInstance(invoiceDocument);
   }, [invoiceDocument, invoicePayments]);
+
+  useEffect(() => {
+    if (ordersWithCurrentStage.length) {
+      console.log("Invoice Orders →", ordersWithCurrentStage);
+    }
+  }, [ordersWithCurrentStage]);
 
   // Print (opens PDF and triggers print dialog)
   const handlePrint = () => {
@@ -404,20 +487,41 @@ Here is your Saree Palace Elite invoice.
                     <th className="text-right p-3">Qty</th>
                     <th className="text-right p-3">Price</th>
                     <th className="text-right p-3">Total</th>
+                    <th className="text-left p-3">Production</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(invoice.raw_payload?.items || []).map((item: any, i: number) => (
-                    <tr key={i} className="border-t">
-                      <td className="p-3">{item.name}</td>
-                      <td className="p-3 text-right">{item.num_products || 1}</td>
-                      <td className="p-3 text-right">{item.qty}</td>
-                      <td className="p-3 text-right">{formatCurrency(item.unit_price)}</td>
-                      <td className="p-3 text-right font-medium">
-                        {formatCurrency(item.qty * item.unit_price)}
-                      </td>
-                    </tr>
-                  ))}
+                  {(invoice.raw_payload?.items || []).map((item: any, i: number) => {
+                    // const linkedOrder = orderByItemName.get(
+                    //   normalize(item.name)
+                    // );
+
+                    const linkedOrder =
+                      orderByItemIndex.get(i + 1) ??
+                      orderByItemName.get(normalize(item.name));
+
+                    return (
+                      <tr key={i} className="border-t">
+                        <td className="p-3">{item.name}</td>
+                        <td className="p-3 text-right">{item.num_products || 1}</td>
+                        <td className="p-3 text-right">{item.qty}</td>
+                        <td className="p-3 text-right">{formatCurrency(item.unit_price)}</td>
+                        <td className="p-3 text-right font-medium">
+                          {formatCurrency(item.qty * item.unit_price)}
+                        </td>
+                        <td className="p-3">
+                          {linkedOrder ? (
+                            <Badge variant="secondary">
+                              {linkedOrder.currentStage}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+
+                  })}
                 </tbody>
               </table>
             </div>
