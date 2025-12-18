@@ -1,8 +1,8 @@
 // Orders page - in use
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,17 @@ export default function OrdersNew() {
   });
   const [quickFilter, setQuickFilter] = useState<"overdue" | "dueSoon" | null>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  // Restore scroll position when coming back from order details
+  useEffect(() => {
+    const savedScrollY = sessionStorage.getItem("ordersScrollY");
+    if (savedScrollY) {
+      window.scrollTo(0, Number(savedScrollY));
+      sessionStorage.removeItem("ordersScrollY");
+    }
+  }, []);
+
 
   // --- Fetch orders (with relations) ---
   const { data: orders, isLoading } = useQuery({
@@ -581,7 +592,11 @@ export default function OrdersNew() {
                       ${getCardClassName(order.order_status)}
                       ${isOverdue(order) ? "border-destructive bg-destructive/5 ring-1 ring-destructive/30" : ""}
                     `}
-                    onClick={() => window.location.href = `/orders/${order.id}`}
+                    // onClick={() => window.location.href = `/orders/${order.id}`}
+                    onClick={() => {
+                      sessionStorage.setItem("ordersScrollY", window.scrollY.toString());
+                      navigate(`/orders/${order.id}`);
+                    }}
                     style={{
                       borderLeftColor: isOverdue(order)
                         ? "hsl(var(--destructive))"
@@ -757,7 +772,11 @@ export default function OrdersNew() {
                         return (
                           // kanban card
                           <Card key={order.id} className={`p-3 hover:shadow-md transition-all cursor-pointer ${getCardClassName(order.order_status)}`}
-                            onClick={() => window.location.href = `/orders/${order.id}`}>
+                            // onClick={() => window.location.href = `/orders/${order.id}`}
+                            onClick={() => {
+                              sessionStorage.setItem("ordersScrollY", window.scrollY.toString());
+                              navigate(`/orders/${order.id}`);
+                            }}>
                             <div className="space-y-2">
                               <div className="flex items-start justify-between">
                                 <h4 className="font-semibold text-sm">
