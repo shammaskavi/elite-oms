@@ -41,13 +41,32 @@ export default function OrdersNew() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  // store and restore UI state (search, filters, view mode) from sessionStorage
+  useEffect(() => {
+    const saved = sessionStorage.getItem("ordersUIState");
+    if (!saved) return;
+
+    try {
+      const state = JSON.parse(saved);
+
+      setSearchQuery(state.searchQuery ?? "");
+      setStatusFilter(state.statusFilter ?? "active");
+      setViewMode(state.viewMode ?? "list");
+      setDateFilter(state.dateFilter ?? "");
+      setQuickFilter(state.quickFilter ?? null);
+    } catch {
+      console.warn("Failed to restore orders UI state");
+    }
+  }, []);
+
   // Restore scroll position when coming back from order details
   useEffect(() => {
     const savedScrollY = sessionStorage.getItem("ordersScrollY");
-    if (savedScrollY) {
+    if (!savedScrollY) return;
+    requestAnimationFrame(() => {
       window.scrollTo(0, Number(savedScrollY));
-      sessionStorage.removeItem("ordersScrollY");
-    }
+    });
+    sessionStorage.removeItem("ordersScrollY");
   }, []);
 
 
@@ -595,6 +614,16 @@ export default function OrdersNew() {
                     // onClick={() => window.location.href = `/orders/${order.id}`}
                     onClick={() => {
                       sessionStorage.setItem("ordersScrollY", window.scrollY.toString());
+                      sessionStorage.setItem(
+                        "ordersUIState",
+                        JSON.stringify({
+                          searchQuery,
+                          statusFilter,
+                          viewMode,
+                          dateFilter,
+                          quickFilter,
+                        })
+                      );
                       navigate(`/orders/${order.id}`);
                     }}
                     style={{
@@ -775,6 +804,16 @@ export default function OrdersNew() {
                             // onClick={() => window.location.href = `/orders/${order.id}`}
                             onClick={() => {
                               sessionStorage.setItem("ordersScrollY", window.scrollY.toString());
+                              sessionStorage.setItem(
+                                "ordersUIState",
+                                JSON.stringify({
+                                  searchQuery,
+                                  statusFilter,
+                                  viewMode,
+                                  dateFilter,
+                                  quickFilter,
+                                })
+                              );
                               navigate(`/orders/${order.id}`);
                             }}>
                             <div className="space-y-2">
