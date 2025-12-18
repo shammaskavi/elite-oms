@@ -3,6 +3,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -77,7 +83,8 @@ export function InvoiceView({
         metadata,
         order_stages (
           stage_name,
-          created_at
+          created_at,
+          vendor_name
         )
       `)
         .eq("invoice_id", invoice.id);
@@ -102,9 +109,13 @@ export function InvoiceView({
           ? stages[stages.length - 1].stage_name
           : "Ordered";
 
+      const currentVendor =
+        stages.length > 0 ? stages[stages.length - 1].vendor_name : null;
+
       return {
         ...order,
         currentStage,
+        currentVendor,
         itemIndex: order.metadata?.item_index,
       };
     });
@@ -409,24 +420,25 @@ Here is your Saree Palace Elite invoice.
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-2xl">
-            {isDraft ? "Draft Invoice" : "Invoice Details"}
-          </DialogTitle>
-        </DialogHeader>
+    <TooltipProvider delayDuration={200}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">
+              {isDraft ? "Draft Invoice" : "Invoice Details"}
+            </DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Header */}
-          <div className="flex justify-between items-start">
-            <div>
-              <h2 className="text-3xl font-bold">{invoice.invoice_number}</h2>
-              <p className="text-muted-foreground mt-1">
-                {new Date(invoice.date).toLocaleDateString()}
-              </p>
-            </div>
-            {/* <Badge
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex justify-between items-start">
+              <div>
+                <h2 className="text-3xl font-bold">{invoice.invoice_number}</h2>
+                <p className="text-muted-foreground mt-1">
+                  {new Date(invoice.date).toLocaleDateString()}
+                </p>
+              </div>
+              {/* <Badge
               variant={
                 isPaid
                   ? "success"
@@ -442,301 +454,338 @@ Here is your Saree Palace Elite invoice.
                   ? "PARTIALLY PAID"
                   : "UNPAID"}
             </Badge> */}
-            <Badge
-              variant={
-                status === "paid"
-                  ? "success"
+              <Badge
+                variant={
+                  status === "paid"
+                    ? "success"
+                    : status === "partial"
+                      ? "warning"
+                      : "destructive"
+                }
+                className="text-lg px-4 py-2"
+              >
+                {status === "paid"
+                  ? "PAID"
                   : status === "partial"
-                    ? "warning"
-                    : "destructive"
-              }
-              className="text-lg px-4 py-2"
-            >
-              {status === "paid"
-                ? "PAID"
-                : status === "partial"
-                  ? "PARTIALLY PAID"
-                  : "UNPAID"}
-            </Badge>
-          </div>
-
-          {/* Customer */}
-          <div className="border rounded-lg p-4 bg-muted/50">
-            <h3 className="font-semibold mb-2">Customer Details</h3>
-            <p className="text-lg font-medium">
-              {invoice.customers?.name || "N/A"}
-            </p>
-            <p className="text-sm mt-1">📞 {invoice.customers?.phone || "N/A"}</p>
-            <p className="text-sm mt-1">📍 {invoice.customers?.address || "N/A"}</p>
-            <p className="text-sm mt-1">🗓️ {new Date(invoice.raw_payload.delivery_date).toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: '2-digit',
-            }) || "N/A"}</p>
-          </div>
-
-          {/* Items (restored) */}
-          <div>
-            <h3 className="font-semibold mb-3">Items</h3>
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-muted">
-                  <tr>
-                    <th className="text-left p-3">Item</th>
-                    <th className="text-right p-3">Products</th>
-                    <th className="text-right p-3">Qty</th>
-                    <th className="text-right p-3">Price</th>
-                    <th className="text-right p-3">Total</th>
-                    <th className="text-left p-3">Production</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(invoice.raw_payload?.items || []).map((item: any, i: number) => {
-                    // const linkedOrder = orderByItemName.get(
-                    //   normalize(item.name)
-                    // );
-
-                    const linkedOrder =
-                      orderByItemIndex.get(i + 1) ??
-                      orderByItemName.get(normalize(item.name));
-
-                    return (
-                      <tr key={i} className="border-t">
-                        <td className="p-3">{item.name}</td>
-                        <td className="p-3 text-right">{item.num_products || 1}</td>
-                        <td className="p-3 text-right">{item.qty}</td>
-                        <td className="p-3 text-right">{formatCurrency(item.unit_price)}</td>
-                        <td className="p-3 text-right font-medium">
-                          {formatCurrency(item.qty * item.unit_price)}
-                        </td>
-                        <td className="p-3">
-                          {linkedOrder ? (
-                            <Badge variant="secondary">
-                              {linkedOrder.currentStage}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Totals */}
-          <div className="border rounded-lg p-4 space-y-2 bg-muted/50">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span className="font-medium">{formatCurrency(invoice.subtotal)}</span>
+                    ? "PARTIALLY PAID"
+                    : "UNPAID"}
+              </Badge>
             </div>
 
-            {invoice.raw_payload?.discount > 0 && (
-              <div className="flex justify-between text-green-600">
-                <span>
-                  Discount (
-                  {invoice.raw_payload?.discount_type === "percentage"
-                    ? `${invoice.raw_payload?.discount}%`
-                    : `₹${invoice.raw_payload?.discount}`}
-                  ):
-                </span>
-                <span className="font-medium">
-                  -{formatCurrency(
-                    invoice.raw_payload?.discount_type === "percentage"
-                      ? (parseFloat(invoice.subtotal) *
-                        parseFloat(invoice.raw_payload?.discount)) /
-                      100
-                      : parseFloat(invoice.raw_payload?.discount || 0)
-                  )}
-                </span>
-              </div>
-            )}
-
-            <div className="flex justify-between text-lg font-bold border-t pt-2">
-              <span>Total:</span>
-              <span>{formatCurrency(invoice.total)}</span>
-            </div>
-
-            {remainingBalance > 0 && (
-              <>
-                <div className="flex justify-between text-success border-t pt-2">
-                  <span>Paid Amount:</span>
-                  <span className="font-medium">{formatCurrency(paidAmount)}</span>
-                </div>
-                <div className="flex justify-between text-destructive font-semibold">
-                  <span>Remaining:</span>
-                  <span>{formatCurrency(remainingBalance)}</span>
-                </div>
-              </>
-            )}
-
-            {invoice.raw_payload?.coupon_code && (
-              <div className="flex justify-between text-muted-foreground text-sm border-t pt-2">
-                <span>Coupon Code:</span>
-                <span className="font-mono">{invoice.raw_payload.coupon_code}</span>
-              </div>
-            )}
-            {invoice.raw_payload?.offer_description && (
-              <div className="text-sm text-muted-foreground border-t pt-2">
-                <span className="font-medium">Offer: </span>
-                {invoice.raw_payload.offer_description}
-              </div>
-            )}
-          </div>
-
-          {/* Remarks */}
-          {invoice.raw_payload?.remarks && invoice.raw_payload.remarks.trim() !== "" && (
+            {/* Customer */}
             <div className="border rounded-lg p-4 bg-muted/50">
-              <h3 className="font-semibold mb-2">Remarks</h3>
-              <p className="text-sm whitespace-pre-line text-muted-foreground">
-                {invoice.raw_payload.remarks}
+              <h3 className="font-semibold mb-2">Customer Details</h3>
+              <p className="text-lg font-medium">
+                {invoice.customers?.name || "N/A"}
               </p>
+              <p className="text-sm mt-1">📞 {invoice.customers?.phone || "N/A"}</p>
+              <p className="text-sm mt-1">📍 {invoice.customers?.address || "N/A"}</p>
+              <p className="text-sm mt-1">🗓️ {new Date(invoice.raw_payload.delivery_date).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: '2-digit',
+              }) || "N/A"}</p>
             </div>
-          )}
 
-          {/* Partial Payment Section */}
-          {!isPaid && remainingBalance > 0 && (
-            <div className="border rounded-lg p-4 bg-muted/30">
-              <h3 className="font-semibold mb-3">Update Payment</h3>
-              {!isEditingPayment ? (
-                <Button onClick={() => setIsEditingPayment(true)} variant="outline" size="sm">
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Add Payment
-                </Button>
-              ) : (
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor="partial_payment">Amount to Add</Label>
-                    <Input
-                      id="partial_payment"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      // max={parseFloat(invoice.total) - parseFloat(invoice.raw_payload?.paid_amount || 0)}
-                      max={parseFloat(invoice.total) - paidAmount}
+            {/* Items (restored) */}
+            <div>
+              <h3 className="font-semibold mb-3">Items</h3>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="text-left p-3">Item</th>
+                      <th className="text-right p-3">Products</th>
+                      <th className="text-right p-3">Qty</th>
+                      <th className="text-right p-3">Price</th>
+                      <th className="text-right p-3">Total</th>
+                      <th className="text-left p-3">Production</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(invoice.raw_payload?.items || []).map((item: any, i: number) => {
+                      // const linkedOrder = orderByItemName.get(
+                      //   normalize(item.name)
+                      // );
 
-                      value={partialPaymentAmount}
-                      onChange={(e) => setPartialPaymentAmount(e.target.value)}
-                      placeholder="Enter amount"
-                    />
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {/* Current: {formatCurrency(invoice.raw_payload?.paid_amount || 0)} | Remaining: {formatCurrency(remainingBalance)} */}
-                      Current: {formatCurrency(paidAmount)} | Remaining: {formatCurrency(remainingBalance)}
-                    </p>
+                      const linkedOrder =
+                        orderByItemIndex.get(i + 1) ??
+                        orderByItemName.get(normalize(item.name));
+
+                      return (
+                        <tr key={i} className="border-t">
+                          <td className="p-3">{item.name}</td>
+                          <td className="p-3 text-right">{item.num_products || 1}</td>
+                          <td className="p-3 text-right">{item.qty}</td>
+                          <td className="p-3 text-right">{formatCurrency(item.unit_price)}</td>
+                          <td className="p-3 text-right font-medium">
+                            {formatCurrency(item.qty * item.unit_price)}
+                          </td>
+                          <td className="p-3">
+                            {linkedOrder ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="inline-block">
+                                    <Badge variant="secondary" className="cursor-help">
+                                      {linkedOrder.currentStage}
+                                    </Badge>
+                                  </div>
+                                </TooltipTrigger>
+
+                                <TooltipContent
+                                  side="left"
+                                  className="text-xs space-y-1"
+                                >
+                                  <div>
+                                    <span className="font-medium">Vendor:</span>{" "}
+                                    {linkedOrder.currentVendor || "N/A"}
+                                  </div>
+
+                                  <div>
+                                    <span className="font-medium">Delivery date:</span>{" "}
+                                    {item.delivery_date
+                                      ? new Date(item.delivery_date).toLocaleDateString("en-IN", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                      })
+                                      : invoice.raw_payload?.delivery_date
+                                        ? new Date(invoice.raw_payload.delivery_date).toLocaleDateString(
+                                          "en-IN",
+                                          {
+                                            day: "2-digit",
+                                            month: "short",
+                                            year: "numeric",
+                                          }
+                                        )
+                                        : "—"}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—N/A</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Totals */}
+            <div className="border rounded-lg p-4 space-y-2 bg-muted/50">
+              <div className="flex justify-between">
+                <span>Subtotal:</span>
+                <span className="font-medium">{formatCurrency(invoice.subtotal)}</span>
+              </div>
+
+              {invoice.raw_payload?.discount > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>
+                    Discount (
+                    {invoice.raw_payload?.discount_type === "percentage"
+                      ? `${invoice.raw_payload?.discount}%`
+                      : `₹${invoice.raw_payload?.discount}`}
+                    ):
+                  </span>
+                  <span className="font-medium">
+                    -{formatCurrency(
+                      invoice.raw_payload?.discount_type === "percentage"
+                        ? (parseFloat(invoice.subtotal) *
+                          parseFloat(invoice.raw_payload?.discount)) /
+                        100
+                        : parseFloat(invoice.raw_payload?.discount || 0)
+                    )}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-between text-lg font-bold border-t pt-2">
+                <span>Total:</span>
+                <span>{formatCurrency(invoice.total)}</span>
+              </div>
+
+              {remainingBalance > 0 && (
+                <>
+                  <div className="flex justify-between text-success border-t pt-2">
+                    <span>Paid Amount:</span>
+                    <span className="font-medium">{formatCurrency(paidAmount)}</span>
                   </div>
-                  {/* date section & payment type */}
-                  <div>
-                    <Label className="text-sm">Payment Method</Label>
-                    <Select
-                      value={paymentMethod}
-                      onValueChange={setPaymentMethod}
-                    >
-                      <SelectTrigger className="h-9 mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="card">Card</SelectItem>
-                        <SelectItem value="upi">UPI</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="flex justify-between text-destructive font-semibold">
+                    <span>Remaining:</span>
+                    <span>{formatCurrency(remainingBalance)}</span>
                   </div>
-                  <div>
-                    <Label htmlFor="payment_date" className="text-sm">Payment Date</Label>
-                    <Input
-                      id="payment_date"
-                      type="date"
-                      className="h-9 mt-1"
-                      value={paymentDate}
-                      onChange={(e) => setPaymentDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => {
-                        const amount = parseFloat(partialPaymentAmount);
-                        // ensure valid amount and does not exceed remaining
-                        if (isNaN(amount) || amount <= 0) {
-                          toast.error("Enter a valid amount");
-                          return;
-                        }
-                        if (amount > remainingBalance) {
-                          toast.error("Amount exceeds remaining balance");
-                          return;
-                        }
-                        addPaymentMutation.mutate(amount);
-                      }}
-                      disabled={!partialPaymentAmount || parseFloat(partialPaymentAmount) <= 0}
-                      size="sm"
-                    >
-                      Add Payment
-                    </Button>
-                    <Button onClick={() => { setIsEditingPayment(false); setPartialPaymentAmount(""); }} variant="outline" size="sm">
-                      Cancel
-                    </Button>
-                  </div>
+                </>
+              )}
+
+              {invoice.raw_payload?.coupon_code && (
+                <div className="flex justify-between text-muted-foreground text-sm border-t pt-2">
+                  <span>Coupon Code:</span>
+                  <span className="font-mono">{invoice.raw_payload.coupon_code}</span>
+                </div>
+              )}
+              {invoice.raw_payload?.offer_description && (
+                <div className="text-sm text-muted-foreground border-t pt-2">
+                  <span className="font-medium">Offer: </span>
+                  {invoice.raw_payload.offer_description}
                 </div>
               )}
             </div>
-          )}
 
-          {/* Actions */}
-          <div className="flex flex-wrap gap-3">
-            {isDraft ? (
-              <>
-                <div className="w-full bg-muted/50 border border-muted-foreground/20 rounded-lg p-4">
-                  <p className="text-sm font-medium mb-2">
-                    This invoice is currently a draft. You can continue editing it before finalizing.
-                  </p>
-                  <Button onClick={() => onEditDraft?.(invoice)} className="mr-2" >
-                    <Pencil className="w-4 h-4 mr-2" />
-                    Continue Editing
+            {/* Remarks */}
+            {invoice.raw_payload?.remarks && invoice.raw_payload.remarks.trim() !== "" && (
+              <div className="border rounded-lg p-4 bg-muted/50">
+                <h3 className="font-semibold mb-2">Remarks</h3>
+                <p className="text-sm whitespace-pre-line text-muted-foreground">
+                  {invoice.raw_payload.remarks}
+                </p>
+              </div>
+            )}
+
+            {/* Partial Payment Section */}
+            {!isPaid && remainingBalance > 0 && (
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <h3 className="font-semibold mb-3">Update Payment</h3>
+                {!isEditingPayment ? (
+                  <Button onClick={() => setIsEditingPayment(true)} variant="outline" size="sm">
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Add Payment
                   </Button>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="partial_payment">Amount to Add</Label>
+                      <Input
+                        id="partial_payment"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        // max={parseFloat(invoice.total) - parseFloat(invoice.raw_payload?.paid_amount || 0)}
+                        max={parseFloat(invoice.total) - paidAmount}
 
+                        value={partialPaymentAmount}
+                        onChange={(e) => setPartialPaymentAmount(e.target.value)}
+                        placeholder="Enter amount"
+                      />
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {/* Current: {formatCurrency(invoice.raw_payload?.paid_amount || 0)} | Remaining: {formatCurrency(remainingBalance)} */}
+                        Current: {formatCurrency(paidAmount)} | Remaining: {formatCurrency(remainingBalance)}
+                      </p>
+                    </div>
+                    {/* date section & payment type */}
+                    <div>
+                      <Label className="text-sm">Payment Method</Label>
+                      <Select
+                        value={paymentMethod}
+                        onValueChange={setPaymentMethod}
+                      >
+                        <SelectTrigger className="h-9 mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="card">Card</SelectItem>
+                          <SelectItem value="upi">UPI</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="payment_date" className="text-sm">Payment Date</Label>
+                      <Input
+                        id="payment_date"
+                        type="date"
+                        className="h-9 mt-1"
+                        value={paymentDate}
+                        onChange={(e) => setPaymentDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => {
+                          const amount = parseFloat(partialPaymentAmount);
+                          // ensure valid amount and does not exceed remaining
+                          if (isNaN(amount) || amount <= 0) {
+                            toast.error("Enter a valid amount");
+                            return;
+                          }
+                          if (amount > remainingBalance) {
+                            toast.error("Amount exceeds remaining balance");
+                            return;
+                          }
+                          addPaymentMutation.mutate(amount);
+                        }}
+                        disabled={!partialPaymentAmount || parseFloat(partialPaymentAmount) <= 0}
+                        size="sm"
+                      >
+                        Add Payment
+                      </Button>
+                      <Button onClick={() => { setIsEditingPayment(false); setPartialPaymentAmount(""); }} variant="outline" size="sm">
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex flex-wrap gap-3">
+              {isDraft ? (
+                <>
+                  <div className="w-full bg-muted/50 border border-muted-foreground/20 rounded-lg p-4">
+                    <p className="text-sm font-medium mb-2">
+                      This invoice is currently a draft. You can continue editing it before finalizing.
+                    </p>
+                    <Button onClick={() => onEditDraft?.(invoice)} className="mr-2" >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Continue Editing
+                    </Button>
+
+                    <Button onClick={handlePrint} variant="outline">
+                      <Printer className="w-4 h-4 mr-2" />
+                      Print Invoice
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
                   <Button onClick={handlePrint} variant="outline">
                     <Printer className="w-4 h-4 mr-2" />
                     Print Invoice
                   </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <Button onClick={handlePrint} variant="outline">
-                  <Printer className="w-4 h-4 mr-2" />
-                  Print Invoice
-                </Button>
 
-                <Button onClick={handleSend} disabled={isSending}>
-                  {isSending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {sendProgress || "Sending..."}
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4 mr-2" />
-                      Send via WhatsApp
-                    </>
-                  )}
-                </Button>
+                  <Button onClick={handleSend} disabled={isSending}>
+                    {isSending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {sendProgress || "Sending..."}
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send via WhatsApp
+                      </>
+                    )}
+                  </Button>
 
-                {/* <Button
+                  {/* <Button
                   onClick={() => updatePaymentMutation.mutate(isPaid ? "unpaid" : "paid")}
                   variant={isPaid ? "outline" : "default"}
                 >
                   <DollarSign className="w-4 h-4 mr-2" />
                   Mark as {isPaid ? "Unpaid" : "Paid"}
                 </Button> */}
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
 
-        </div>
-      </DialogContent>
-    </Dialog>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </TooltipProvider>
   );
 }
