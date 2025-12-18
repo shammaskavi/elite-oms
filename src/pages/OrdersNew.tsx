@@ -1,5 +1,5 @@
 // Orders page - in use
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useNavigate } from "react-router-dom";
@@ -40,6 +40,7 @@ export default function OrdersNew() {
   const [quickFilter, setQuickFilter] = useState<"overdue" | "dueSoon" | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const kanbanScrollRef = useRef<HTMLDivElement | null>(null);
 
   // store and restore UI state (search, filters, view mode) from sessionStorage
   useEffect(() => {
@@ -52,6 +53,11 @@ export default function OrdersNew() {
       setSearchQuery(state.searchQuery ?? "");
       setStatusFilter(state.statusFilter ?? "active");
       setViewMode(state.viewMode ?? "list");
+      // if (state.viewMode === "list" || state.viewMode === "kanban") {
+      //   setViewMode(state.viewMode);
+      // } else {
+      //   setViewMode("list");
+      // }
       setDateFilter(state.dateFilter ?? "");
       setQuickFilter(state.quickFilter ?? null);
     } catch {
@@ -68,6 +74,20 @@ export default function OrdersNew() {
     });
     sessionStorage.removeItem("ordersScrollY");
   }, []);
+
+  // Restore kanban scroll position
+  useEffect(() => {
+    if (viewMode !== "kanban") return;
+
+    const savedX = sessionStorage.getItem("ordersKanbanScrollX");
+    if (!savedX || !kanbanScrollRef.current) return;
+
+    requestAnimationFrame(() => {
+      kanbanScrollRef.current!.scrollLeft = Number(savedX);
+    });
+
+    sessionStorage.removeItem("ordersKanbanScrollX");
+  }, [viewMode]);
 
 
   // --- Fetch orders (with relations) ---
@@ -614,6 +634,12 @@ export default function OrdersNew() {
                     // onClick={() => window.location.href = `/orders/${order.id}`}
                     onClick={() => {
                       sessionStorage.setItem("ordersScrollY", window.scrollY.toString());
+                      if (viewMode === "kanban" && kanbanScrollRef.current) {
+                        sessionStorage.setItem(
+                          "ordersKanbanScrollX",
+                          kanbanScrollRef.current.scrollLeft.toString()
+                        );
+                      }
                       sessionStorage.setItem(
                         "ordersUIState",
                         JSON.stringify({
@@ -767,7 +793,7 @@ export default function OrdersNew() {
           )}
         </Card>
       ) : (
-        <div className="overflow-x-auto pb-4">
+        <div ref={kanbanScrollRef} className="overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max">
             {STAGES.map((stage) => {
               const stageOrders = getOrdersByStage(stage);
@@ -804,6 +830,12 @@ export default function OrdersNew() {
                             // onClick={() => window.location.href = `/orders/${order.id}`}
                             onClick={() => {
                               sessionStorage.setItem("ordersScrollY", window.scrollY.toString());
+                              if (viewMode === "kanban" && kanbanScrollRef.current) {
+                                sessionStorage.setItem(
+                                  "ordersKanbanScrollX",
+                                  kanbanScrollRef.current.scrollLeft.toString()
+                                );
+                              }
                               sessionStorage.setItem(
                                 "ordersUIState",
                                 JSON.stringify({
