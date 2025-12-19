@@ -47,7 +47,7 @@ import { Plus, Trash2, Search, Eye, UserPlus, ChevronDown, ChevronUp, Check, Che
 import { Command } from "@/components/ui/command";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
@@ -60,6 +60,8 @@ import { InvoiceRow } from "@/components/InvoiceRow";
 
 export default function Invoices() {
   const [open, setOpen] = useState(false);
+  const location = useLocation();
+  // const [openInvoice, setOpenInvoice] = useState<any>(null);
   const [customerComboboxOpen, setCustomerComboboxOpen] = useState(false);
   const [customerInput, setCustomerInput] = useState("");
 
@@ -181,6 +183,21 @@ export default function Invoices() {
       return data;
     },
   });
+
+  useEffect(() => {
+    const invoiceId = location.state?.openInvoiceId;
+    if (!invoiceId) return;
+
+    const invoice = invoices.find((i) => i.id === invoiceId);
+    if (invoice) {
+      // setOpenInvoice(invoice);
+      setSelectedInvoice(invoice);
+    }
+    // Clean up state so refresh doesn't reopen
+    // window.history.replaceState({}, "");
+    // Instead of replaceState (which is low-level)
+    navigate(location.pathname, { replace: true });
+  }, [location.state, invoices]);
 
   const { data: customers } = useQuery({
     queryKey: ["customers"],

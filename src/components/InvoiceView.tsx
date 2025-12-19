@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +64,7 @@ export function InvoiceView({
   const [paymentDate, setPaymentDate] = useState(
     () => new Date().toISOString().split("T")[0]
   );
-
+  const navigate = useNavigate();
 
   // helper to normalize strings
   const normalize = (v?: string) =>
@@ -508,12 +509,28 @@ Here is your Saree Palace Elite invoice.
                       //   normalize(item.name)
                       // );
 
+                      // const linkedOrder =
+                      //   orderByItemIndex.get(i + 1) ??
+                      //   orderByItemName.get(normalize(item.name));
+
                       const linkedOrder =
-                        orderByItemIndex.get(i + 1) ??
-                        orderByItemName.get(normalize(item.name));
+                        typeof item.item_index === "number"
+                          ? orderByItemIndex.get(item.item_index)
+                          : orderByItemName.get(normalize(item.name));
 
                       return (
-                        <tr key={i} className="border-t">
+                        <tr key={i} className="border-t cursor-pointer hover:bg-muted/50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!linkedOrder?.id) return;
+                            navigate(`/orders/${linkedOrder.id}`, {
+                              state: {
+                                from: "invoice",
+                                invoiceId: invoice.id,
+                              },
+                            });
+                          }}
+                        >
                           <td className="p-3">{item.name}</td>
                           <td className="p-3 text-right">{item.num_products || 1}</td>
                           <td className="p-3 text-right">{item.qty}</td>
@@ -526,7 +543,8 @@ Here is your Saree Palace Elite invoice.
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <div className="inline-block">
-                                    <Badge variant="secondary" className="cursor-help">
+                                    <Badge variant="secondary" className="cursor-help"
+                                    >
                                       {linkedOrder.currentStage}
                                     </Badge>
                                   </div>

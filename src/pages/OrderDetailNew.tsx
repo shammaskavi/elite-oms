@@ -1,7 +1,7 @@
 // src/pages/OrderDetailNew.tsx  (or wherever you keep it)
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,12 @@ import { OrderTimeline } from "@/components/OrderTimeline";
 
 export default function OrderDetailNew() {
     const { id } = useParams();
+    const location = useLocation();
     const navigate = useNavigate();
+
+    const fromInvoice = location.state?.from === "invoice";
+    const invoiceId = location.state?.invoiceId;
+
     const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: "delivered" | "cancelled" | "delete" }>({ open: false, action: "delivered" });
     const queryClient = useQueryClient();
 
@@ -309,9 +314,25 @@ export default function OrderDetailNew() {
     return (
         <div className="space-y-6 p-4 md:p-6">
             <div className="flex items-center justify-between">
-                <Button variant="ghost" size="sm" onClick={() => navigate("/orders")}>
+                {/* <Button variant="ghost" size="sm" onClick={() => navigate("/orders")}>
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Orders
+                </Button> */}
+                <Button
+                    variant="ghost"
+                    onClick={() => {
+                        if (fromInvoice && invoiceId) {
+                            navigate("/invoices", {
+                                state: {
+                                    openInvoiceId: invoiceId,
+                                },
+                            });
+                        } else {
+                            navigate("/orders");
+                        }
+                    }}
+                >
+                    ← Back
                 </Button>
                 {/* <div className="flex gap-2">
                     <DropdownMenu>
