@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InvoiceView } from "@/components/InvoiceView";
 import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
+
 
 
 export default function Dashboard() {
@@ -22,12 +23,31 @@ export default function Dashboard() {
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([]);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
   }, [timePeriod]);
+
+
+  useEffect(() => {
+    const state = location.state as any;
+
+    if (!state?.invoiceId) return;
+
+    // find invoice from pendingInvoices
+    const invoice = pendingInvoices.find(
+      (inv) => inv.id === state.invoiceId
+    );
+
+    if (invoice) {
+      setSelectedInvoice(invoice);
+      setInvoiceModalOpen(true);
+    }
+  }, [location.state, pendingInvoices]);
+
 
   const getDateRange = () => {
     const now = new Date();
@@ -120,6 +140,8 @@ export default function Dashboard() {
           }))
         )
         : [];
+
+
 
     // Only keep invoices that are NOT fully paid
     const pending = enrichedInvoices.filter(

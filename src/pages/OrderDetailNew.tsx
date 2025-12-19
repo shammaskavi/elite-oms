@@ -31,8 +31,8 @@ export default function OrderDetailNew() {
     const location = useLocation();
     const navigate = useNavigate();
 
-    const fromInvoice = location.state?.from === "invoice";
-    const invoiceId = location.state?.invoiceId;
+    const returnTo = location.state?.returnTo as string | undefined;
+    const openInvoiceId = location.state?.openInvoiceId as string | undefined;
 
     const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: "delivered" | "cancelled" | "delete" }>({ open: false, action: "delivered" });
     const queryClient = useQueryClient();
@@ -321,14 +321,14 @@ export default function OrderDetailNew() {
                 <Button
                     variant="ghost"
                     onClick={() => {
-                        if (fromInvoice && invoiceId) {
-                            navigate("/invoices", {
-                                state: {
-                                    openInvoiceId: invoiceId,
-                                },
+                        if (returnTo && openInvoiceId) {
+                            navigate(returnTo, {
+                                state: { openInvoiceId },
                             });
+                        } else if (returnTo) {
+                            navigate(returnTo);
                         } else {
-                            navigate("/orders");
+                            navigate(-1);
                         }
                     }}
                 >

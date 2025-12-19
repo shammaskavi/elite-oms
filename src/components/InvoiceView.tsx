@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +65,7 @@ export function InvoiceView({
     () => new Date().toISOString().split("T")[0]
   );
   const navigate = useNavigate();
+  const location = useLocation();
 
   // helper to normalize strings
   const normalize = (v?: string) =>
@@ -525,8 +526,8 @@ Here is your Saree Palace Elite invoice.
                             if (!linkedOrder?.id) return;
                             navigate(`/orders/${linkedOrder.id}`, {
                               state: {
-                                from: "invoice",
-                                invoiceId: invoice.id,
+                                returnTo: location.pathname,
+                                openInvoiceId: invoice.id,
                               },
                             });
                           }}

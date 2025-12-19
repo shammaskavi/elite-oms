@@ -184,19 +184,51 @@ export default function Invoices() {
     },
   });
 
+  // useEffect(() => {
+  //   const invoiceId = location.state?.openInvoiceId;
+  //   if (!invoiceId) return;
+
+  //   const invoice = invoices.find((i) => i.id === invoiceId);
+  //   if (invoice) {
+  //     // setOpenInvoice(invoice);
+  //     setSelectedInvoice(invoice);
+  //   }
+  //   // Clean up state so refresh doesn't reopen
+  //   // window.history.replaceState({}, "");
+  //   // Instead of replaceState (which is low-level)
+  //   navigate(location.pathname, { replace: true });
+  // }, [location.state, invoices]);
+
   useEffect(() => {
     const invoiceId = location.state?.openInvoiceId;
     if (!invoiceId) return;
 
-    const invoice = invoices.find((i) => i.id === invoiceId);
-    if (invoice) {
-      // setOpenInvoice(invoice);
-      setSelectedInvoice(invoice);
-    }
-    // Clean up state so refresh doesn't reopen
-    // window.history.replaceState({}, "");
-    // Instead of replaceState (which is low-level)
-    navigate(location.pathname, { replace: true });
+    const restoreInvoice = async () => {
+      // 1️⃣ Try local cache first
+      const localInvoice = invoices?.find((i) => i.id === invoiceId);
+      if (localInvoice) {
+        setSelectedInvoice(localInvoice);
+        navigate(location.pathname, { replace: true });
+        return;
+      }
+
+      // 2️⃣ Fallback: fetch invoice directly
+      const { data, error } = await supabase
+        .from("invoices")
+        .select(`
+        *,
+        customers(id, name, phone, email, address)
+      `)
+        .eq("id", invoiceId)
+        .single();
+
+      if (error || !data) return;
+
+      setSelectedInvoice(data);
+      navigate(location.pathname, { replace: true });
+    };
+
+    restoreInvoice();
   }, [location.state, invoices]);
 
   const { data: customers } = useQuery({
