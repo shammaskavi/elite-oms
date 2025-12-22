@@ -17,6 +17,7 @@ import OrderDetailNew from "./pages/OrderDetailNew";
 import NotFound from "./pages/NotFound";
 import CustomerDetail from "./pages/CustomerDetail";
 import { OneSignalInit } from "./OneSignalInit";
+import PublicInvoiceTracking from "./pages/PublicInvoiceTracking";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
+            <Route path="/track/:token" element={<PublicInvoiceTracking />} />
             <Route path="/auth" element={<Auth />} />
             <Route
               path="/"

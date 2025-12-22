@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
     Dialog,
     DialogHeader,
@@ -12,8 +14,23 @@ import {
     DialogContent,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import { CheckCircle2, MoveRight, Loader2, Edit2, Info } from "lucide-react";
+import {
+    CheckCircle2,
+    MoveRight,
+    Loader2,
+    Edit2,
+    Info,
+    ChevronDown,
+    ChevronUp,
+    ClipboardList,
+    History
+} from "lucide-react";
 import { ActivityLog } from "./ActivityLog";
 
 export function OrderTimeline({
@@ -27,6 +44,7 @@ export function OrderTimeline({
     const queryClient = useQueryClient();
 
     const [open, setOpen] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
     const [selectedStage, setSelectedStage] = useState("");
     const [selectedVendor, setSelectedVendor] = useState("");
 
@@ -36,19 +54,13 @@ export function OrderTimeline({
     const [editingProductName, setEditingProductName] = useState(false);
     const [localProductName, setLocalProductName] = useState(productName || "");
 
-    /* -----------------------------------------------------------
-       🔥 FIX #1 — Sync localProductName with metadata change
-       ----------------------------------------------------------- */
+    // Sync localProductName with metadata change
     useEffect(() => {
-        const updated =
-            order.metadata?.product_names?.[productNumber] ||
-            productName ||
-            "";
-
+        const updated = order.metadata?.product_names?.[productNumber] || productName || "";
         setLocalProductName(updated);
     }, [order.metadata, productName, productNumber]);
 
-    // Sync notes too
+    // Sync notes
     useEffect(() => {
         setProductNotes(order.metadata?.product_notes?.[productNumber] || "");
     }, [order.metadata, productNumber]);
@@ -86,17 +98,21 @@ export function OrderTimeline({
 
     const currentStageName = currentStage?.stage_name;
 
-    const selectedStageRow = canonicalStageRows.find(
-        (s) => s.name === selectedStage
-    );
+    const selectedStageRow = canonicalStageRows.find((s) => s.name === selectedStage);
     const selectedStageId = selectedStageRow?.id || null;
+
+    // Calculate Progress Percentage
+    const currentIdx = canonicalStages.findIndex(s => s === currentStageName);
+    const progressValue = currentStageName
+        ? ((currentIdx + 1) / canonicalStages.length) * 100
+        : 0;
 
     /* ---------------- Vendors for stage ---------------- */
     const { data: stageVendors = [] } = useQuery({
         queryKey: ["vendors-by-stage", selectedStageId],
         queryFn: async () => {
             if (!selectedStageId) return [];
-            const { data, error } = await supabase
+            const { data, error } = await (supabase as any)
                 .from("vendors")
                 .select("*")
                 .eq("stage_id", selectedStageId)
@@ -107,28 +123,20 @@ export function OrderTimeline({
         enabled: !!selectedStageId,
     });
 
-    /* ---------------- Move to Stage Mutation ------------- */
+    /* ---------------- Mutations ---------------- */
     const moveToStageMutation = useMutation({
         mutationFn: async () => {
-            const currentIndex =
-                currentStageName != null
-                    ? stageOrderIndexMap[currentStageName]
-                    : -1;
-
+            const currentIndex = currentStageName != null ? stageOrderIndexMap[currentStageName] : -1;
             const selectedIndex = stageOrderIndexMap[selectedStage];
 
             if (selectedIndex <= currentIndex) {
                 throw new Error("Can only move forward to a later stage.");
             }
 
-            // mark current stage as done
             if (currentStage) {
                 await supabase
                     .from("order_stages")
-                    .update({
-                        status: "done",
-                        end_ts: new Date().toISOString(),
-                    })
+                    .update({ status: "done", end_ts: new Date().toISOString() })
                     .eq("id", currentStage.id);
             }
 
@@ -146,49 +154,30 @@ export function OrderTimeline({
                     vendor_name: selectedVendor || null,
                     status: "in_progress",
                     start_ts: new Date().toISOString(),
-                    metadata: {
-                        product_number: productNumber,
-                        product_name: localProductName,
-                    },
+                    metadata: { product_number: productNumber, product_name: localProductName },
                 },
             ]);
 
             if (selectedStage.toLowerCase() === "delivered") {
-                await supabase
-                    .from("orders")
-                    .update({ order_status: "delivered" })
-                    .eq("id", order.id);
+                await supabase.from("orders").update({ order_status: "delivered" }).eq("id", order.id);
             }
         },
         onSuccess: () => {
             toast.success(`Moved to ${selectedStage}`);
             queryClient.invalidateQueries({ queryKey: ["orders"] });
             queryClient.invalidateQueries({ queryKey: ["order-stages", order.id] });
-            queryClient.invalidateQueries({
-                queryKey: ["order-stages-log", order.id, productNumber],
-            });
+            queryClient.invalidateQueries({ queryKey: ["order-stages-log", order.id, productNumber] });
             onStageUpdate?.();
             setOpen(false);
         },
     });
 
-    /* ---------------- Update Product Notes ------------- */
     const updateProductNotesMutation = useMutation({
         mutationFn: async (notes: string) => {
             const current = order.metadata?.product_notes || {};
-
-            await supabase
-                .from("orders")
-                .update({
-                    metadata: {
-                        ...order.metadata,
-                        product_notes: {
-                            ...current,
-                            [productNumber]: notes,
-                        },
-                    },
-                })
-                .eq("id", order.id);
+            await supabase.from("orders").update({
+                metadata: { ...order.metadata, product_notes: { ...current, [productNumber]: notes } }
+            }).eq("id", order.id);
         },
         onSuccess: () => {
             toast.success("Product notes updated");
@@ -197,339 +186,184 @@ export function OrderTimeline({
         },
     });
 
-    /* ---------------- Update Product Name (FIXED) ------------- */
     const updateProductNameMutation = useMutation({
         mutationFn: async (newName: string) => {
             const currentNames = order.metadata?.product_names || {};
-
-            await supabase
-                .from("orders")
-                .update({
-                    metadata: {
-                        ...order.metadata,
-                        product_names: {
-                            ...currentNames,
-                            [productNumber]: newName,
-                        },
-                    },
-                })
-                .eq("id", order.id);
+            await supabase.from("orders").update({
+                metadata: { ...order.metadata, product_names: { ...currentNames, [productNumber]: newName } }
+            }).eq("id", order.id);
         },
-
         onSuccess: (_, newName) => {
             toast.success("Product name updated");
-
-            // Update local UI instantly
             setLocalProductName(newName);
-
-            // Refresh order
             queryClient.invalidateQueries({ queryKey: ["order", order.id] });
-
             setEditingProductName(false);
         },
     });
 
     const currentVendor = currentStage?.vendor_name;
     const currentStageDate = currentStage?.start_ts
-        ? new Date(currentStage.start_ts).toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-        })
+        ? new Date(currentStage.start_ts).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
         : null;
 
     const isSameStageSelected = selectedStage === currentStageName;
 
-    /* -------------------- RENDER ----------------------- */
     return (
-        <Card className="p-6 space-y-6 border-l-4 border-primary/40 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    {/* ------------ PRODUCT NAME (EDITABLE) ----------- */}
-                    <div className="flex items-center gap-2 mb-1">
-                        {editingProductName ? (
-                            <>
-                                <input
-                                    className="border rounded px-2 py-1 text-sm"
-                                    value={localProductName}
-                                    onChange={(e) =>
-                                        setLocalProductName(e.target.value)
-                                    }
-                                    autoFocus
-                                />
-                                <Button
-                                    size="sm"
-                                    onClick={() =>
-                                        updateProductNameMutation.mutate(localProductName)
-                                    }
-                                >
-                                    Save
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                        setEditingProductName(false);
-                                        // restore last saved value
-                                        setLocalProductName(
-                                            order.metadata?.product_names?.[productNumber] ||
-                                            productName ||
-                                            ""
-                                        );
-                                    }}
-                                >
-                                    Cancel
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                <h3 className="text-lg font-semibold">
-                                    {localProductName || "Product"}
-                                </h3>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={() => setEditingProductName(true)}
-                                >
-                                    <Edit2 className="h-4 w-4" />
-                                </Button>
-                            </>
-                        )}
-                    </div>
-
-                    {currentStageName ? (
-                        <span className="text-primary text-sm">
-                            {currentStageName}
-                        </span>
-                    ) : (
-                        <span className="text-muted-foreground italic text-sm">
-                            Not started
-                        </span>
-                    )}
-
-                    {currentVendor && (
-                        <p className="text-sm text-muted-foreground">
-                            Vendor:{" "}
-                            <span className="font-medium text-foreground">
-                                {currentVendor}
-                            </span>
-                        </p>
-                    )}
-
-                    {currentStageDate && (
-                        <p className="text-xs text-muted-foreground">
-                            Started on {currentStageDate}
-                        </p>
-                    )}
-                </div>
-
-                {/* ----------- Move to Stage Button -------------- */}
-                <Dialog open={open} onOpenChange={setOpen}>
-                    <DialogTrigger asChild>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="mt-3 sm:mt-0"
-                        >
-                            <MoveRight className="h-4 w-4 mr-1" /> Move to Stage
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>
-                                Move Product to Another Stage
-                            </DialogTitle>
-                        </DialogHeader>
-
-                        <div className="space-y-3 mt-2">
-                            <div>
-                                <Label>Stage</Label>
-                                <select
-                                    className="w-full border rounded-md px-3 py-2"
-                                    value={selectedStage}
-                                    onChange={(e) => {
-                                        setSelectedStage(e.target.value);
-                                        setSelectedVendor("");
-                                    }}
-                                >
-                                    <option value="">Select stage...</option>
-                                    {canonicalStages.map((stageName) => (
-                                        <option key={stageName} value={stageName}>
-                                            {stageName}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Vendor list if available */}
-                            {selectedStage &&
-                                stageVendors &&
-                                stageVendors.length > 0 && (
-                                    <div>
-                                        <Label>Vendor</Label>
-                                        <select
-                                            className="w-full border rounded-md px-3 py-2"
-                                            value={selectedVendor}
-                                            onChange={(e) =>
-                                                setSelectedVendor(
-                                                    e.target.value
-                                                )
-                                            }
-                                        >
-                                            <option value="">
-                                                Select vendor...
-                                            </option>
-                                            {stageVendors.map((v) => (
-                                                <option
-                                                    key={v.id}
-                                                    value={v.name}
-                                                >
-                                                    {v.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
-
-                            <Button
-                                className="w-full mt-2"
-                                disabled={
-                                    !selectedStage ||
-                                    moveToStageMutation.isLoading ||
-                                    isSameStageSelected
-                                }
-                                onClick={() =>
-                                    moveToStageMutation.mutate()
-                                }
-                            >
-                                {moveToStageMutation.isLoading ? (
-                                    <>
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
-                                        Moving...
-                                    </>
-                                ) : isSameStageSelected ? (
-                                    <>
-                                        <Info className="h-4 w-4 mr-2" /> Already
-                                        in this stage
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckCircle2 className="h-4 w-4 mr-2" />{" "}
-                                        Confirm Move
-                                    </>
-                                )}
-                            </Button>
-                        </div>
-                    </DialogContent>
-                </Dialog>
-            </div>
-
-            {/* ---------- Stage Pills Row ---------- */}
-            <div className="flex items-center gap-2 flex-wrap">
-                {canonicalStages.map((stage, i) => {
-                    const isDone = completedStages.includes(stage);
-                    const isActive = currentStageName === stage;
-                    return (
-                        <div key={stage} className="flex items-center">
-                            <div
-                                className={`w-3 h-3 rounded-full mr-1 ${isDone
-                                    ? "bg-green-500"
-                                    : isActive
-                                        ? "bg-blue-500"
-                                        : "bg-gray-300"
-                                    }`}
-                            />
-                            <span
-                                className={`text-xs ${isActive
-                                    ? "text-primary font-semibold"
-                                    : "text-muted-foreground"
-                                    }`}
-                            >
-                                {stage}
-                            </span>
-                            {i < canonicalStages.length - 1 && (
-                                <span className="mx-2 text-muted-foreground">
-                                    ›
-                                </span>
+        <Card className="overflow-hidden  shadow-sm transition-all">
+            {/* 1. COMPACT HEADER */}
+            <div className="p-4 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                            {editingProductName ? (
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        className="border rounded px-2 py-0.5 text-sm w-40"
+                                        value={localProductName}
+                                        onChange={(e) => setLocalProductName(e.target.value)}
+                                        autoFocus
+                                    />
+                                    <Button size="sm" className="h-7 px-2" onClick={() => updateProductNameMutation.mutate(localProductName)}>Save</Button>
+                                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingProductName(false)}>Cancel</Button>
+                                </div>
+                            ) : (
+                                <>
+                                    <h3 className="font-bold text-base">{localProductName || "Product"}</h3>
+                                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground" onClick={() => setEditingProductName(true)}>
+                                        <Edit2 className="h-3 w-3" />
+                                    </Button>
+                                </>
                             )}
                         </div>
-                    );
-                })}
-            </div>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <Badge variant={currentStageName ? "default" : "secondary"} className="h-5 text-[10px] px-1.5">
+                                {currentStageName || "Not Started"}
+                            </Badge>
+                            {currentVendor && <span>Vendor: <b className="text-foreground">{currentVendor}</b></span>}
+                            {currentStageDate && <span>Updated {currentStageDate}</span>}
+                        </div>
+                    </div>
 
-            {/* ---------- Notes ---------- */}
-            <div className="pt-3 border-t">
-                <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm font-medium">
-                        Product Notes
-                    </Label>
-                    {!editingNotes && (
+                    <div className="flex items-center gap-2">
+                        <Dialog open={open} onOpenChange={setOpen}>
+                            <DialogTrigger asChild>
+                                <Button size="sm" variant="outline" className="h-8 text-xs">
+                                    <MoveRight className="h-3.5 w-3.5 mr-1.5" /> Move Stage
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader><DialogTitle>Move Product to Another Stage</DialogTitle></DialogHeader>
+                                <div className="space-y-4 pt-4">
+                                    <div className="space-y-2">
+                                        <Label>Stage</Label>
+                                        <select className="w-full border rounded-md px-3 py-2" value={selectedStage} onChange={(e) => { setSelectedStage(e.target.value); setSelectedVendor(""); }}>
+                                            <option value="">Select stage...</option>
+                                            {canonicalStages.map((stageName) => <option key={stageName} value={stageName}>{stageName}</option>)}
+                                        </select>
+                                    </div>
+                                    {selectedStage && stageVendors?.length > 0 && (
+                                        <div className="space-y-2">
+                                            <Label>Vendor</Label>
+                                            <select className="w-full border rounded-md px-3 py-2" value={selectedVendor} onChange={(e) => setSelectedVendor(e.target.value)}>
+                                                <option value="">Select vendor...</option>
+                                                {stageVendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
+                                    <Button className="w-full" disabled={!selectedStage || moveToStageMutation.isPending || isSameStageSelected} onClick={() => moveToStageMutation.mutate()}>
+                                        {moveToStageMutation.isPending ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                        {isSameStageSelected ? "Already in this stage" : "Confirm Move"}
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setEditingNotes(true)}
-                            className="h-7 text-xs"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setIsExpanded(!isExpanded)}
                         >
-                            <Edit2 className="h-3 w-3 mr-1" />
-                            Edit
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </Button>
-                    )}
+                    </div>
                 </div>
 
-                {!editingNotes ? (
-                    <p className="text-sm text-muted-foreground">
-                        {productNotes ||
-                            "No notes added yet. Click Edit to add notes about this product."}
-                    </p>
-                ) : (
-                    <div className="space-y-2">
-                        <Textarea
-                            value={productNotes}
-                            onChange={(e) =>
-                                setProductNotes(e.target.value)
-                            }
-                            placeholder="Add notes about this product..."
-                            className="min-h-[80px]"
-                            autoFocus
-                        />
-                        <div className="flex gap-2">
-                            <Button
-                                size="sm"
-                                onClick={() =>
-                                    updateProductNotesMutation.mutate(
-                                        productNotes
-                                    )
-                                }
-                            >
-                                Save
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                    setEditingNotes(false);
-                                    setProductNotes(
-                                        order.metadata?.product_notes?.[
-                                        productNumber
-                                        ] || ""
-                                    );
-                                }}
-                            >
-                                Cancel
-                            </Button>
-                        </div>
+                {/* SLIM PROGRESS BAR */}
+                <div className="space-y-1">
+                    <Progress value={progressValue} className="h-1.5" />
+                    <div className="flex justify-between text-[9px] uppercase tracking-tighter text-muted-foreground font-semibold">
+                        <span>{canonicalStages[0]}</span>
+                        <span>{canonicalStages[canonicalStages.length - 1]}</span>
                     </div>
-                )}
+                </div>
             </div>
 
-            {/* ---------- Activity Log ---------- */}
-            <div className="pt-2">
-                <ActivityLog
-                    orderId={order.id}
-                    productNumber={productNumber}
-                />
-            </div>
+            {/* 2. COLLAPSIBLE CONTENT */}
+            <Collapsible open={isExpanded}>
+                <CollapsibleContent className="border-t bg-muted/20 p-4 space-y-6 animate-in fade-in slide-in-from-top-1">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Notes Section */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                    <ClipboardList className="h-4 w-4 text-primary" />
+                                    <h4>Product Notes</h4>
+                                </div>
+                                {!editingNotes && (
+                                    <Button variant="ghost" size="sm" onClick={() => setEditingNotes(true)} className="h-7 text-xs">
+                                        <Edit2 className="h-3 w-3 mr-1" /> Edit
+                                    </Button>
+                                )}
+                            </div>
+                            {!editingNotes ? (
+                                <p className="text-xs text-muted-foreground leading-relaxed italic">
+                                    {productNotes || "No specific notes for this product item."}
+                                </p>
+                            ) : (
+                                <div className="space-y-2">
+                                    <Textarea value={productNotes} onChange={(e) => setProductNotes(e.target.value)} placeholder="Add notes..." className="text-xs min-h-[80px]" />
+                                    <div className="flex gap-2">
+                                        <Button size="sm" className="h-7 text-xs" onClick={() => updateProductNotesMutation.mutate(productNotes)}>Save</Button>
+                                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingNotes(false)}>Cancel</Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Activity Log */}
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                <History className="h-4 w-4 text-primary" />
+                                <h4>Recent Activity</h4>
+                            </div>
+                            <ActivityLog orderId={order.id} productNumber={productNumber} />
+                        </div>
+                    </div>
+
+                    {/* Detailed Stage Workflow */}
+                    <div className="pt-4 border-t">
+                        <Label className="text-[10px] uppercase text-muted-foreground mb-3 block tracking-widest">Full Workflow Progress</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {canonicalStages.map((stage) => {
+                                const isDone = completedStages.includes(stage);
+                                const isActive = currentStageName === stage;
+                                return (
+                                    <Badge
+                                        key={stage}
+                                        variant={isActive ? "default" : "outline"}
+                                        className={`text-[10px] font-normal transition-colors ${isDone ? "border-green-500/50 text-green-600 bg-green-50" :
+                                            isActive ? "" : "text-muted-foreground opacity-60"
+                                            }`}
+                                    >
+                                        {isDone && "✓ "}{stage}
+                                    </Badge>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </CollapsibleContent>
+            </Collapsible>
         </Card>
     );
 }

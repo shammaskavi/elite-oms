@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -254,58 +255,131 @@ export function InvoiceView({
     }
   };
 
+  // Ensure tracking token exists
+  async function ensureTrackingToken(invoiceId: string) {
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("tracking_token")
+      .eq("id", invoiceId)
+      .single();
+
+    if (error) throw error;
+
+    // ✅ Token already exists → reuse
+    if (data?.tracking_token) {
+      return data.tracking_token;
+    }
+
+    // ✅ Generate new token
+    const token = uuidv4();
+
+    const { error: updateError } = await supabase
+      .from("invoices")
+      .update({ tracking_token: token })
+      .eq("id", invoiceId);
+
+    if (updateError) throw updateError;
+
+    return token;
+  }
+
   // WhatsApp send (generate PDF blob -> upload -> call WA Notifier)
+  // const handleSend = async () => {
+  //   try {
+  //     setIsSending(true);
+  //     setSendProgress("Generating PDF...");
+
+  //     const blob = await pdf(invoiceDocument).toBlob();
+  //     const fileName = `invoice-${invoice.invoice_number}-${Date.now()}.pdf`;
+
+  //     const { data: upload, error } = await supabase.storage
+  //       .from("invoices")
+  //       .upload(fileName, blob, {
+  //         contentType: "application/pdf",
+  //         upsert: true,
+  //       });
+  //     if (error) throw error;
+
+  //     const publicUrl = supabase.storage
+  //       .from("invoices")
+  //       .getPublicUrl(upload.path).data.publicUrl;
+
+  //     await supabase
+  //       .from("invoices")
+  //       .update({
+  //         raw_payload: {
+  //           ...invoice.raw_payload,
+  //           invoice_pdf_url: publicUrl,
+  //         },
+  //       })
+  //       .eq("id", invoice.id);
+
+  //     const customerPhone = String(invoice.customers?.phone || "").replace(
+  //       /\D/g,
+  //       ""
+  //     );
+  //     if (!customerPhone) {
+  //       toast.error("Customer phone number is missing.");
+  //       setIsSending(false);
+  //       return;
+  //     }
+  //     const trackingToken = await ensureTrackingToken(invoice.id);
+  //     console.log("Tracking token:", trackingToken);
+
+  //     const message = `
+  //     Hello ${invoice.customers?.name || ""}!
+  //     👋Here is your Saree Palace Elite invoice.
+  //     💰 Total: ₹${invoice.total.toLocaleString()}
+  //     🧾 Invoice No: ${invoice.invoice_number}
+  //     `;
+
+  //     setSendProgress("Sending via WhatsApp...");
+  //     await axios.post(WA_WEBHOOK_URL, {
+  //       to: `91${customerPhone}`,
+  //       message,
+  //       invoice_number: invoice.invoice_number,
+  //       total: `₹${invoice.total.toLocaleString()}`,
+  //       invoice_url: publicUrl,
+  //     });
+
+  //     toast.success(`Invoice sent to ${invoice.customers?.name} via WhatsApp`);
+  //   } catch (err: any) {
+  //     console.error("❌ WhatsApp send failed:", err);
+  //     toast.error(err.message || "Failed to send invoice via WhatsApp");
+  //   } finally {
+  //     setIsSending(false);
+  //     setSendProgress("");
+  //   }
+  // };
+
   const handleSend = async () => {
     try {
-      setIsSending(true);
-      setSendProgress("Generating PDF...");
-
-      const blob = await pdf(invoiceDocument).toBlob();
-      const fileName = `invoice-${invoice.invoice_number}-${Date.now()}.pdf`;
-
-      const { data: upload, error } = await supabase.storage
-        .from("invoices")
-        .upload(fileName, blob, {
-          contentType: "application/pdf",
-          upsert: true,
-        });
-      if (error) throw error;
-
-      const publicUrl = supabase.storage
-        .from("invoices")
-        .getPublicUrl(upload.path).data.publicUrl;
-
-      const customerPhone = String(invoice.customers?.phone || "").replace(
-        /\D/g,
-        ""
-      );
-      if (!customerPhone) {
+      const phone = String(invoice.customers?.phone || "").replace(/\D/g, "");
+      if (!phone) {
         toast.error("Customer phone number is missing.");
-        setIsSending(false);
         return;
       }
 
-      const message = `Hello ${invoice.customers?.name || ""}! 👋
+      const trackingToken = await ensureTrackingToken(invoice.id);
+      const trackingUrl = `${window.location.origin}/track/${trackingToken}`;
+
+      const message = `
+Hello ${invoice.customers?.name || ""}! 👋
+
 Here is your Saree Palace Elite invoice.
-💰 Total: ₹${invoice.total.toLocaleString()}
-🧾 Invoice No: ${invoice.invoice_number}`;
 
-      setSendProgress("Sending via WhatsApp...");
-      await axios.post(WA_WEBHOOK_URL, {
-        to: `91${customerPhone}`,
-        message,
-        invoice_number: invoice.invoice_number,
-        total: `₹${invoice.total.toLocaleString()}`,
-        invoice_url: publicUrl,
-      });
+🧾 Invoice No: ${invoice.invoice_number}
+💰 Total: ₹${invoice.total.toLocaleString("en-IN")}
 
-      toast.success(`Invoice sent to ${invoice.customers?.name} via WhatsApp`);
-    } catch (err: any) {
-      console.error("❌ WhatsApp send failed:", err);
-      toast.error(err.message || "Failed to send invoice via WhatsApp");
-    } finally {
-      setIsSending(false);
-      setSendProgress("");
+📦 Track your order here:
+${trackingUrl}
+    `.trim();
+
+      const waUrl = `https://wa.me/91${phone}?text=${encodeURIComponent(message)}`;
+      window.open(waUrl, "_blank");
+    } catch (err) {
+      console.error("WhatsApp redirect failed:", err);
+      toast.error("Failed to open WhatsApp");
     }
   };
 
