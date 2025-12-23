@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InvoiceView } from "@/components/InvoiceView";
 import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
+import { getOrderItems } from "@/lib/getOrderItems";
 
 
 
@@ -181,6 +182,10 @@ export default function Dashboard() {
     };
     return <Badge variant={variants[status] || "default"}>{status}</Badge>;
   };
+
+  useEffect(() => {
+    getOrderItems().then(console.log);
+  }, []);
 
 
   return (

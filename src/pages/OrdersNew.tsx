@@ -1,5 +1,5 @@
 // Orders page - in use
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useNavigate } from "react-router-dom";
@@ -7,8 +7,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, AlertTriangle } from "lucide-react";
+import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, AlertTriangle, CalendarDays } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { startOfWeek, addDays } from "date-fns";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,11 +27,42 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import WeekCalendar from "@/components/calendar/WeekCalendar";
 
 export default function OrdersNew() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("active");
-  const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
+  const [viewMode, setViewMode] =
+    useState<"list" | "kanban" | "calendar">("list");
+  // Calendar anchor date (controls visible week/month)
+  const [anchorDate, setAnchorDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
+  const weekDates = useMemo(() => {
+    const start = startOfWeek(anchorDate, { weekStartsOn: 1 }); // Monday
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  }, [anchorDate]);
+
+  function getWeekDates(anchor: Date) {
+    const start = new Date(anchor);
+    const day = start.getDay(); // 0 = Sun, 1 = Mon
+    const diff = day === 0 ? -6 : 1 - day; // make Monday start
+    start.setDate(start.getDate() + diff);
+
+    return Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    });
+  }
+  const visibleWeekDates = getWeekDates(anchorDate);
+  // Calendar view mode
+  const [calendarView, setCalendarView] =
+    useState<"week" | "month">("week");
   const [dateFilter, setDateFilter] = useState<string>("");
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; orderId: string; action: "delivered" | "cancelled" }>({
     open: false,
@@ -133,6 +165,37 @@ export default function OrdersNew() {
       return data || [];
     },
   });
+
+  // --- Fetch calendar order items (per-item, per-delivery-date) ---
+  const { data: calendarItems = [], isLoading: calendarLoading } = useQuery({
+    queryKey: ["calendar-order-items"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("order_items_calendar_view")
+        .select("*");
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: viewMode === "calendar",
+  });
+
+  // --- Group calendar items by delivery date (YYYY-MM-DD) ---
+  const calendarItemsByDate = useMemo(() => {
+    const map: Record<string, any[]> = {};
+
+    calendarItems.forEach((item: any) => {
+      if (!item.delivery_date) return;
+
+      const key = item.delivery_date; // already YYYY-MM-DD from DB
+      if (!map[key]) {
+        map[key] = [];
+      }
+      map[key].push(item);
+    });
+
+    return map;
+  }, [calendarItems]);
 
   // build stage names array used across component
   const STAGES = (stagesData || []).map((s: any) => s.name);
@@ -526,6 +589,15 @@ export default function OrdersNew() {
                 <LayoutGrid className="h-4 w-4 mr-2" />
                 Kanban
               </Button>
+              <Button
+                variant={viewMode === "calendar" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("calendar")}
+              >
+
+                <CalendarDays className="h-4 w-4 mr-2" />
+                Calendar
+              </Button>
             </div>
           </div>
 
@@ -605,7 +677,7 @@ export default function OrdersNew() {
       </Card>
 
       {/* Orders View */}
-      {viewMode === "list" ? (
+      {viewMode === "list" && (
         <Card className="p-4 md:p-6">
           <div className="flex items-center gap-2 mb-6">
             <Package className="h-5 w-5" />
@@ -792,7 +864,8 @@ export default function OrdersNew() {
             </div>
           )}
         </Card>
-      ) : (
+      )}
+      {viewMode === "kanban" && (
         <div ref={kanbanScrollRef} className="overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max">
             {STAGES.map((stage) => {
@@ -931,6 +1004,44 @@ export default function OrdersNew() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {viewMode === "calendar" && (
+        <div className="space-y-4">
+          {/* Week Navigation — STEP 3d */}
+          <div className="flex items-center justify-between">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAnchorDate(d => addDays(d, -7))}
+            >
+              ← Previous
+            </Button>
+
+            <div className="text-sm font-medium">
+              Week of{" "}
+              {weekDates[0].toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAnchorDate(d => addDays(d, 7))}
+            >
+              Next →
+            </Button>
+          </div>
+
+          {/* Calendar Grid */}
+          <WeekCalendar
+            dates={weekDates}
+            anchorDate={anchorDate}
+          />
         </div>
       )}
 
