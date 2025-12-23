@@ -30,6 +30,7 @@ export default function PublicInvoiceTracking() {
                     invoice_number,
                     date,
                     total,
+                    file_url,
                     raw_payload,
                     customers ( name )
         `
@@ -70,6 +71,17 @@ export default function PublicInvoiceTracking() {
     // Helper to normalize strings for matching (same as your InvoiceView)
     const normalize = (v?: string) => v?.trim().toLowerCase() ?? "";
 
+    const getPublicStageLabel = (stage?: string) => {
+        if (!stage) return "Ordered";
+
+        switch (stage.toLowerCase()) {
+            case "packed":
+                return "Ready to pickup";
+            default:
+                return stage;
+        }
+    };
+
     // Map stages using the same logic as the admin view
     const { orderIndexMap, orderNameMap } = useMemo(() => {
         const indexMap = new Map<number, any>();
@@ -84,7 +96,7 @@ export default function PublicInvoiceTracking() {
 
             const latest = stages[stages.length - 1];
             const stageData = {
-                stage: latest?.stage_name ?? "Ordered",
+                stage: getPublicStageLabel(latest?.stage_name),
                 vendor: latest?.vendor_name ?? null,
                 updatedAt: latest?.created_at ?? null,
             };
@@ -187,12 +199,13 @@ export default function PublicInvoiceTracking() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                                const url = invoice.raw_payload?.invoice_pdf_url;
-                                if (url) window.open(url, "_blank");
+                                if (invoice.file_url) {
+                                    window.open(invoice.file_url, "_blank");
+                                }
                             }}
-                            disabled={!invoice.raw_payload?.invoice_pdf_url}
+                            disabled={!invoice.file_url}
                         >
-                            Download Invoice PDF
+                            View Full Invoice PDF
                         </Button>
                     </div>
 

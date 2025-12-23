@@ -33,7 +33,7 @@ import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
 import { toast } from "sonner";
 import { usePDF, pdf } from "@react-pdf/renderer";
 import { PrintableInvoice } from "./PrintableInvoice";
-import axios from "axios";
+// import axios from "axios";
 
 
 const WA_WEBHOOK_URL =
@@ -309,7 +309,7 @@ export function InvoiceView({
   //       .update({
   //         raw_payload: {
   //           ...invoice.raw_payload,
-  //           invoice_pdf_url: publicUrl,
+  //           invoice_file_url: publicUrl,
   //         },
   //       })
   //       .eq("id", invoice.id);
@@ -352,6 +352,28 @@ export function InvoiceView({
   //   }
   // };
 
+  const getExpectedDeliveryDate = () => {
+    const items = invoice.raw_payload?.items || [];
+
+    // Collect all valid item delivery dates
+    const itemDates = items
+      .map((item: any) => item.delivery_date)
+      .filter(Boolean)
+      .map((d: string) => new Date(d).getTime());
+
+    if (itemDates.length > 0) {
+      // Return the LATEST delivery date (safe promise)
+      return new Date(Math.max(...itemDates));
+    }
+
+    // Fallback to invoice-level delivery date
+    if (invoice.raw_payload?.delivery_date) {
+      return new Date(invoice.raw_payload.delivery_date);
+    }
+
+    return null;
+  };
+
   const handleSend = async () => {
     try {
       const phone = String(invoice.customers?.phone || "").replace(/\D/g, "");
@@ -362,14 +384,23 @@ export function InvoiceView({
 
       const trackingToken = await ensureTrackingToken(invoice.id);
       const trackingUrl = `${window.location.origin}/track/${trackingToken}`;
-
+      const expectedDelivery = getExpectedDeliveryDate();
+      const formattedDelivery = expectedDelivery
+        ? expectedDelivery.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })
+        : null;
       const message = `
 Hello ${invoice.customers?.name || ""}! 👋
 
 Here is your Saree Palace Elite invoice.
 
 🧾 Invoice No: ${invoice.invoice_number}
-💰 Total: ₹${invoice.total.toLocaleString("en-IN")}
+💰 Total Invoice Amount: ₹${invoice.total.toLocaleString("en-IN")}
+${formattedDelivery ? `📅 Expected Delivery: ${formattedDelivery}` : ""}
+
 
 📦 Track your order here:
 ${trackingUrl}
@@ -380,6 +411,7 @@ ${trackingUrl}
     } catch (err) {
       console.error("WhatsApp redirect failed:", err);
       toast.error("Failed to open WhatsApp");
+
     }
   };
 

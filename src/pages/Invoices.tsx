@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InvoiceView } from "@/components/InvoiceView";
+import { pdf } from "@react-pdf/renderer";
+import { PrintableInvoice } from "@/components/PrintableInvoice";
 import {
   Table,
   TableBody,
@@ -64,7 +66,6 @@ export default function Invoices() {
   // const [openInvoice, setOpenInvoice] = useState<any>(null);
   const [customerComboboxOpen, setCustomerComboboxOpen] = useState(false);
   const [customerInput, setCustomerInput] = useState("");
-
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
@@ -216,6 +217,55 @@ export default function Invoices() {
       return data;
     },
   });
+
+  const generateAndStoreInvoicePDF = async (invoice: any) => {
+    // Safety: don't regenerate
+    if (invoice.file_url) return invoice.file_url;
+
+    const blob = await pdf(
+      <PrintableInvoice
+        data={{
+          ...invoice,
+          delivery_date: invoice.raw_payload?.delivery_date,
+          isPaid: invoice.payment_status === "paid",
+          paidAmount: parseFloat(invoice.raw_payload?.paid_amount || 0),
+          remainingBalance:
+            parseFloat(invoice.total) -
+            parseFloat(invoice.raw_payload?.paid_amount || 0),
+        }}
+        payments={[]} // optional, safe default
+      />
+    ).toBlob();
+
+    const fileName = `invoice-${invoice.invoice_number}.pdf`;
+
+    const { data: upload, error: uploadError } = await supabase.storage
+      .from("invoices")
+      .upload(fileName, blob, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("PDF upload failed:", uploadError);
+      throw uploadError;
+    }
+    const publicUrl = supabase.storage
+      .from("invoices")
+      .getPublicUrl(upload.path).data.publicUrl;
+
+    const { error: updateError } = await (supabase as any)
+      .from("invoices")
+      .update({ file_url: publicUrl })
+      .eq("id", invoice.id);
+
+    if (updateError) {
+      console.error("PDF URL save failed:", updateError);
+      throw updateError;
+    }
+    console.log("Generating invoice PDF for:", invoice.invoice_number);
+    return publicUrl;
+  };
 
   const saveDraftMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -543,6 +593,24 @@ export default function Invoices() {
         }
       }
 
+      // ------- GENERATE & STORE PDF (FINALIZED ONLY) -------
+      try {
+        const { data: freshInvoice, error } = await supabase
+          .from("invoices")
+          .select(`
+      *,
+      customers(*),
+      invoice_items(*)
+    `)
+          .eq("id", invoice.id)
+          .single();
+
+        if (error) throw error;
+
+        await generateAndStoreInvoicePDF(freshInvoice);
+      } catch (err) {
+        console.error("PDF generation failed (non-blocking):", err);
+      }
       return invoice;
     },
     onSuccess: () => {
