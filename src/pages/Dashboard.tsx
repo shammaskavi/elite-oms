@@ -127,9 +127,16 @@ export default function Dashboard() {
     // Load recent invoices (we'll derive pending status from payments)
     const { data: invoicesData } = await (supabase as any)
       .from("invoices")
-      .select("*, customers(name)")
+      .select(`
+    *,
+    customers (
+      name,
+      phone,
+      address
+    )
+  `)
       .order("created_at", { ascending: false })
-      .limit(30); // get a bit more, we'll filter in JS
+      .limit(30);
 
     const enrichedInvoices =
       (invoicesData && invoicesData.length > 0)
