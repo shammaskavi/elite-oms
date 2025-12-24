@@ -92,6 +92,12 @@ export default function OrdersNew() {
       // }
       setDateFilter(state.dateFilter ?? "");
       setQuickFilter(state.quickFilter ?? null);
+      // Restore anchorDate if present
+      if (state.anchorDate) {
+        const restoredDate = new Date(state.anchorDate);
+        restoredDate.setHours(0, 0, 0, 0);
+        setAnchorDate(restoredDate);
+      }
     } catch {
       console.warn("Failed to restore orders UI state");
     }
@@ -720,6 +726,7 @@ export default function OrdersNew() {
                           viewMode,
                           dateFilter,
                           quickFilter,
+                          anchorDate: anchorDate.toISOString(),
                         })
                       );
                       navigate(`/orders/${order.id}`);
@@ -735,7 +742,7 @@ export default function OrdersNew() {
                     <div className="flex items-start justify-between">
                       <div className="space-y-1">
                         <div className="flex items-center flex-wrap gap-2">
-                          <h3 className="font-semibold text-base sm:text-lg">#{order.order_code}</h3>
+                          <h3 className="font-semibold text-base sm:text-lg leading-snug break-words">#{order.order_code}</h3>
                           <Badge
                             className={`${getStatusColor(order.order_status)} text-[10px] px-2 py-0.5`}
                           >
@@ -754,7 +761,7 @@ export default function OrdersNew() {
                           )}
                         </div>
 
-                        <p className="text-sm font-medium text-foreground truncate">
+                        <p className="text-sm font-medium text-foreground leading-snug break-words">
                           {order.metadata?.item_name || "Order Item"}
                         </p>
                         {order.metadata?.reference_name && (
@@ -917,6 +924,7 @@ export default function OrdersNew() {
                                   viewMode,
                                   dateFilter,
                                   quickFilter,
+                                  anchorDate: anchorDate.toISOString(),
                                 })
                               );
                               navigate(`/orders/${order.id}`);
@@ -1038,9 +1046,37 @@ export default function OrdersNew() {
           </div>
 
           {/* Calendar Grid */}
+          {/* <WeekCalendar
+            dates={weekDates}
+            anchorDate={anchorDate}
+            onItemClick={(orderId: string) => {
+              sessionStorage.setItem(
+                "ordersUIState",
+                JSON.stringify({
+                  searchQuery,
+                  statusFilter,
+                  viewMode: "calendar",
+                  dateFilter,
+                  quickFilter,
+                  anchorDate: anchorDate.toISOString(),
+                })
+              );
+              navigate(`/orders/${orderId}`);
+            }}
+          /> */}
+
           <WeekCalendar
             dates={weekDates}
             anchorDate={anchorDate}
+            onItemClick={(orderId) => {
+              navigate(`/orders/${orderId}`, {
+                state: {
+                  returnTo: location.pathname,
+                  activeTab: "calendar",
+                  anchorDate: anchorDate.toISOString(),
+                },
+              });
+            }}
           />
         </div>
       )}

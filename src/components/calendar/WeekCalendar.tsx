@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 import { format, isSameDay, startOfDay } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +9,13 @@ import clsx from "clsx";
 interface WeekCalendarProps {
     dates: Date[];
     anchorDate: Date;
+    onItemClick: (orderId: string) => void;
 }
 
 type CalendarItem = {
     order_id: string;
     invoice_number: string;
+    order_code: string;
     item_name: string;
     delivery_date: string; // YYYY-MM-DD
     customer_name: string;
@@ -25,8 +26,8 @@ type CalendarItem = {
 export default function WeekCalendar({
     dates,
     anchorDate,
+    onItemClick,
 }: WeekCalendarProps) {
-    const navigate = useNavigate();
     /* -----------------------------
        1️⃣ Fetch calendar items
     ------------------------------ */
@@ -100,7 +101,7 @@ export default function WeekCalendar({
                         {/* Day Column */}
                         <div
                             className={clsx(
-                                "flex-1 rounded-lg border p-2 space-y-2 min-h-[120px] overflow-y-auto",
+                                "rounded-lg border p-2 space-y-2 h-[540px] overflow-y-scroll scrollbar-thin scrollbar-thumb-muted-foreground/40 scrollbar-track-transparent",
                                 isToday
                                     ? "border-primary bg-primary/5"
                                     : "bg-background"
@@ -121,11 +122,12 @@ export default function WeekCalendar({
                                 return (
                                     <Card
                                         key={item.order_id + item.item_name}
-                                        className="p-2 cursor-pointer hover:shadow-sm transition"
-                                        onClick={() =>
-                                            navigate(`/orders/${item.order_id}`)
-                                        }
+                                        className="p-2 hover:shadow-md transition-all cursor-pointer"
+                                        onClick={() => onItemClick(item.order_id)}
                                     >
+                                        <div className="text-xs font-semibold leading-snug break-words">
+                                            {item.invoice_number}
+                                        </div>
                                         <div className="text-xs font-medium leading-snug break-words">
                                             {item.item_name}
                                         </div>
