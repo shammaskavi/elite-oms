@@ -885,13 +885,14 @@ export default function Invoices() {
               Create Invoice
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-6xl max-h-[100vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="max-w-6xl w-full max-h-[100vh] overflow-y-auto p-0 md:p-6">
+            <DialogHeader className="p-4 pb-0 md:p-0">
               <DialogTitle>{editingDraftId ? "Edit Draft Invoice" : "Create Invoice"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {/* Row 1: Invoice Number, Invoice Date, Delivery Date */}
-              <div className="grid grid-cols-3 gap-3">
+            <form onSubmit={handleSubmit} className="space-y-3 p-4 md:p-0">
+
+              {/* Row 1: Responsive Grid for Invoice Details */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <Label htmlFor="invoice_number" className="text-xs">Invoice Number *</Label>
                   <Input
@@ -900,6 +901,7 @@ export default function Invoices() {
                     onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
                     required
                     disabled
+                    placeholder="Invoice Number"
                     className="bg-muted h-9"
                   />
                 </div>
@@ -931,47 +933,30 @@ export default function Invoices() {
                 </div>
               </div>
 
-              {/* Row 2: Customer dropdown with inline Add New */}
               {/* CUSTOMER FIELD */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label htmlFor="customer_id">Customer *</Label>
-
-                  {/* Add New Customer Button */}
-                  {/* <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setNewCustomer({ name: customerInput, phone: "", email: "", address: "" });
-                      setCustomerDialogOpen(true);
-                    }}
-                    className="h-auto py-1 px-2"
-                  >
-                    <UserPlus className="w-3 h-3 mr-1" />
-                    Add New
-                  </Button> */}
-                </div>
-
+                <Label htmlFor="customer_id" className="text-xs mb-2 block">Customer *</Label>
                 <Popover open={customerComboboxOpen} onOpenChange={setCustomerComboboxOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       role="combobox"
                       aria-expanded={customerComboboxOpen}
-                      className="w-full justify-between"
+                      className="w-full justify-between h-9"
                     >
-                      {formData.customer_id
-                        ? (() => {
-                          const c = customers?.find((x) => x.id === formData.customer_id);
-                          return c ? `${c.name}${c.phone ? ` (${c.phone})` : ""}` : "Select customer...";
-                        })()
-                        : "Select customer..."}
+                      <span className="truncate">
+                        {formData.customer_id
+                          ? (() => {
+                            const c = customers?.find((x) => x.id === formData.customer_id);
+                            return c ? `${c.name}${c.phone ? ` (${c.phone})` : ""}` : "Select customer..."
+                          })()
+                          : "Select customer..."}
+                      </span>
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
 
-                  <PopoverContent className="w-[400px] p-0" align="start">
+                  <PopoverContent className="w-[calc(100vw-2rem)] md:w-[400px] p-0" align="start">
                     <Command>
                       <CommandInput
                         placeholder="Search customers..."
@@ -981,39 +966,26 @@ export default function Invoices() {
                           setFormData((prev) => ({ ...prev, customer_id: "" }));
                         }}
                       />
-
                       <CommandList>
                         <CommandEmpty>No customer found.</CommandEmpty>
-
                         <CommandGroup>
-                          {/* MATCHING CUSTOMERS */}
-                          {customers
-                            ?.filter((customer) =>
-                              `${customer.name} ${customer.phone || ""}`
-                                .toLowerCase()
-                                .includes(customerInput.toLowerCase())
-                            )
-                            .map((customer) => (
-                              <CommandItem
-                                key={customer.id}
-                                value={`${customer.name} ${customer.phone || ""}`}
-                                onSelect={() => {
-                                  setFormData({ ...formData, customer_id: customer.id });
-                                  setCustomerInput(customer.name);
-                                  setCustomerComboboxOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    formData.customer_id === customer.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                {customer.name} {customer.phone && `(${customer.phone})`}
-                              </CommandItem>
-                            ))}
+                          {customers?.filter((customer) =>
+                            `${customer.name} ${customer.phone || ""}`.toLowerCase().includes(customerInput.toLowerCase())
+                          ).map((customer) => (
+                            <CommandItem
+                              key={customer.id}
+                              value={`${customer.name} ${customer.phone || ""}`}
+                              onSelect={() => {
+                                setFormData({ ...formData, customer_id: customer.id });
+                                setCustomerInput(customer.name);
+                                setCustomerComboboxOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", formData.customer_id === customer.id ? "opacity-100" : "opacity-0")} />
+                              {customer.name} {customer.phone && `(${customer.phone})`}
+                            </CommandItem>
+                          ))}
 
-                          {/* CREATE NEW CUSTOMER IF NO MATCHING ITEM */}
                           {customers?.filter((c) =>
                             `${c.name} ${c.phone}`.toLowerCase().includes(customerInput.toLowerCase())
                           ).length === 0 && customerInput.length > 0 && (
@@ -1035,12 +1007,12 @@ export default function Invoices() {
                 </Popover>
               </div>
 
-
-
-              {/* Items Table */}
+              {/* Items Section */}
               <div className="space-y-2">
                 <Label className="text-xs">Items</Label>
-                <div className="border rounded-lg overflow-hidden">
+
+                {/* Desktop Table View */}
+                <div className="hidden md:block border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
@@ -1058,86 +1030,33 @@ export default function Invoices() {
                       {items.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell className="p-2">
-                            <Input
-                              value={item.name}
-                              onChange={(e) => updateItem(index, "name", e.target.value)}
-                              required
-                              placeholder="Item name"
-                              className="h-8"
-                            />
+                            <Input value={item.name} onChange={(e) => updateItem(index, "name", e.target.value)} required placeholder="Item name" className="h-8" />
                           </TableCell>
                           <TableCell className="p-2">
-                            <Input
-                              type="number"
-                              value={item.qty}
-                              onChange={(e) => updateItem(index, "qty", e.target.value)}
-                              required
-                              min="1"
-                              className="h-8"
-                            />
-                            {/* updated with no zersos */}
+                            <Input type="number" value={item.qty} onChange={(e) => updateItem(index, "qty", e.target.value)} required min="1" placeholder="0" className="h-8" />
                           </TableCell>
                           <TableCell className="p-2">
-                            <Input
-                              type="text"
-                              inputMode="decimal"
-                              value={item.unit_price}
-                              onChange={(e) => updateItem(index, "unit_price", e.target.value.replace(/[^\d.]/g, ""))}
-                              required
-                              placeholder="Enter Price"
-                              className="h-8"
-                            />
+                            <Input type="text" inputMode="decimal" value={item.unit_price} onChange={(e) => updateItem(index, "unit_price", e.target.value.replace(/[^\d.]/g, ""))} required placeholder="0.00" className="h-8" />
                           </TableCell>
                           <TableCell className="p-2">
-                            <Select
-                              value={item.num_products}
-                              onValueChange={(value) => updateItem(index, "num_products", value)}
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue />
-                              </SelectTrigger>
+                            <Select value={item.num_products} onValueChange={(value) => updateItem(index, "num_products", value)}>
+                              <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="1">1</SelectItem>
-                                <SelectItem value="2">2</SelectItem>
-                                <SelectItem value="3">3</SelectItem>
-                                <SelectItem value="4">4</SelectItem>
-                                <SelectItem value="5">5</SelectItem>
+                                {["1", "2", "3", "4", "5"].map(num => <SelectItem key={num} value={num}>{num}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </TableCell>
                           <TableCell className="p-2">
-                            <Input
-                              value={`₹${(parseFloat(item.qty || 0) * parseFloat(item.unit_price || 0)).toFixed(2)}`}
-                              disabled
-                              className="bg-muted h-8 font-medium"
-                            />
+                            <Input value={`₹${(parseFloat(item.qty || 0) * parseFloat(item.unit_price || 0)).toFixed(2)}`} disabled className="bg-muted h-8 font-medium text-xs" />
                           </TableCell>
                           <TableCell className="p-2">
-                            <Input
-                              value={item.reference_name}
-                              onChange={(e) => updateItem(index, "reference_name", e.target.value)}
-                              placeholder="Reference"
-                              className="h-8"
-                            />
+                            <Input value={item.reference_name} onChange={(e) => updateItem(index, "reference_name", e.target.value)} placeholder="Reference" className="h-8" />
                           </TableCell>
                           <TableCell className="p-2">
-                            <Input
-                              type="date"
-                              value={item.delivery_date}
-                              onChange={(e) => updateItem(index, "delivery_date", e.target.value)}
-                              required
-                              className="h-8"
-                            />
+                            <Input type="date" value={item.delivery_date} onChange={(e) => updateItem(index, "delivery_date", e.target.value)} required className="h-8" />
                           </TableCell>
                           <TableCell className="p-2">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeItem(index)}
-                              disabled={items.length === 1}
-                              className="h-8 w-8"
-                            >
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(index)} disabled={items.length === 1} className="h-8 w-8 text-destructive">
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </TableCell>
@@ -1146,13 +1065,70 @@ export default function Invoices() {
                     </TableBody>
                   </Table>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={addItem} className="w-full h-8">
-                  <Plus className="w-4 h-4 mr-1" />
-                  Add Item
+
+                {/* Mobile Item Cards */}
+                <div className="md:hidden space-y-4">
+                  {items.map((item, index) => (
+                    <div key={index} className="border rounded-lg p-4 space-y-3 bg-card relative shadow-sm">
+                      <div className="flex justify-between items-center border-b pb-2 mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Item #{index + 1}</span>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeItem(index)} disabled={items.length === 1} className="h-8 w-8 p-0 text-destructive">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+                        <div className="col-span-2">
+                          <Label className="text-[11px] font-semibold mb-1 block">Item Name *</Label>
+                          <Input value={item.name} onChange={(e) => updateItem(index, "name", e.target.value)} required placeholder="Enter item name" className="h-10" />
+                        </div>
+                        <div>
+                          <Label className="text-[11px] font-semibold mb-1 block">Quantity *</Label>
+                          <Input type="number" value={item.qty} onChange={(e) => updateItem(index, "qty", e.target.value)} required min="1" placeholder="Qty" className="h-10" />
+                        </div>
+                        <div>
+                          <Label className="text-[11px] font-semibold mb-1 block">Unit Price *</Label>
+                          <Input type="text" inputMode="decimal" value={item.unit_price} onChange={(e) => updateItem(index, "unit_price", e.target.value.replace(/[^\d.]/g, ""))} required placeholder="Price" className="h-10" />
+                        </div>
+                        <div>
+                          <Label className="text-[11px] font-semibold mb-1 block">Product *</Label>
+                          <Select value={item.num_products} onValueChange={(v) => updateItem(index, "num_products", v)}>
+                            <SelectTrigger className="h-10"><SelectValue placeholder="Qty" /></SelectTrigger>
+                            <SelectContent>
+                              {["1", "2", "3", "4", "5"].map(num => <SelectItem key={num} value={num}>{num}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-[11px] font-semibold mb-1 block">Total</Label>
+                          <Input value={`₹${(parseFloat(item.qty || 0) * parseFloat(item.unit_price || 0)).toFixed(2)}`} disabled className="bg-muted h-10 font-bold" />
+                        </div>
+
+                        {/* Reference Name Fixed to Col-Span-2 */}
+                        <div className="col-span-2">
+                          <Label className="text-[11px] font-semibold mb-1 block">Customer Reference</Label>
+                          <Input
+                            value={item.reference_name}
+                            onChange={(e) => updateItem(index, "reference_name", e.target.value)}
+                            placeholder="Enter Customer Reference Name "
+                            className="h-10 w-full"
+                          />
+                        </div>
+
+                        <div className="col-span-2">
+                          <Label className="text-[11px] font-semibold mb-1 block">Item Delivery Date *</Label>
+                          <Input type="date" value={item.delivery_date} onChange={(e) => updateItem(index, "delivery_date", e.target.value)} required className="h-10" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Button type="button" variant="outline" size="sm" onClick={addItem} className="w-full h-10">
+                  <Plus className="w-4 h-4 mr-1" /> Add Another Item
                 </Button>
               </div>
 
-              {/* Collapsible Discount Section */}
+              {/* Discount Section */}
               <Collapsible open={showDiscount} onOpenChange={setShowDiscount} className="border-t pt-3">
                 <CollapsibleTrigger asChild>
                   <Button type="button" variant="link" className="h-auto p-0 text-sm">
@@ -1161,29 +1137,15 @@ export default function Invoices() {
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-3 pt-3">
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
                       <Label htmlFor="coupon_code" className="text-xs">Coupon Code</Label>
-                      <Input
-                        id="coupon_code"
-                        value={formData.coupon_code}
-                        onChange={(e) => setFormData({ ...formData, coupon_code: e.target.value })}
-                        placeholder="Enter code"
-                        className="h-9"
-                      />
+                      <Input id="coupon_code" value={formData.coupon_code} onChange={(e) => setFormData({ ...formData, coupon_code: e.target.value })} placeholder="Enter Code" className="h-9" />
                     </div>
                     <div>
                       <Label htmlFor="discount_type" className="text-xs">Discount Type</Label>
-                      <Select
-                        value={formData.discount_type}
-                        onValueChange={(value) => {
-                          setFormData({ ...formData, discount_type: value });
-                          updateTotals(items, formData.discount, value);
-                        }}
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue />
-                        </SelectTrigger>
+                      <Select value={formData.discount_type} onValueChange={(value) => { setFormData({ ...formData, discount_type: value }); updateTotals(items, formData.discount, value); }}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Select Type" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="fixed">₹ Fixed</SelectItem>
                           <SelectItem value="percentage">% Percentage</SelectItem>
@@ -1192,18 +1154,7 @@ export default function Invoices() {
                     </div>
                     <div>
                       <Label htmlFor="discount" className="text-xs">Amount</Label>
-                      <Input
-                        id="discount"
-                        type="number"
-                        step="0.01"
-                        value={formData.discount}
-                        onChange={(e) => {
-                          setFormData({ ...formData, discount: e.target.value });
-                          updateTotals(items, e.target.value, formData.discount_type);
-                        }}
-                        placeholder="0.00"
-                        className="h-9"
-                      />
+                      <Input id="discount" type="number" step="0.01" value={formData.discount} onChange={(e) => { setFormData({ ...formData, discount: e.target.value }); updateTotals(items, e.target.value, formData.discount_type); }} placeholder="0.00" className="h-9" />
                     </div>
                   </div>
                 </CollapsibleContent>
@@ -1218,12 +1169,12 @@ export default function Invoices() {
                   value={formData.remarks}
                   onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
                   placeholder="Add any notes or special instructions..."
-                  className="w-full border rounded-md p-2 text-sm"
+                  className="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
                 />
               </div>
 
               {/* Totals Section */}
-              <div className="border-t pt-3 space-y-1.5">
+              <div className="border-t pt-3 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal:</span>
                   <span className="font-medium">₹{parseFloat(formData.subtotal).toFixed(2)}</span>
@@ -1231,29 +1182,19 @@ export default function Invoices() {
                 {parseFloat(formData.discount) > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
                     <span>Discount ({formData.discount_type === "percentage" ? `${formData.discount}%` : `₹${formData.discount}`}):</span>
-                    <span className="font-medium">
-                      -₹{(formData.discount_type === "percentage"
-                        ? (parseFloat(formData.subtotal) * parseFloat(formData.discount)) / 100
-                        : parseFloat(formData.discount)).toFixed(2)}
-                    </span>
+                    <span className="font-medium">-₹{(formData.discount_type === "percentage" ? (parseFloat(formData.subtotal) * parseFloat(formData.discount)) / 100 : parseFloat(formData.discount)).toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-xl font-bold pt-1.5 border-t">
+                <div className="flex justify-between text-xl font-bold pt-2 border-t">
                   <span>Total:</span>
                   <span>₹{parseFloat(formData.total).toFixed(2)}</span>
                 </div>
 
-                {/* Advance Payment Row */}
-                <div className="flex justify-between items-center pt-1.5">
-                  <span className="text-sm">Advance:</span>
+                <div className="flex flex-col gap-2 pt-2 border-t border-dashed">
+                  <Label className="text-xs">Advance Payment</Label>
                   <div className="flex items-center gap-2">
-                    <Select
-                      value={formData.payment_method}
-                      onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
-                    >
-                      <SelectTrigger className="h-8 w-32 text-xs">
-                        <SelectValue placeholder="Mode" />
-                      </SelectTrigger>
+                    <Select value={formData.payment_method} onValueChange={(value) => setFormData({ ...formData, payment_method: value })}>
+                      <SelectTrigger className="h-10 flex-1 md:w-32"><SelectValue placeholder="Mode" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="card">Card</SelectItem>
@@ -1265,53 +1206,37 @@ export default function Invoices() {
                       type="text"
                       inputMode="decimal"
                       value={formData.paid_amount}
+                      placeholder="0.00"
                       onChange={(e) => {
-                        // Allow only numbers and decimal points
                         const rawValue = e.target.value.replace(/[^\d.]/g, "");
-
-                        // Convert empty string safely to 0 for calculation
                         const paidAmount = parseFloat(rawValue || "0");
                         const total = parseFloat(formData.total || "0");
-
-                        const status =
-                          paidAmount >= total
-                            ? "paid"
-                            : paidAmount > 0
-                              ? "partial"
-                              : "unpaid";
-
-                        setFormData({
-                          ...formData,
-                          paid_amount: rawValue, // keep actual typed value (even "")
-                          payment_status: status,
-                        });
+                        const status = paidAmount >= total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+                        setFormData({ ...formData, paid_amount: rawValue, payment_status: status });
                       }}
-                      placeholder="Enter Advance"
-                      className="h-8 w-32 text-right"
+                      className="h-10 flex-1 text-right"
                     />
-                    <span className="font-medium min-w-[100px] text-right">₹{parseFloat(formData.paid_amount || "0").toFixed(2)}</span>
                   </div>
-                </div>
 
-                {/* Due Amount Row */}
-                <div className="flex justify-between text-lg font-semibold pt-1">
-                  <span>Due Amount:</span>
-                  <span className="text-destructive">₹{Math.max(0, parseFloat(formData.total) - parseFloat(formData.paid_amount || "0")).toFixed(2)}</span>
+                  {/* proposed  */}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Paid:</span>
+                    <span className="font-medium">₹{parseFloat(formData.paid_amount || "0").toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-xl font-bold pt-2">
+                    <span>Due Amount:</span>
+                    <span className="text-destructive">₹{Math.max(0, parseFloat(formData.total) - parseFloat(formData.paid_amount || "0")).toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
 
-
               {/* Action Buttons */}
-              <div className="flex gap-3 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleSaveDraft}
-                >
+              <div className="flex flex-col md:flex-row gap-3 pt-4">
+                <Button type="button" variant="outline" className="flex-1 order-2 md:order-1 h-11" onClick={handleSaveDraft}>
                   {editingDraftId ? "Update Draft" : "Save as Draft"}
                 </Button>
-                <Button type="submit" className="flex-1">
+                <Button type="submit" className="flex-1 order-1 md:order-2 h-11">
                   {editingDraftId ? "Finalize & Create Order" : "Create Invoice & Order"}
                 </Button>
               </div>
