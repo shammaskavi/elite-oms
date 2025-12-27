@@ -608,25 +608,24 @@ export default function OrdersNew() {
                 size="sm"
                 onClick={() => setViewMode("list")}
               >
-                <List className="h-4 w-4 mr-2" />
-                List
+                <List className="h-4 w-4" />
+                {/* List */}
               </Button>
               <Button
                 variant={viewMode === "kanban" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setViewMode("kanban")}
               >
-                <LayoutGrid className="h-4 w-4 mr-2" />
-                Kanban
+                <LayoutGrid className="h-4 w-4" />
+                {/* Kanban */}
               </Button>
               <Button
                 variant={viewMode === "calendar" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setViewMode("calendar")}
               >
-
-                <CalendarDays className="h-4 w-4 mr-2" />
-                Calendar
+                <CalendarDays className="h-4 w-4" />
+                {/* Calendar */}
               </Button>
             </div>
           </div>
