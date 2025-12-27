@@ -31,8 +31,14 @@ export default function OrderDetailNew() {
     const location = useLocation();
     const navigate = useNavigate();
 
-    const returnTo = location.state?.returnTo as string | undefined;
-    const openInvoiceId = location.state?.openInvoiceId as string | undefined;
+    const navState = location.state as any;
+
+    const returnTo = navState?.returnTo;
+    const openInvoiceId = navState?.openInvoiceId;
+    const ordersView = navState?.ordersView;
+    const anchorDate = navState?.anchorDate;
+    // const returnTo = location.state?.returnTo as string | undefined;
+    // const openInvoiceId = location.state?.openInvoiceId as string | undefined;
 
     const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: "delivered" | "cancelled" | "delete" }>({ open: false, action: "delivered" });
     const queryClient = useQueryClient();
@@ -130,6 +136,7 @@ export default function OrderDetailNew() {
     // });
     // --- order_stages for this single order ---
     // --- order_stages for this single order ---
+
     const { data: allStages } = useQuery({
         queryKey: ["order-stages", id],
         queryFn: async () => {
@@ -321,6 +328,26 @@ export default function OrderDetailNew() {
                 <Button
                     variant="ghost"
                     onClick={() => {
+                        if (!returnTo) {
+                            navigate(-1);
+                            return;
+                        }
+
+                        navigate(returnTo, {
+                            state: {
+                                openInvoiceId,
+                                ordersView,
+                                anchorDate,
+                            },
+                        });
+                    }}
+                >
+                    ← Back
+                </Button>
+                {/* old back button */}
+                {/* <Button
+                    variant="ghost"
+                    onClick={() => {
                         if (returnTo && openInvoiceId) {
                             navigate(returnTo, {
                                 state: { openInvoiceId },
@@ -333,32 +360,7 @@ export default function OrderDetailNew() {
                     }}
                 >
                     ← Back
-                </Button>
-                {/* <div className="flex gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline">
-                                Change Status <ChevronDown className="ml-2 h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setConfirmDialog({ open: true, action: "delivered" })}>
-                                Mark All as Delivered
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setConfirmDialog({ open: true, action: "cancelled" })}>
-                                Mark All as Cancelled
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setConfirmDialog({ open: true, action: "delete" })}
-                    >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete All Orders
-                    </Button>
-                </div> */}
+                </Button> */}
             </div>
 
             <div>

@@ -27,6 +27,7 @@ export default function Dashboard() {
   const location = useLocation();
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const openInvoiceId = (location.state as any)?.openInvoiceId;
 
   useEffect(() => {
     loadDashboardData();
@@ -34,20 +35,17 @@ export default function Dashboard() {
 
 
   useEffect(() => {
-    const state = location.state as any;
+    if (!openInvoiceId || pendingInvoices.length === 0) return;
 
-    if (!state?.invoiceId) return;
-
-    // find invoice from pendingInvoices
     const invoice = pendingInvoices.find(
-      (inv) => inv.id === state.invoiceId
+      (inv) => inv.id === openInvoiceId
     );
 
     if (invoice) {
       setSelectedInvoice(invoice);
       setInvoiceModalOpen(true);
     }
-  }, [location.state, pendingInvoices]);
+  }, [openInvoiceId, pendingInvoices]);
 
 
   const getDateRange = () => {

@@ -630,9 +630,12 @@ ${trackingUrl}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!linkedOrder?.id) return;
+                            const returnTo =
+                              (location.state as any)?.returnTo || location.pathname;
+
                             navigate(`/orders/${linkedOrder.id}`, {
                               state: {
-                                returnTo: location.pathname,
+                                returnTo,
                                 openInvoiceId: invoice.id,
                               },
                             });

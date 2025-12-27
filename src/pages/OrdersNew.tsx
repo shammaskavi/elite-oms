@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -72,7 +72,31 @@ export default function OrdersNew() {
   const [quickFilter, setQuickFilter] = useState<"overdue" | "dueSoon" | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const kanbanScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const goToOrder = (orderId: string) => {
+    navigate(`/orders/${orderId}`, {
+      state: {
+        returnTo: "/orders",
+        ordersView: viewMode,
+        anchorDate: anchorDate.toISOString(),
+      },
+    });
+  };
+
+  // restore view mode and anchor date from navigation state
+  useEffect(() => {
+    const state = location.state as any;
+    if (!state) return;
+
+    if (state.ordersView) setViewMode(state.ordersView);
+    if (state.anchorDate) {
+      const d = new Date(state.anchorDate);
+      d.setHours(0, 0, 0, 0);
+      setAnchorDate(d);
+    }
+  }, [location.state]);
 
   // store and restore UI state (search, filters, view mode) from sessionStorage
   useEffect(() => {
@@ -729,7 +753,8 @@ export default function OrdersNew() {
                           anchorDate: anchorDate.toISOString(),
                         })
                       );
-                      navigate(`/orders/${order.id}`);
+                      goToOrder(order.id);
+                      // navigate(`/orders/${order.id}`);
                     }}
                     style={{
                       borderLeftColor: isOverdue(order)
@@ -927,7 +952,8 @@ export default function OrdersNew() {
                                   anchorDate: anchorDate.toISOString(),
                                 })
                               );
-                              navigate(`/orders/${order.id}`);
+                              // navigate(`/orders/${order.id}`);
+                              goToOrder(order.id);
                             }}>
                             <div className="space-y-2">
                               <div className="flex items-start justify-between">
@@ -1045,37 +1071,11 @@ export default function OrdersNew() {
             </Button>
           </div>
 
-          {/* Calendar Grid */}
-          {/* <WeekCalendar
-            dates={weekDates}
-            anchorDate={anchorDate}
-            onItemClick={(orderId: string) => {
-              sessionStorage.setItem(
-                "ordersUIState",
-                JSON.stringify({
-                  searchQuery,
-                  statusFilter,
-                  viewMode: "calendar",
-                  dateFilter,
-                  quickFilter,
-                  anchorDate: anchorDate.toISOString(),
-                })
-              );
-              navigate(`/orders/${orderId}`);
-            }}
-          /> */}
-
           <WeekCalendar
             dates={weekDates}
             anchorDate={anchorDate}
             onItemClick={(orderId) => {
-              navigate(`/orders/${orderId}`, {
-                state: {
-                  returnTo: location.pathname,
-                  activeTab: "calendar",
-                  anchorDate: anchorDate.toISOString(),
-                },
-              });
+              goToOrder(orderId);
             }}
           />
         </div>

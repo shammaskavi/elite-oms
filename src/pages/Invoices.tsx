@@ -64,6 +64,7 @@ export default function Invoices() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   // const [openInvoice, setOpenInvoice] = useState<any>(null);
+  const openInvoiceId = (location.state as any)?.openInvoiceId;
   const [customerComboboxOpen, setCustomerComboboxOpen] = useState(false);
   const [customerInput, setCustomerInput] = useState("");
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
@@ -184,6 +185,18 @@ export default function Invoices() {
       return data;
     },
   });
+
+  useEffect(() => {
+    if (!openInvoiceId || !invoices?.length) return;
+
+    const invoice = invoices.find((i: any) => i.id === openInvoiceId);
+    if (invoice) {
+      setSelectedInvoice(invoice);
+    }
+
+    // clear state so refresh doesn't reopen
+    navigate(location.pathname, { replace: true });
+  }, [openInvoiceId, invoices]);
 
   // useEffect(() => {
   //   const invoiceId = location.state?.openInvoiceId;
