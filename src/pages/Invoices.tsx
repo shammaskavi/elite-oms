@@ -1351,7 +1351,8 @@ export default function Invoices() {
               <TableHead>Invoice #</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Total</TableHead>
+              <TableHead >Total</TableHead>
+              <TableHead>Due</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>

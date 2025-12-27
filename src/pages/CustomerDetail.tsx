@@ -210,7 +210,7 @@ export default function CustomerDetail() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4 w-full">
-                    <Button variant="ghost" size="icon" onClick={() => navigate("/customers")}>
+                    <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
                     <div className="flex-1 min-w-0">

@@ -36,6 +36,14 @@ export function InvoiceRow({
     const isPartial = status === "partial";
     const isUnpaid = status === "unpaid";
 
+    const total = Number(invoice.total || 0);
+    const paidAmount = Number(
+        invoice.raw_payload?.paid_amount ??
+        invoice.paid_amount ??
+        0
+    );
+    const dueAmount = Math.max(0, total - paidAmount);
+
     return (
         <TableRow
             className="cursor-pointer hover:bg-muted/50"
@@ -54,7 +62,17 @@ export function InvoiceRow({
 
             <TableCell>{invoice.customers?.name || "-"}</TableCell>
             <TableCell>{format(new Date(invoice.date), "dd/MM/yyyy")}</TableCell>
-            <TableCell>₹{invoice.total}</TableCell>
+
+            <TableCell className="font-medium">
+                ₹{total.toLocaleString()}
+            </TableCell>
+            <TableCell>
+                <span
+                    className="font-medium"
+                >
+                    ₹{dueAmount.toLocaleString()}
+                </span>
+            </TableCell>
 
             <TableCell>
                 {isDraft ? (

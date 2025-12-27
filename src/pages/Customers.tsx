@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ import { toast } from "sonner";
 
 export default function Customers() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState<any>(null);
@@ -52,6 +53,28 @@ export default function Customers() {
     dob: "",
     anniversary: "",
   });
+
+  useEffect(() => {
+    const state = location.state as any;
+    if (!state) return;
+
+    if (state.searchQuery !== undefined) {
+      setSearchQuery(state.searchQuery);
+    }
+
+    if (state.filterType) {
+      setFilterType(state.filterType);
+    }
+
+    if (state.scrollY !== undefined) {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, state.scrollY);
+      });
+    }
+
+    // ✅ clear navigation state
+    navigate(location.pathname, { replace: true });
+  }, []);
 
   const queryClient = useQueryClient();
 
@@ -322,8 +345,18 @@ export default function Customers() {
               </TableRow>
             ) : (
               filteredCustomers?.map((customer: any) => (
-                <TableRow key={customer.id}
-                  onClick={() => navigate(`/customers/${customer.id}`)}
+                <TableRow key={customer.id} className="cursor-pointer"
+                  // onClick={() => navigate(`/customers/${customer.id}`)}
+                  onClick={() =>
+                    navigate(`/customers/${customer.id}`, {
+                      state: {
+                        from: "customers",
+                        scrollY: window.scrollY,
+                        searchQuery,
+                        filterType,
+                      },
+                    })
+                  }
                 >
                   <TableCell className="font-medium">{customer.name}</TableCell>
                   <TableCell>{customer.phone || "-"}</TableCell>

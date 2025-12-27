@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, AlertTriangle, CalendarDays } from "lucide-react";
+import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, Sheet, AlertTriangle, CalendarDays } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { startOfWeek, addDays } from "date-fns";
 import {
@@ -28,12 +28,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import WeekCalendar from "@/components/calendar/WeekCalendar";
+import OrdersInvoiceTable from "@/components/orders/OrdersInvoiceTable";
 
 export default function OrdersNew() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const [viewMode, setViewMode] =
-    useState<"list" | "kanban" | "calendar">("list");
+    useState<"list" | "kanban" | "calendar" | "table">("list");
   // Calendar anchor date (controls visible week/month)
   const [anchorDate, setAnchorDate] = useState<Date>(() => {
     const d = new Date();
@@ -334,6 +335,55 @@ export default function OrdersNew() {
       return matchesSearch && matchesDate;
     });
 
+
+  // Group orders by invoice for table view
+  const ordersGroupedByInvoice = useMemo(() => {
+    if (!filteredOrders) return [];
+
+    const map = new Map<string, any>();
+
+    filteredOrders.forEach((order: any) => {
+      const invoiceId = order.invoice_id || "no-invoice";
+
+      if (!map.has(invoiceId)) {
+        map.set(invoiceId, {
+          invoice_id: invoiceId,
+          invoice_number: order.invoices?.invoice_number || "—",
+          customer_name: order.customers?.name || "—",
+          orders: [],
+          earliest_delivery_date: order.metadata?.delivery_date
+            ? new Date(order.metadata.delivery_date)
+            : null,
+        });
+      }
+
+      const group = map.get(invoiceId);
+
+      // track earliest delivery date
+      if (order.metadata?.delivery_date) {
+        const d = new Date(order.metadata.delivery_date);
+        if (
+          !group.earliest_delivery_date ||
+          d < group.earliest_delivery_date
+        ) {
+          group.earliest_delivery_date = d;
+        }
+      }
+
+      group.orders.push(order);
+    });
+
+    // sort invoices by earliest delivery date
+    return Array.from(map.values()).sort((a, b) => {
+      if (!a.earliest_delivery_date) return 1;
+      if (!b.earliest_delivery_date) return -1;
+      return (
+        a.earliest_delivery_date.getTime() -
+        b.earliest_delivery_date.getTime()
+      );
+    });
+  }, [filteredOrders]);
+
   // get orders for a given stage name (kanban)
   const getOrdersByStage = (stageName: string) => {
     return activeOrders?.filter(order => {
@@ -626,6 +676,13 @@ export default function OrdersNew() {
               >
                 <CalendarDays className="h-4 w-4" />
                 {/* Calendar */}
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+              >
+                <Sheet className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -1078,6 +1135,26 @@ export default function OrdersNew() {
             }}
           />
         </div>
+      )}
+
+      {viewMode === "table" && (
+        <OrdersInvoiceTable
+          groupedInvoices={ordersGroupedByInvoice}
+          onOrderClick={(orderId) => {
+            sessionStorage.setItem(
+              "ordersUIState",
+              JSON.stringify({
+                searchQuery,
+                statusFilter,
+                viewMode,
+                dateFilter,
+                quickFilter,
+                anchorDate: anchorDate.toISOString(),
+              })
+            );
+            goToOrder(orderId);
+          }}
+        />
       )}
 
       <AlertDialog open={confirmDialog.open} onOpenChange={(open) => !open && setConfirmDialog({ open: false, orderId: "", action: "delivered" })}>
