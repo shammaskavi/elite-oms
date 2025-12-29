@@ -34,6 +34,39 @@ const getCurrentStage = (order: any) => {
         : "Ordered";
 };
 
+const getProductsFromOrder = (order: any) => {
+    const stages = order.order_stages || [];
+
+    const productMap = new Map<number, any[]>();
+
+    stages.forEach((stage: any) => {
+        const productNumber = stage.metadata?.product_number;
+        if (!productNumber) return;
+
+        if (!productMap.has(productNumber)) {
+            productMap.set(productNumber, []);
+        }
+        productMap.get(productNumber)!.push(stage);
+    });
+
+    return Array.from(productMap.entries()).map(([productNumber, stages]) => {
+        const sortedStages = [...stages].sort(
+            (a, b) =>
+                new Date(a.created_at).getTime() -
+                new Date(b.created_at).getTime()
+        );
+
+        const latest = sortedStages[sortedStages.length - 1];
+
+        return {
+            productNumber,
+            productName: latest?.metadata?.product_name,
+            stage: latest?.stage_name ?? "Ordered",
+            vendor: latest?.vendor_name ?? null,
+        };
+    });
+};
+
 export default function OrdersInvoiceTable({
     groupedInvoices,
     onOrderClick,
@@ -50,22 +83,22 @@ export default function OrdersInvoiceTable({
     }
 
     const sortedInvoices = [...groupedInvoices].sort((a, b) => {
-      if (sortBy === "invoice") {
-        const aNum = a.invoice_number;
-        const bNum = b.invoice_number;
-        return sortDir === "asc"
-          ? aNum.localeCompare(bNum)
-          : bNum.localeCompare(aNum);
-      }
+        if (sortBy === "invoice") {
+            const aNum = a.invoice_number;
+            const bNum = b.invoice_number;
+            return sortDir === "asc"
+                ? aNum.localeCompare(bNum)
+                : bNum.localeCompare(aNum);
+        }
 
-      const aDate = a.earliest_delivery_date
-        ? new Date(a.earliest_delivery_date).getTime()
-        : Infinity;
-      const bDate = b.earliest_delivery_date
-        ? new Date(b.earliest_delivery_date).getTime()
-        : Infinity;
+        const aDate = a.earliest_delivery_date
+            ? new Date(a.earliest_delivery_date).getTime()
+            : Infinity;
+        const bDate = b.earliest_delivery_date
+            ? new Date(b.earliest_delivery_date).getTime()
+            : Infinity;
 
-      return sortDir === "asc" ? aDate - bDate : bDate - aDate;
+        return sortDir === "asc" ? aDate - bDate : bDate - aDate;
     });
 
     return (
@@ -74,33 +107,33 @@ export default function OrdersInvoiceTable({
                 <TableHeader>
                     <TableRow className="bg-muted/50">
                         <TableHead
-                          className="cursor-pointer select-none text-xs uppercase tracking-wide text-muted-foreground px-3 py-2 text-left"
-                          onClick={() => {
-                            if (sortBy === "invoice") {
-                              setSortDir(sortDir === "asc" ? "desc" : "asc");
-                            } else {
-                              setSortBy("invoice");
-                              setSortDir("desc");
-                            }
-                          }}
+                            className="cursor-pointer select-none text-xs uppercase tracking-wide text-muted-foreground px-3 py-2 text-left"
+                            onClick={() => {
+                                if (sortBy === "invoice") {
+                                    setSortDir(sortDir === "asc" ? "desc" : "asc");
+                                } else {
+                                    setSortBy("invoice");
+                                    setSortDir("desc");
+                                }
+                            }}
                         >
-                          Invoice {sortBy === "invoice" && (sortDir === "asc" ? "▲" : "▼")}
+                            Invoice {sortBy === "invoice" && (sortDir === "asc" ? "▲" : "▼")}
                         </TableHead>
                         <TableHead className="text-xs uppercase tracking-wide text-muted-foreground px-3 py-2 text-left">Customer</TableHead>
                         <TableHead className="text-xs uppercase tracking-wide text-muted-foreground px-3 py-2 text-left">Order Item</TableHead>
                         <TableHead className="text-xs uppercase tracking-wide text-muted-foreground px-3 py-2 text-left">Stage</TableHead>
                         <TableHead
-                          className="cursor-pointer select-none text-xs uppercase tracking-wide text-muted-foreground px-3 py-2 text-left"
-                          onClick={() => {
-                            if (sortBy === "delivery") {
-                              setSortDir(sortDir === "asc" ? "desc" : "asc");
-                            } else {
-                              setSortBy("delivery");
-                              setSortDir("asc");
-                            }
-                          }}
+                            className="cursor-pointer select-none text-xs uppercase tracking-wide text-muted-foreground px-3 py-2 text-left"
+                            onClick={() => {
+                                if (sortBy === "delivery") {
+                                    setSortDir(sortDir === "asc" ? "desc" : "asc");
+                                } else {
+                                    setSortBy("delivery");
+                                    setSortDir("asc");
+                                }
+                            }}
                         >
-                          Delivery {sortBy === "delivery" && (sortDir === "asc" ? "▲" : "▼")}
+                            Delivery {sortBy === "delivery" && (sortDir === "asc" ? "▲" : "▼")}
                         </TableHead>
                         <TableHead className="text-xs uppercase tracking-wide text-muted-foreground px-3 py-2 text-right">Amount</TableHead>
                         <TableHead className="text-xs uppercase tracking-wide text-muted-foreground px-3 py-2"></TableHead>
@@ -139,13 +172,55 @@ export default function OrdersInvoiceTable({
                                     </TableCell>
 
                                     {/* Order item */}
-                                    <TableCell className="px-3 py-3">
+                                    {/* <TableCell className="px-3 py-3">
                                         <div className="font-medium">
                                             {order.metadata?.item_name || "Order Item"}
                                         </div>
                                         {order.metadata?.reference_name && (
                                             <div className="text-xs text-muted-foreground">
                                                 Ref: {order.metadata.reference_name}
+                                            </div>
+                                        )}
+                                    </TableCell> */}
+
+                                    <TableCell className="px-3 py-3">
+                                        <div className="font-medium">
+                                            {order.metadata?.item_name || "Order Item"}
+                                        </div>
+
+                                        {order.metadata?.reference_name && (
+                                            <div className="text-xs text-muted-foreground">
+                                                Ref: {order.metadata.reference_name}
+                                            </div>
+                                        )}
+
+                                        {/* Products */}
+                                        {order.metadata?.num_products > 1 && (
+                                            <div className="mt-2 space-y-2 pl-4 border-l">
+                                                {getProductsFromOrder(order).map((product) => (
+                                                    <div
+                                                        key={product.productNumber}
+                                                        className="flex items-start justify-between gap-2"
+                                                    >
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm text-foreground">
+                                                                {product.productName}
+                                                            </span>
+                                                            {product.vendor && (
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    Vendor: {product.vendor}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="text-[11px] shrink-0"
+                                                        >
+                                                            {product.stage}
+                                                        </Badge>
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                     </TableCell>

@@ -270,6 +270,7 @@ export default function Dashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
+            <div className="text-2xl font-bold">₹{stats.revenue.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {timePeriod === "today" ? "Today" :
                 timePeriod === "week" ? "This week" :
