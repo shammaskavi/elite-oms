@@ -1,7 +1,7 @@
 import React from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ChevronRight, Calendar, User, ShoppingBag } from "lucide-react";
+import { ChevronRight, Calendar, User, ShoppingBag, ArrowUp, ArrowDown, ChevronLeft } from "lucide-react";
 import {
     Table,
     TableBody,
@@ -25,7 +25,7 @@ const getStageColor = (stage: string) => {
 const simplifyProductName = (fullName: string, orderName: string) => {
     if (!fullName || !orderName) return fullName;
     const clean = fullName.replace(orderName, "").replace(/^-/, "").trim();
-    // Return null or empty if it matches the order name exactly or is "Standard Component"
+    // Logic to remove "Standard Component" or exact duplicates of item name
     return clean && clean.toLowerCase() !== "standard component" ? clean : null;
 };
 
@@ -55,25 +55,132 @@ const getProductsFromOrder = (order: any) => {
 };
 
 // --- Component ---
+export default function OrdersInvoiceTable({
+    groupedInvoices,
+    onOrderClick,
+    invoiceSortKey,
+    invoiceSortDirection,
+    onChangeSort,
+}: {
+    groupedInvoices: any[];
+    onOrderClick: (id: number) => void;
+    invoiceSortKey: "invoice" | "delivery" | "amount";
+    invoiceSortDirection: "asc" | "desc";
+    onChangeSort: (key: "invoice" | "delivery" | "amount") => void;
+}) {
+    const renderSortIcon = (key: "invoice" | "delivery" | "amount") => {
+        if (key !== invoiceSortKey) return null;
+        const iconClass = "h-4 w-4 text-primary shrink-0";
+        return invoiceSortDirection === "asc" ? (
+            <ArrowUp className={iconClass} />
+        ) : (
+            <ArrowDown className={iconClass} />
+        );
+    };
 
-export default function OrdersInvoiceTable({ groupedInvoices, onOrderClick }: any) {
     if (!groupedInvoices.length) {
-        return <Card className="p-12 text-center text-muted-foreground">No orders found.</Card>;
+        return <Card className="p-8 text-center text-muted-foreground">No orders found.</Card>;
     }
+
+    console.log("SORT DEBUG:", { invoiceSortKey, invoiceSortDirection });
 
     return (
         <Card className="overflow-hidden border-none shadow-sm">
             <Table>
+                {/* <TableHeader className="bg-slate-50/50">
+                    <TableRow>
+                        <TableHead className="w-[90px] h-10 py-2 font-semibold text-slate-900 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => onChangeSort("invoice")}
+                                className={`inline-flex items-center gap-1 text-xs font-semibold ${sortKey === "invoice" ? "text-primary" : "text-slate-900"
+                                    }`}
+                            >
+                                <span>Invoice</span>
+                                {renderSortIcon("invoice")}
+                            </button>
+                        </TableHead>
+                        <TableHead className="w-[150px] h-10 py-2 font-semibold text-slate-900 text-xs">Customer</TableHead>
+                        <TableHead className="h-10 py-2 font-semibold text-slate-900 text-xs">Order Item</TableHead>
+                        <TableHead className="w-[120px] h-10 py-2 font-semibold text-slate-900 text-xs">Stage</TableHead>
+                        <TableHead className="w-[120px] h-10 py-2 font-semibold text-slate-900 text-xs">Vendor</TableHead>
+                        <TableHead className="w-[100px] h-10 py-2 font-semibold text-slate-900 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => onChangeSort("delivery")}
+                                className={`inline-flex items-center gap-1 text-xs font-semibold ${sortKey === "delivery" ? "text-primary" : "text-slate-900"
+                                    }`}
+                            >
+                                <span>Delivery</span>
+                                {renderSortIcon("delivery")}
+                            </button>
+                        </TableHead>
+                        <TableHead className="w-[90px] h-10 py-2 text-right font-semibold text-slate-900 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => onChangeSort("amount")}
+                                className={`inline-flex items-center gap-1 text-xs font-semibold ${sortKey === "amount" ? "text-primary" : "text-slate-900"
+                                    }`}
+                            >
+                                <span>Amount</span>
+                                {renderSortIcon("amount")}
+                            </button>
+                        </TableHead>
+                        <TableHead className="w-[30px] h-10 py-2"></TableHead>
+                    </TableRow>
+                </TableHeader> */}
                 <TableHeader className="bg-slate-50/50">
                     <TableRow>
-                        <TableHead className="w-[100px] font-semibold text-slate-900">Invoice</TableHead>
-                        <TableHead className="w-[160px] font-semibold text-slate-900">Customer</TableHead>
-                        <TableHead className="font-semibold text-slate-900">Order Item</TableHead>
-                        <TableHead className="w-[130px] font-semibold text-slate-900">Stage</TableHead>
-                        <TableHead className="w-[130px] font-semibold text-slate-900">Vendor</TableHead>
-                        <TableHead className="w-[110px] font-semibold text-slate-900">Delivery</TableHead>
-                        <TableHead className="w-[100px] text-right font-semibold text-slate-900">Amount</TableHead>
-                        <TableHead className="w-[40px]"></TableHead>
+                        {/* Invoice Header */}
+                        <TableHead className="w-[100px] h-10 p-0 font-semibold text-slate-900 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => onChangeSort("invoice")}
+                                className={`flex items-center gap-1 w-full h-full px-2 hover:bg-slate-100/50 transition-colors ${invoiceSortKey === "invoice" ? "text-primary" : "text-slate-600"
+                                    }`}
+                            >
+                                <span className="truncate">Invoice</span>
+                                <span className="flex-shrink-0 w-4">
+                                    {renderSortIcon("invoice")}
+                                </span>
+                            </button>
+                        </TableHead>
+
+                        <TableHead className="w-[150px] px-2 font-semibold text-slate-900 text-xs text-left">Customer</TableHead>
+                        <TableHead className="px-2 font-semibold text-slate-900 text-xs text-left">Order Item</TableHead>
+                        <TableHead className="w-[120px] px-2 font-semibold text-slate-900 text-xs text-left">Stage</TableHead>
+                        <TableHead className="w-[120px] px-2 font-semibold text-slate-900 text-xs text-left">Vendor</TableHead>
+
+                        {/* Delivery Header */}
+                        <TableHead className="w-[110px] h-10 p-0 font-semibold text-slate-900 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => onChangeSort("delivery")}
+                                className={`flex items-center gap-1 w-full h-full px-2 hover:bg-slate-100/50 transition-colors ${invoiceSortKey === "delivery" ? "text-primary" : "text-slate-600"
+                                    }`}
+                            >
+                                <span className="truncate">Delivery</span>
+                                <span className="flex-shrink-0 w-4">
+                                    {renderSortIcon("delivery")}
+                                </span>
+                            </button>
+                        </TableHead>
+
+                        {/* Amount Header (Right Aligned) */}
+                        <TableHead className="w-[100px] h-10 p-0 font-semibold text-slate-900 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => onChangeSort("amount")}
+                                className={`flex items-center justify-end gap-1 w-full h-full px-2 hover:bg-slate-100/50 transition-colors ${invoiceSortKey === "amount" ? "text-primary" : "text-slate-600"
+                                    }`}
+                            >
+                                <span className="flex-shrink-0 w-4">
+                                    {renderSortIcon("amount")}
+                                </span>
+                                <span className="truncate">Amount dikaho bhaaiii</span>
+                            </button>
+                        </TableHead>
+                        <TableHead className="w-[30px] p-0"></TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -91,30 +198,32 @@ export default function OrdersInvoiceTable({ groupedInvoices, onOrderClick }: an
                                         className="group cursor-pointer hover:bg-slate-50/50 transition-colors border-t"
                                         onClick={() => onOrderClick(order.id)}
                                     >
-                                        <TableCell className="align-top py-4 font-bold text-blue-600 text-sm">
+                                        {/* Invoice Number */}
+                                        <TableCell className="align-top py-2 font-bold text-blue-600 text-[13px]">
                                             {orderIdx === 0 ? invoice.invoice_number : ""}
                                         </TableCell>
 
-                                        <TableCell className="align-top py-4">
+                                        {/* Customer Name */}
+                                        <TableCell className="align-top py-2">
                                             {orderIdx === 0 && (
-                                                <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                                <div className="flex items-center gap-1.5 text-[13px] font-medium text-slate-700">
                                                     <User className="h-3 w-3 text-muted-foreground shrink-0" />
                                                     <span className="truncate">{invoice.customer_name}</span>
                                                 </div>
                                             )}
                                         </TableCell>
 
-                                        <TableCell className="py-4 align-top">
-                                            <div className="font-semibold text-slate-800 flex items-center gap-2 mb-1">
-                                                <ShoppingBag className="h-3.5 w-3.5 text-slate-400" />
+                                        {/* Item & Sub-products */}
+                                        <TableCell className="py-2 align-top">
+                                            <div className="font-semibold text-slate-800 text-[13px] flex items-center gap-1.5 leading-tight">
+                                                <ShoppingBag className="h-3 w-3 text-slate-400" />
                                                 {orderName}
                                             </div>
 
-                                            {/* Sub-components only if more than 1 product */}
                                             {isMultiProduct && (
-                                                <div className="mt-3 space-y-3">
+                                                <div className="mt-1 space-y-1">
                                                     {products.map((p) => (
-                                                        <div key={p.productNumber} className="h-6 flex items-center text-xs font-medium text-slate-500 pl-6 border-l-2 border-slate-100">
+                                                        <div key={p.productNumber} className="h-5 flex items-center text-[11px] font-medium text-slate-500 pl-4 border-l-2 border-slate-100">
                                                             {simplifyProductName(p.productName, orderName) || "Component"}
                                                         </div>
                                                     ))}
@@ -122,11 +231,12 @@ export default function OrdersInvoiceTable({ groupedInvoices, onOrderClick }: an
                                             )}
                                         </TableCell>
 
-                                        <TableCell className="py-4 align-top">
-                                            <div className={isMultiProduct ? "mt-7 space-y-3" : "mt-0"}>
+                                        {/* Stage Badge */}
+                                        <TableCell className="py-2 align-top">
+                                            <div className={isMultiProduct ? "mt-5 space-y-1" : "mt-0"}>
                                                 {products.map((p) => (
-                                                    <div key={p.productNumber} className="h-6 flex items-center">
-                                                        <Badge className={`${getStageColor(p.stage)} text-[10px] px-2 py-0 h-5 shadow-none border font-medium`}>
+                                                    <div key={p.productNumber} className="h-5 flex items-center">
+                                                        <Badge className={`${getStageColor(p.stage)} text-[10px] px-1.5 py-0 h-4 shadow-none border font-medium`}>
                                                             {p.stage}
                                                         </Badge>
                                                     </div>
@@ -134,29 +244,33 @@ export default function OrdersInvoiceTable({ groupedInvoices, onOrderClick }: an
                                             </div>
                                         </TableCell>
 
-                                        <TableCell className="py-4 align-top">
-                                            <div className={isMultiProduct ? "mt-7 space-y-3" : "mt-0"}>
+                                        {/* Vendor Name */}
+                                        <TableCell className="py-2 align-top">
+                                            <div className={isMultiProduct ? "mt-5 space-y-1" : "mt-0"}>
                                                 {products.map((p) => (
-                                                    <div key={p.productNumber} className="h-6 flex items-center text-xs text-slate-500 italic">
+                                                    <div key={p.productNumber} className="h-5 flex items-center text-[11px] text-slate-500 italic">
                                                         {p.vendor}
                                                     </div>
                                                 ))}
                                             </div>
                                         </TableCell>
 
-                                        <TableCell className="align-top py-4 text-sm text-slate-600">
+                                        {/* Delivery Date */}
+                                        <TableCell className="align-top py-2 text-[12px] text-slate-600">
                                             <div className="flex items-center gap-1.5 pt-0.5">
-                                                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                                <Calendar className="h-3 w-3 text-muted-foreground" />
                                                 {deliveryDate ? deliveryDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}
                                             </div>
                                         </TableCell>
 
-                                        <TableCell className="align-top py-4 text-right font-bold text-slate-900">
+                                        {/* Total Amount */}
+                                        <TableCell className="align-top py-2 text-right font-bold text-slate-900 text-[13px]">
                                             ₹{order.total_amount?.toLocaleString("en-IN")}
                                         </TableCell>
 
-                                        <TableCell className="align-top py-4">
-                                            <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-primary transition-colors mt-0.5" />
+                                        {/* Action Icon */}
+                                        <TableCell className="align-top py-2">
+                                            <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-primary transition-colors mt-0.5" />
                                         </TableCell>
                                     </TableRow>
                                 );

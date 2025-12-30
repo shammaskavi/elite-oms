@@ -42,6 +42,7 @@ export default function OrdersNew() {
     return d;
   });
 
+
   const weekDates = useMemo(() => {
     const start = startOfWeek(anchorDate, { weekStartsOn: 1 }); // Monday
     return Array.from({ length: 7 }, (_, i) => addDays(start, i));
@@ -110,11 +111,6 @@ export default function OrdersNew() {
       setSearchQuery(state.searchQuery ?? "");
       setStatusFilter(state.statusFilter ?? "active");
       setViewMode(state.viewMode ?? "list");
-      // if (state.viewMode === "list" || state.viewMode === "kanban") {
-      //   setViewMode(state.viewMode);
-      // } else {
-      //   setViewMode("list");
-      // }
       setDateFilter(state.dateFilter ?? "");
       setQuickFilter(state.quickFilter ?? null);
       // Restore anchorDate if present
@@ -243,7 +239,6 @@ export default function OrdersNew() {
     return deliveryDate < todayStart;
   };
 
-  // console.log("Overdue orders:", orders?.filter(isOverdue));
 
   // Calculate stats
   const stats = {
@@ -265,14 +260,6 @@ export default function OrdersNew() {
 
         return diffDays >= 0 && diffDays <= 3 && !isOverdue(o);
       }).length || 0,
-
-
-    // dueSoon: orders?.filter((o: any) => {
-    //   // Calculate if order is due within 3 days - placeholder logic for now
-    //   return !["delivered", "cancelled"].includes(o.order_status);
-    // }).length || 0,
-
-
   };
 
   const upcoming = orders?.filter(o => {
@@ -336,6 +323,26 @@ export default function OrdersNew() {
     });
 
 
+  // --- Sorting for invoices in table view ---
+  type InvoiceSortKey = "delivery" | "invoice" | "amount";
+  type SortDirection = "asc" | "desc";
+  const [invoiceSortKey, setInvoiceSortKey] =
+    useState<InvoiceSortKey>("delivery");
+  const [invoiceSortDirection, setInvoiceSortDirection] =
+    useState<SortDirection>("asc"); // earliest first
+
+
+  const handleInvoiceSortChange = (key: InvoiceSortKey) => {
+    if (invoiceSortKey === key) {
+      // toggle direction
+      setInvoiceSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      // new key → default direction
+      setInvoiceSortKey(key);
+      setInvoiceSortDirection(key === "delivery" ? "asc" : "desc");
+    }
+  };
+
   // Group orders by invoice for table view
   const ordersGroupedByInvoice = useMemo(() => {
     if (!filteredOrders) return [];
@@ -354,6 +361,7 @@ export default function OrdersNew() {
           earliest_delivery_date: order.metadata?.delivery_date
             ? new Date(order.metadata.delivery_date)
             : null,
+          total_amount: 0, // 👈 ADD
         });
       }
 
@@ -371,18 +379,31 @@ export default function OrdersNew() {
       }
 
       group.orders.push(order);
+      group.total_amount += Number(order.total_amount || 0);
     });
+    // --- SORTING BASED ON SELECTED KEY ---
+    const sortedInvoices = Array.from(map.values()).sort((a, b) => {
+      let result = 0;
+      if (invoiceSortKey === "delivery") {
+        if (!a.earliest_delivery_date) return 1;
+        if (!b.earliest_delivery_date) return -1;
+        result =
+          a.earliest_delivery_date.getTime() -
+          b.earliest_delivery_date.getTime();
+      }
+      if (invoiceSortKey === "invoice") {
+        const aNum = parseInt(a.invoice_number.replace(/\D/g, "")) || 0;
+        const bNum = parseInt(b.invoice_number.replace(/\D/g, "")) || 0;
+        result = aNum - bNum;
+      }
+      if (invoiceSortKey === "amount") {
+        result = a.total_amount - b.total_amount;
+      }
+      return invoiceSortDirection === "asc" ? result : -result;
+    });
+    return sortedInvoices;
+  }, [filteredOrders, invoiceSortKey, invoiceSortDirection]);
 
-    // sort invoices by earliest delivery date
-    return Array.from(map.values()).sort((a, b) => {
-      if (!a.earliest_delivery_date) return 1;
-      if (!b.earliest_delivery_date) return -1;
-      return (
-        a.earliest_delivery_date.getTime() -
-        b.earliest_delivery_date.getTime()
-      );
-    });
-  }, [filteredOrders]);
 
   // get orders for a given stage name (kanban)
   const getOrdersByStage = (stageName: string) => {
@@ -810,7 +831,6 @@ export default function OrdersNew() {
                         })
                       );
                       goToOrder(order.id);
-                      // navigate(`/orders/${order.id}`);
                     }}
                     style={{
                       borderLeftColor: isOverdue(order)
@@ -988,7 +1008,6 @@ export default function OrdersNew() {
                         return (
                           // kanban card
                           <Card key={order.id} className={`p-3 hover:shadow-md transition-all cursor-pointer ${getCardClassName(order.order_status)}`}
-                            // onClick={() => window.location.href = `/orders/${order.id}`}
                             onClick={() => {
                               sessionStorage.setItem("ordersScrollY", window.scrollY.toString());
                               if (viewMode === "kanban" && kanbanScrollRef.current) {
@@ -1140,6 +1159,9 @@ export default function OrdersNew() {
       {viewMode === "table" && (
         <OrdersInvoiceTable
           groupedInvoices={ordersGroupedByInvoice}
+          invoiceSortKey={invoiceSortKey}
+          invoiceSortDirection={invoiceSortDirection}
+          onChangeSort={handleInvoiceSortChange}
           onOrderClick={(orderId) => {
             sessionStorage.setItem(
               "ordersUIState",
@@ -1155,6 +1177,7 @@ export default function OrdersNew() {
             goToOrder(orderId);
           }}
         />
+
       )}
 
       <AlertDialog open={confirmDialog.open} onOpenChange={(open) => !open && setConfirmDialog({ open: false, orderId: "", action: "delivered" })}>
