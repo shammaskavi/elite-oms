@@ -402,7 +402,7 @@ Here is your Saree Palace Elite invoice.
 ${formattedDelivery ? `📅 Expected Delivery: ${formattedDelivery}` : ""}
 
 
-📦 Track your order here:
+📦 To know the status of your oder click below:
 ${trackingUrl}
     `.trim();
 

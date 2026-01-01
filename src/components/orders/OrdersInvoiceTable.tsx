@@ -188,7 +188,8 @@ export default function OrdersInvoiceTable({
                         <React.Fragment key={invoice.invoice_id}>
                             {invoice.orders.map((order: any, orderIdx: number) => {
                                 const deliveryDate = order.metadata?.delivery_date ? new Date(order.metadata.delivery_date) : null;
-                                const products = getProductsFromOrder(order);
+                                // const products = getProductsFromOrder(order);
+                                const products = order.visibleProducts || [];
                                 const orderName = order.metadata?.item_name || "Order Item";
                                 const isMultiProduct = products.length > 1;
 

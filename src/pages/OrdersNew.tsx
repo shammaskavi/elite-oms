@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, Sheet, AlertTriangle, CalendarDays } from "lucide-react";
+import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, Sheet, AlertTriangle, CalendarDays, SlidersHorizontal } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { startOfWeek, addDays } from "date-fns";
 import {
@@ -41,6 +41,8 @@ export default function OrdersNew() {
     d.setHours(0, 0, 0, 0);
     return d;
   });
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
+  const [vendorFilter, setVendorFilter] = useState<string | null>(null);
 
 
   const weekDates = useMemo(() => {
@@ -166,6 +168,43 @@ export default function OrdersNew() {
       return data;
     },
   });
+
+  const getProductsFromOrder = (order: any) => {
+    const stages = order.order_stages || [];
+    const productMap = new Map<number, any[]>();
+
+    stages.forEach((stage: any) => {
+      const productNumber = stage.metadata?.product_number;
+      if (!productNumber) return;
+      if (!productMap.has(productNumber)) productMap.set(productNumber, []);
+      productMap.get(productNumber)!.push(stage);
+    });
+
+    return Array.from(productMap.entries()).map(([productNumber, stages]) => {
+      const sortedStages = [...stages].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      const latest = sortedStages[sortedStages.length - 1];
+      return {
+        productNumber,
+        productName: latest?.metadata?.product_name,
+        stage: latest?.stage_name ?? "Ordered",
+        vendor: latest?.vendor_name ?? "In-house",
+      };
+    });
+  };
+
+  const filterProducts = (products: any[]) => {
+    return products.filter((p) => {
+      if (
+        stageFilter &&
+        p.stage?.toLowerCase() !== stageFilter.toLowerCase()
+      ) return false;
+      // ⚠️ normalize vendor casing too
+      if (vendorFilter && p.vendor !== vendorFilter) return false;
+      return true;
+    });
+  };
 
   // --- Fetch stages from DB (order by order_index) ---
   const { data: stagesData } = useQuery({
@@ -323,6 +362,24 @@ export default function OrdersNew() {
     });
 
 
+  const ordersWithVisibleProducts = useMemo(() => {
+    if (!filteredOrders) return [];
+
+    return filteredOrders
+      .map((order: any) => {
+        const allProducts = getProductsFromOrder(order);
+        const visibleProducts = filterProducts(allProducts);
+
+        if (visibleProducts.length === 0) return null;
+
+        return {
+          ...order,
+          visibleProducts,
+        };
+      })
+      .filter(Boolean);
+  }, [filteredOrders, stageFilter, vendorFilter]);
+
   // --- Sorting for invoices in table view ---
   type InvoiceSortKey = "delivery" | "invoice" | "amount";
   type SortDirection = "asc" | "desc";
@@ -345,11 +402,11 @@ export default function OrdersNew() {
 
   // Group orders by invoice for table view
   const ordersGroupedByInvoice = useMemo(() => {
-    if (!filteredOrders) return [];
+    if (!ordersWithVisibleProducts) return [];
 
     const map = new Map<string, any>();
 
-    filteredOrders.forEach((order: any) => {
+    ordersWithVisibleProducts.forEach((order: any) => {
       const invoiceId = order.invoice_id || "no-invoice";
 
       if (!map.has(invoiceId)) {
@@ -381,6 +438,7 @@ export default function OrdersNew() {
       group.orders.push(order);
       group.total_amount += Number(order.total_amount || 0);
     });
+
     // --- SORTING BASED ON SELECTED KEY ---
     const sortedInvoices = Array.from(map.values()).sort((a, b) => {
       let result = 0;
@@ -722,8 +780,74 @@ export default function OrdersNew() {
               onChange={(e) => setDateFilter(e.target.value)}
               className="w-full md:w-auto"
             />
+            {/* Stage Filter */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="min-w-[140px] justify-between">
+                  <span className="truncate">
+                    {stageFilter ? `Stage: ${stageFilter}` : <div>All Stages</div>}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
 
-            <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full md:w-auto">
+              <DropdownMenuContent align="start" className="w-56 max-h-[280px] overflow-y-auto">
+                <DropdownMenuItem
+                  onClick={() => setStageFilter(null)}
+                  className={!stageFilter ? "font-semibold" : ""}
+                >
+                  All Stages
+                </DropdownMenuItem>
+
+                {STAGES.map((stage) => (
+                  <DropdownMenuItem
+                    key={stage}
+                    onClick={() => setStageFilter(stage)}
+                    className={stageFilter === stage ? "font-semibold text-primary" : ""}
+                  >
+                    {stage}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Vendor Filter */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-w-[160px] justify-between"
+                >
+                  <span className="truncate">
+                    {vendorFilter ? `Vendor: ${vendorFilter}` : "All Vendors"}
+                  </span>
+                  <SlidersHorizontal className="h-4 w-4 ml-2 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent align="start" className="w-56 max-h-[280px] overflow-y-auto">
+                <DropdownMenuItem
+                  onClick={() => setVendorFilter(null)}
+                  className={!vendorFilter ? "font-semibold" : ""}
+                >
+                  All Vendors
+                </DropdownMenuItem>
+
+                {(vendors || []).map((vendor: any) => (
+                  <DropdownMenuItem
+                    key={vendor.id}
+                    onClick={() => setVendorFilter(vendor.name)}
+                    className={
+                      vendorFilter === vendor.name
+                        ? "font-semibold text-primary"
+                        : ""
+                    }
+                  >
+                    {vendor.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-auto md:w-auto">
               <TabsList className="grid grid-cols-4 w-full md:w-auto">
                 <TabsTrigger value="all">All</TabsTrigger>
                 <TabsTrigger value="active">Active</TabsTrigger>
@@ -731,12 +855,23 @@ export default function OrdersNew() {
                 <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
               </TabsList>
             </Tabs>
+
           </div>
         </div>
         {/* Active Filters */}
         {(statusFilter !== "all" || quickFilter) && (
           <div className="flex flex-wrap items-center gap-2 pt-2">
             <span className="text-xs text-muted-foreground">Active filters:</span>
+
+            {stageFilter && (
+              <Badge
+                variant="secondary"
+                className="cursor-pointer"
+                onClick={() => setStageFilter(null)}
+              >
+                Stage: {stageFilter} ✕
+              </Badge>
+            )}
 
             {statusFilter !== "all" && (
               <Badge
@@ -765,6 +900,15 @@ export default function OrdersNew() {
                 onClick={() => setQuickFilter(null)}
               >
                 Due Soon ✕
+              </Badge>
+            )}
+            {vendorFilter && (
+              <Badge
+                variant="secondary"
+                className="cursor-pointer"
+                onClick={() => setVendorFilter(null)}
+              >
+                Vendor: {vendorFilter} ✕
               </Badge>
             )}
 
