@@ -81,13 +81,13 @@ All colors MUST be HSL.
     /* Border and input */
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 239 84% 67%;
+    /* --ring: 239 84% 67%; */
+    --ring: 326 70% 55%;
 
     /* Radius */
     --radius: 0.5rem;
 
     /* Gradients */
-    /* --gradient-primary: linear-gradient(135deg, hsl(239 84% 67%), hsl(250 84% 54%)); */
     --gradient-primary: linear-gradient(135deg,
         hsl(326, 92%, 81%),
         hsl(318, 77%, 55%));
@@ -149,7 +149,8 @@ All colors MUST be HSL.
 
     --border: 217 33% 17%;
     --input: 217 33% 17%;
-    --ring: 239 84% 67%;
+    /* --ring: 239 84% 67%; */
+    --ring: 326 70% 55%;
 
     --gradient-primary: linear-gradient(135deg, hsl(239 84% 67%), hsl(250 84% 54%));
     /* --gradient-primary: linear-gradient(135deg,

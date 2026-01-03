@@ -748,7 +748,7 @@ export default function OrdersNew() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Search className="h-5 w-5 text-muted-foreground" />
-              <h2 className="text-xl font-semibold">Search & Filter Orders</h2>
+              <h2 className="text-xl font-semibold">Search Orders</h2>
             </div>
             <div className="flex gap-2">
               <Button

@@ -225,7 +225,22 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+
+        {/* Total Orders Card */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Total Orders</p>
+              <h3 className="text-3xl font-bold mt-2">{stats.totalOrders}</h3>
+              {/* <p className="text-xs text-muted-foreground mt-1">All orders in system</p> */}
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Package className="h-6 w-6 text-primary" />
+            </div>
+          </div>
+        </Card>
+        {/* older  */}
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
@@ -233,8 +248,31 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalOrders}</div>
           </CardContent>
+        </Card> */}
+
+        {/* Pending Orders Card */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Pending{timePeriod === "today" ? "Today" :
+                timePeriod === "week" ? "This week" :
+                  timePeriod === "month" ? "This month" :
+                    timePeriod === "quarter" ? "This quarter" :
+                      timePeriod === "year" ? "This year" : "All time"}</p>
+              <h3 className="text-3xl font-bold mt-2">{stats.pendingOrders}</h3>
+              <p className="text-xs text-muted-foreground mt-1">Active orders {timePeriod === "today" ? "Today" :
+                timePeriod === "week" ? "This week" :
+                  timePeriod === "month" ? "This month" :
+                    timePeriod === "quarter" ? "This quarter" :
+                      timePeriod === "year" ? "This year" : "All time"}</p>
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+              <TrendingUp className="h-6 w-6 text-primary" />
+            </div>
+          </div>
         </Card>
-        <Card>
+        {/* olders */}
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pending {timePeriod === "today" ? "Today" :
               timePeriod === "week" ? "This week" :
@@ -243,6 +281,7 @@ export default function Dashboard() {
                     timePeriod === "year" ? "This year" : "All time"}</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
+
           <CardContent>
             <div className="text-2xl font-bold">{stats.pendingOrders}</div>
             <p className="text-xs text-muted-foreground mt-1">Active orders {timePeriod === "today" ? "Today" :
@@ -251,8 +290,24 @@ export default function Dashboard() {
                   timePeriod === "quarter" ? "This quarter" :
                     timePeriod === "year" ? "This year" : "All time"}</p>
           </CardContent>
+        </Card> */}
+
+        {/* Dispatched Orders Card */}
+
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Dispatched</p>
+              <h3 className="text-3xl font-bold mt-2">{stats.dispatchedOrders}</h3>
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+              <FileText className="h-6 w-6 text-primary" />
+            </div>
+          </div>
         </Card>
-        <Card>
+
+        {/* older  */}
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Dispatched</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
@@ -260,8 +315,33 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.dispatchedOrders}</div>
           </CardContent>
+        </Card> */}
+
+
+        {/* Revenue Card */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Revenue {timePeriod === "today" ? "Today" :
+                timePeriod === "week" ? "This week" :
+                  timePeriod === "month" ? "This month" :
+                    timePeriod === "quarter" ? "This quarter" :
+                      timePeriod === "year" ? "This year" : "All time"}</p>
+              <h3 className="text-3xl font-bold mt-2">₹{stats.revenue.toLocaleString()}</h3>
+              <p className="text-xs text-muted-foreground mt-1">{timePeriod === "today" ? "Today" :
+                timePeriod === "week" ? "This week" :
+                  timePeriod === "month" ? "This month" :
+                    timePeriod === "quarter" ? "This quarter" :
+                      timePeriod === "year" ? "This year" : "All time"}</p>
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+              <DollarSign className="h-6 w-6 text-primary" />
+            </div>
+          </div>
         </Card>
-        <Card>
+
+        {/* older */}
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Revenue {timePeriod === "today" ? "Today" :
               timePeriod === "week" ? "This week" :
@@ -280,7 +360,7 @@ export default function Dashboard() {
                       timePeriod === "year" ? "This year" : "All time"}
             </p>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
 
       {/* Pending Activity */}

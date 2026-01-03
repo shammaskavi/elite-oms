@@ -1314,7 +1314,7 @@ export default function Invoices() {
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Search className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">Search & Filter Invoices</h2>
+            <h2 className="text-xl font-semibold">Search Invoices</h2>
           </div>
 
           <div className="flex flex-col md:flex-row gap-4">
