@@ -221,7 +221,7 @@ export default function OrdersInvoiceTable({
                                         {/* Item & Sub-products */}
                                         <TableCell className="py-2 align-top">
                                             <div className="font-semibold text-slate-800 text-[13px] flex items-center gap-1.5 leading-tight">
-                                                <ShoppingBag className="h-3 w-3 text-slate-400" />
+                                                <ShoppingBag className="h-3 w-3 min-h-3 min-w-3 text-slate-400" />
                                                 {orderName}
                                             </div>
 

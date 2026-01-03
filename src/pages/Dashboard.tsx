@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const openInvoiceId = (location.state as any)?.openInvoiceId;
 
+
   useEffect(() => {
     loadDashboardData();
   }, [timePeriod]);
@@ -270,7 +271,7 @@ export default function Dashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{stats.revenue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">₹{stats.revenue.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {timePeriod === "today" ? "Today" :
                 timePeriod === "week" ? "This week" :
@@ -307,7 +308,7 @@ export default function Dashboard() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">₹{invoice.total}</p>
+                      <p className="font-medium">₹{invoice.total.toLocaleString()}</p>
                       <Badge
                         variant={invoice.payment_status === "partial" ? "info" : "warning"}
                         className="text-xs"
@@ -354,16 +355,18 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {selectedInvoice && (
-        <InvoiceView
-          invoice={selectedInvoice}
-          open={invoiceModalOpen}
-          onOpenChange={(open) => {
-            setInvoiceModalOpen(open);
-            if (!open) setSelectedInvoice(null);
-          }}
-        />
-      )}
+      {
+        selectedInvoice && (
+          <InvoiceView
+            invoice={selectedInvoice}
+            open={invoiceModalOpen}
+            onOpenChange={(open) => {
+              setInvoiceModalOpen(open);
+              if (!open) setSelectedInvoice(null);
+            }}
+          />
+        )
+      }
     </div >
   );
 }

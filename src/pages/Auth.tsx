@@ -42,15 +42,16 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    toast.info("Sign up is currently disabled. Contact Admin");
 
-    const { error } = await signUp(email, password, fullName);
+    // const { error } = await signUp(email, password, fullName);
 
-    if (error) {
-      toast.error(error.message || "Failed to sign up");
-    } else {
-      toast.success("Account created successfully");
-      navigate("/");
-    }
+    // if (error) {
+    //   toast.error(error.message || "Failed to sign up");
+    // } else {
+    //   toast.success("Account created successfully");
+    //   navigate("/");
+    // }
 
     setIsLoading(false);
   };

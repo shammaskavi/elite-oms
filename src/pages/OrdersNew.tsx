@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, Sheet, AlertTriangle, CalendarDays, SlidersHorizontal } from "lucide-react";
+import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, Sheet, AlertTriangle, CalendarDays, SlidersHorizontal, ChevronDown, X } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { startOfWeek, addDays } from "date-fns";
 import {
@@ -642,7 +642,10 @@ export default function OrdersNew() {
   });
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Orders</h1>
+      </div>
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="p-6">
@@ -697,8 +700,7 @@ export default function OrdersNew() {
         </Card>
 
         <Card
-          className="p-6 border border-destructive/40  cursor-pointer hover:shadow-md"
-          // bg-destructive/5
+          className="p-6 border border-destructive/40 bg-destructive/5 cursor-pointer hover:shadow-md"
           onClick={() => {
             setStatusFilter("active");
             setQuickFilter("overdue");
@@ -804,6 +806,7 @@ export default function OrdersNew() {
                   <span className="truncate">
                     {stageFilter ? `Stage: ${stageFilter}` : <div>All Stages</div>}
                   </span>
+                  <SlidersHorizontal className="h-4 w-4 ml-2 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
 
@@ -865,11 +868,11 @@ export default function OrdersNew() {
               </DropdownMenuContent>
             </DropdownMenu>
             <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-auto md:w-auto">
-              <TabsList className="grid grid-cols-4 w-full md:w-auto">
+              <TabsList className="grid grid-cols-3 w-full md:w-auto">
                 <TabsTrigger value="all">All</TabsTrigger>
                 <TabsTrigger value="active">Active</TabsTrigger>
                 <TabsTrigger value="completed">Completed</TabsTrigger>
-                <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
+                {/* <TabsTrigger value="cancelled">Cancelled</TabsTrigger> */}
               </TabsList>
             </Tabs>
 
