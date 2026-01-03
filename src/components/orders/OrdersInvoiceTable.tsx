@@ -85,7 +85,7 @@ export default function OrdersInvoiceTable({
     console.log("SORT DEBUG:", { invoiceSortKey, invoiceSortDirection });
 
     return (
-        <Card className="overflow-hidden border-none shadow-sm">
+        <Card className="overflow-hidden shadow-sm">
             <Table>
                 {/* <TableHeader className="bg-slate-50/50">
                     <TableRow>
@@ -177,7 +177,7 @@ export default function OrdersInvoiceTable({
                                 <span className="flex-shrink-0 w-4">
                                     {renderSortIcon("amount")}
                                 </span>
-                                <span className="truncate">Amount dikaho bhaaiii</span>
+                                <span className="truncate">Amount</span>
                             </button>
                         </TableHead>
                         <TableHead className="w-[30px] p-0"></TableHead>
@@ -197,7 +197,11 @@ export default function OrdersInvoiceTable({
                                     <TableRow
                                         key={order.id}
                                         className="group cursor-pointer hover:bg-slate-50/50 transition-colors border-t"
-                                        onClick={() => onOrderClick(order.id)}
+                                        // onClick={() => onOrderClick(order.id)}
+                                        onClick={() => {
+                                            sessionStorage.setItem("ordersScrollY", window.scrollY.toString());
+                                            onOrderClick(order.id);
+                                        }}
                                     >
                                         {/* Invoice Number */}
                                         <TableCell className="align-top py-2 font-bold text-blue-600 text-[13px]">

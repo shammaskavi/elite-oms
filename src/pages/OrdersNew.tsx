@@ -110,6 +110,22 @@ export default function OrdersNew() {
     try {
       const state = JSON.parse(saved);
 
+      if (state.stageFilter !== undefined) {
+        setStageFilter(state.stageFilter);
+      }
+
+      if (state.vendorFilter !== undefined) {
+        setVendorFilter(state.vendorFilter);
+      }
+
+      if (state.invoiceSortKey) {
+        setInvoiceSortKey(state.invoiceSortKey);
+      }
+
+      if (state.invoiceSortDirection) {
+        setInvoiceSortDirection(state.invoiceSortDirection);
+      }
+
       setSearchQuery(state.searchQuery ?? "");
       setStatusFilter(state.statusFilter ?? "active");
       setViewMode(state.viewMode ?? "list");
@@ -681,7 +697,8 @@ export default function OrdersNew() {
         </Card>
 
         <Card
-          className="p-6 border border-destructive/40 bg-destructive/5 cursor-pointer hover:shadow-md"
+          className="p-6 border border-destructive/40  cursor-pointer hover:shadow-md"
+          // bg-destructive/5
           onClick={() => {
             setStatusFilter("active");
             setQuickFilter("overdue");
@@ -929,7 +946,8 @@ export default function OrdersNew() {
 
       {/* Orders View */}
       {viewMode === "list" && (
-        <Card className="p-4 md:p-6">
+        <Card className="p-4 md:p-6 bg-transparent shadow-none border-none">
+          {/* idhar color dekhlo zara  */}
           <div className="flex items-center gap-2 mb-6">
             <Package className="h-5 w-5" />
             <h2 className="text-xl font-semibold">Orders ({filteredOrders?.length || 0})</h2>
@@ -972,6 +990,10 @@ export default function OrdersNew() {
                           dateFilter,
                           quickFilter,
                           anchorDate: anchorDate.toISOString(),
+                          stageFilter,
+                          vendorFilter,
+                          invoiceSortKey,
+                          invoiceSortDirection,
                         })
                       );
                       goToOrder(order.id);
@@ -1169,6 +1191,10 @@ export default function OrdersNew() {
                                   dateFilter,
                                   quickFilter,
                                   anchorDate: anchorDate.toISOString(),
+                                  stageFilter,
+                                  vendorFilter,
+                                  invoiceSortKey,
+                                  invoiceSortDirection,
                                 })
                               );
                               // navigate(`/orders/${order.id}`);
@@ -1316,6 +1342,10 @@ export default function OrdersNew() {
                 dateFilter,
                 quickFilter,
                 anchorDate: anchorDate.toISOString(),
+                stageFilter,
+                vendorFilter,
+                invoiceSortKey,
+                invoiceSortDirection,
               })
             );
             goToOrder(orderId);
