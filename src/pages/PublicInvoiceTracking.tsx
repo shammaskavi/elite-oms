@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import Logo from "../assets/logo-full.png"
+import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
 
 export default function PublicInvoiceTracking() {
     const { token } = useParams<{ token: string }>();
@@ -45,38 +46,57 @@ export default function PublicInvoiceTracking() {
         enabled: !!token,
     });
 
-    const totalPaid = useMemo(() => {
-        if (!invoice?.invoice_payments) return 0;
+    const { data: paymentInfo, isLoading: paymentLoading } = useQuery({
+        queryKey: ["public-invoice-payment-status", invoice?.id],
+        queryFn: () => derivePaymentStatus(invoice),
+        enabled: !!invoice,
+    });
 
-        return invoice.invoice_payments.reduce(
-            (sum, p) => sum + Number(p.amount || 0),
-            0
-        );
-    }, [invoice?.invoice_payments]);
+    const paidAmount =
+        paymentInfo?.paid ??
+        Number(invoice?.raw_payload?.paid_amount || 0);
 
-    const dueAmount = Math.max(
-        0,
-        Number(invoice?.total || 0) - totalPaid
-    );
+    const remaining =
+        paymentInfo?.remaining ??
+        Math.max(0, Number(invoice?.total || 0) - paidAmount);
+
+    const status =
+        paymentInfo?.status ??
+        invoice?.raw_payload?.payment_status ??
+        "unpaid";
+
+    // const totalPaid = useMemo(() => {
+    //     if (!invoice?.invoice_payments) return 0;
+
+    //     return invoice.invoice_payments.reduce(
+    //         (sum, p) => sum + Number(p.amount || 0),
+    //         0
+    //     );
+    // }, [invoice?.invoice_payments]);
+
+    // const dueAmount = Math.max(
+    //     0,
+    //     Number(invoice?.total || 0) - totalPaid
+    // );
 
     const STORE_UPI_ID = "9925041003@okbizaxis";
     const STORE_NAME = "SAREE PALACE ELITE";
     const WHATSAPP_NUMBER = "919274741003";
 
     const upiPaymentUrl = useMemo(() => {
-        if (!invoice || dueAmount <= 0) return null;
+        if (!invoice || remaining <= 0) return null;
 
         const params = new URLSearchParams({
             pa: STORE_UPI_ID,
             pn: STORE_NAME,
-            am: dueAmount.toFixed(2),
+            am: remaining.toFixed(2),
             cu: "INR",
             tn: `${invoice.customers.name} ${invoice.invoice_number}`,
 
         });
 
         return `upi://pay?${params.toString()}`;
-    }, [invoice, dueAmount]);
+    }, [invoice, remaining]);
 
     const whatsappUrl = useMemo(() => {
         if (!invoice) return "#";
@@ -243,18 +263,18 @@ export default function PublicInvoiceTracking() {
                         <div className="flex justify-between text-sm">
                             <span>Paid</span>
                             <span className="font-medium text-emerald-600">
-                                ₹{totalPaid.toLocaleString("en-IN")}
+                                ₹{paidAmount.toLocaleString("en-IN")}
                             </span>
                         </div>
 
                         <div className="flex justify-between text-base font-semibold pt-1 border-t">
                             <span>Due</span>
-                            <span className={dueAmount > 0 ? "text-destructive" : "text-emerald-600"}>
-                                ₹{dueAmount.toLocaleString("en-IN")}
+                            <span className={remaining > 0 ? "text-destructive" : "text-emerald-600"}>
+                                ₹{remaining.toLocaleString("en-IN")}
                             </span>
                         </div>
 
-                        {dueAmount > 0 ? (
+                        {remaining > 0 ? (
                             <Button
                                 className="w-full mt-3"
                                 onClick={() => {
@@ -264,7 +284,7 @@ export default function PublicInvoiceTracking() {
                                 }}
                             >
 
-                                Pay ₹{dueAmount.toLocaleString("en-IN")} via UPI
+                                Pay ₹{remaining.toLocaleString("en-IN")} via UPI
                             </Button>
                         ) : (
                             <div className="mt-3 text-center text-sm font-medium text-emerald-600">
