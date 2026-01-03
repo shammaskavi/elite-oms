@@ -32,8 +32,9 @@ export default function PublicInvoiceTracking() {
                     total,
                     file_url,
                     raw_payload,
-                    customers ( name )
-        `
+                    customers ( name ),
+                    invoice_payments (amount, created_at)
+                    `
                 )
                 .eq("tracking_token", token)
                 .single();
@@ -43,6 +44,45 @@ export default function PublicInvoiceTracking() {
         },
         enabled: !!token,
     });
+
+    const totalPaid = useMemo(() => {
+        if (!invoice?.invoice_payments) return 0;
+
+        return invoice.invoice_payments.reduce(
+            (sum, p) => sum + Number(p.amount || 0),
+            0
+        );
+    }, [invoice?.invoice_payments]);
+
+    const dueAmount = Math.max(
+        0,
+        Number(invoice?.total || 0) - totalPaid
+    );
+
+    const STORE_UPI_ID = "9925041003@okbizaxis";
+    const STORE_NAME = "SAREE PALACE ELITE";
+    const WHATSAPP_NUMBER = "919274741003";
+
+    const upiPaymentUrl = useMemo(() => {
+        if (!invoice || dueAmount <= 0) return null;
+
+        const params = new URLSearchParams({
+            pa: STORE_UPI_ID,
+            pn: STORE_NAME,
+            am: dueAmount.toFixed(2),
+            cu: "INR",
+            tn: `${invoice.customers.name} ${invoice.invoice_number}`,
+
+        });
+
+        return `upi://pay?${params.toString()}`;
+    }, [invoice, dueAmount]);
+
+    const whatsappUrl = useMemo(() => {
+        if (!invoice) return "#";
+        const text = `Hello Saree Palace Elite, I need help with Invoice ${invoice.invoice_number}.`;
+        return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
+    }, [invoice]);
 
     const { data: orders = [] } = useQuery({
         queryKey: ["public-invoice-orders", invoice?.id],
@@ -159,7 +199,7 @@ export default function PublicInvoiceTracking() {
                         <img
                             src={Logo}
                             alt="Saree Palace Elite"
-                            className="max-h-fit mx-auto"
+                            className="max-h-60 w-auto mx-auto p-61"
                         />
                         <h1 className="text-2xl font-bold">
                             Invoice #{invoice.invoice_number}
@@ -182,20 +222,60 @@ export default function PublicInvoiceTracking() {
                         )}
                     </div>
 
-                    {/* Summary */}
-                    <div className="border rounded-lg p-4 bg-muted/40 space-y-1">
+                    {/* Payment Summary */}
+                    <div className="border rounded-lg p-4 bg-muted/40 space-y-2">
                         <p>
                             <strong>Order date:</strong>{" "}
-                            {new Date(invoice.date).toLocaleDateString("en-IN")}
+                            {new Date(invoice.date).toLocaleDateString("en-IN", {
+                                day: "2-digit",
+                                month: "long",
+                                year: "numeric",
+                            })}
                         </p>
-                        <p>
-                            <strong>Total:</strong> ₹
-                            {Number(invoice.total).toLocaleString("en-IN")}
-                        </p>
+
+                        <div className="flex justify-between text-sm">
+                            <span>Total</span>
+                            <span className="font-medium">
+                                ₹{Number(invoice.total).toLocaleString("en-IN")}
+                            </span>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                            <span>Paid</span>
+                            <span className="font-medium text-emerald-600">
+                                ₹{totalPaid.toLocaleString("en-IN")}
+                            </span>
+                        </div>
+
+                        <div className="flex justify-between text-base font-semibold pt-1 border-t">
+                            <span>Due</span>
+                            <span className={dueAmount > 0 ? "text-destructive" : "text-emerald-600"}>
+                                ₹{dueAmount.toLocaleString("en-IN")}
+                            </span>
+                        </div>
+
+                        {dueAmount > 0 ? (
+                            <Button
+                                className="w-full mt-3"
+                                onClick={() => {
+                                    if (upiPaymentUrl) {
+                                        window.location.href = upiPaymentUrl;
+                                    }
+                                }}
+                            >
+
+                                Pay ₹{dueAmount.toLocaleString("en-IN")} via UPI
+                            </Button>
+                        ) : (
+                            <div className="mt-3 text-center text-sm font-medium text-emerald-600">
+                                Paid in full ✓
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex justify-end">
                         <Button
+                            className="mr-2"
                             variant="outline"
                             size="sm"
                             onClick={() => {
@@ -206,6 +286,13 @@ export default function PublicInvoiceTracking() {
                             disabled={!invoice.file_url}
                         >
                             View Full Invoice PDF
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(whatsappUrl, "_blank")}
+                        >
+                            Contact Store on WhatsApp
                         </Button>
                     </div>
 

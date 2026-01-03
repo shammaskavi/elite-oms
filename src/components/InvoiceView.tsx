@@ -374,9 +374,25 @@ export function InvoiceView({
     return null;
   };
 
+  const normalizePhoneForWhatsApp = (rawPhone?: string) => {
+    if (!rawPhone) return null;
+
+    const trimmed = rawPhone.trim();
+
+    // If number starts with +, keep country code
+    if (trimmed.startsWith("+")) {
+      return trimmed.replace(/\D/g, "");
+    }
+
+    // Otherwise assume India
+    const digits = trimmed.replace(/\D/g, "");
+    return digits ? `91${digits}` : null;
+  };
+
   const handleSend = async () => {
     try {
-      const phone = String(invoice.customers?.phone || "").replace(/\D/g, "");
+      // const phone = String(invoice.customers?.phone || "").replace(/\D/g, "");
+      const phone = normalizePhoneForWhatsApp(invoice.customers?.phone);
       if (!phone) {
         toast.error("Customer phone number is missing.");
         return;
@@ -406,7 +422,8 @@ ${formattedDelivery ? `📅 Expected Delivery: ${formattedDelivery}` : ""}
 ${trackingUrl}
     `.trim();
 
-      const waUrl = `https://wa.me/91${phone}?text=${encodeURIComponent(message)}`;
+      // const waUrl = `https://wa.me/91${phone}?text=${encodeURIComponent(message)}`;
+      const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
       window.open(waUrl, "_blank");
     } catch (err) {
       console.error("WhatsApp redirect failed:", err);

@@ -1203,7 +1203,7 @@ export default function Invoices() {
                   <span>₹{parseFloat(formData.total).toFixed(2)}</span>
                 </div>
 
-                <div className="flex flex-col gap-2 pt-2 border-t border-dashed">
+                {/* <div className="flex flex-col gap-2 pt-2 border-t border-dashed">
                   <Label className="text-xs">Advance Payment</Label>
                   <div className="flex items-center gap-2">
                     <Select value={formData.payment_method} onValueChange={(value) => setFormData({ ...formData, payment_method: value })}>
@@ -1230,8 +1230,6 @@ export default function Invoices() {
                       className="h-10 flex-1 text-right"
                     />
                   </div>
-
-                  {/* proposed  */}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Paid:</span>
                     <span className="font-medium">₹{parseFloat(formData.paid_amount || "0").toFixed(2)}</span>
@@ -1241,7 +1239,7 @@ export default function Invoices() {
                     <span>Due Amount:</span>
                     <span className="text-destructive">₹{Math.max(0, parseFloat(formData.total) - parseFloat(formData.paid_amount || "0")).toFixed(2)}</span>
                   </div>
-                </div>
+                </div> */}
               </div>
 
               {/* Action Buttons */}

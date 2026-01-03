@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, Sheet, AlertTriangle, CalendarDays, SlidersHorizontal, ChevronDown, X } from "lucide-react";
+import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, Table2, AlertTriangle, CalendarDays, SlidersHorizontal } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { startOfWeek, addDays } from "date-fns";
 import {
@@ -780,7 +780,7 @@ export default function OrdersNew() {
                 size="sm"
                 onClick={() => setViewMode("table")}
               >
-                <Sheet className="h-4 w-4" />
+                <Table2 className="h-4 w-4" />
               </Button>
             </div>
           </div>

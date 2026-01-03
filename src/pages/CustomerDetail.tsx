@@ -275,7 +275,7 @@ export default function CustomerDetail() {
                         <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">₹{totalBilled.toFixed(2)}</div>
+                        <div className="text-2xl font-bold">₹{totalBilled.toLocaleString()}</div>
                     </CardContent>
                 </Card>
 
@@ -285,7 +285,7 @@ export default function CustomerDetail() {
                         <DollarSign className="h-4 w-4 text-success" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-success">₹{totalPaid.toFixed(2)}</div>
+                        <div className="text-2xl font-bold text-success">₹{totalPaid.toLocaleString()}</div>
                     </CardContent>
                 </Card>
 
@@ -295,7 +295,7 @@ export default function CustomerDetail() {
                         <AlertCircle className="h-4 w-4 text-warning" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-warning">₹{outstandingBalance.toFixed(2)}</div>
+                        <div className="text-2xl font-bold text-warning">₹{outstandingBalance.toLocaleString()}</div>
                     </CardContent>
                 </Card>
 
