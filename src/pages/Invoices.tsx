@@ -283,6 +283,17 @@ export default function Invoices() {
 
   const saveDraftMutation = useMutation({
     mutationFn: async (data: any) => {
+      // Defensive normalization to avoid NaN/empty string issues and atomicity
+      const normalizeItems = (items: any[]) =>
+        items.map((item) => ({
+          invoice_id: data.__invoiceId, // injected later
+          sku: item.name || "",
+          name: item.name || "",
+          qty: Number(item.qty) || 1,
+          unit_price: Number(item.unit_price) || 0,
+          total: (Number(item.qty) || 1) * (Number(item.unit_price) || 0),
+          reference_name: item.reference_name ?? null,
+        }));
       const { data: profile } = await (supabase as any)
         .from("profiles")
         .select("id")
@@ -319,27 +330,18 @@ export default function Invoices() {
 
         if (invoiceError) throw invoiceError;
 
-        // Delete existing items and re-insert
-        await (supabase as any)
+        // Delete existing items (best-effort)
+        await supabase.from("invoice_items").delete().eq("invoice_id", editingDraftId);
+
+        // Insert items (do NOT fail draft save if this fails)
+        const { error: itemsError } = await supabase
           .from("invoice_items")
-          .delete()
-          .eq("invoice_id", editingDraftId);
+          .insert(normalizeItems(data.items).map(i => ({ ...i, invoice_id: invoice.id })));
 
-        const itemsData = data.items.map((item: any) => ({
-          invoice_id: invoice.id,
-          sku: item.name,
-          name: item.name,
-          qty: parseFloat(item.qty),
-          unit_price: parseFloat(item.unit_price),
-          total: parseFloat(item.qty) * parseFloat(item.unit_price),
-          reference_name: item.reference_name ?? null, // ← added
-        }));
-
-        const { error: itemsError } = await (supabase as any)
-          .from("invoice_items")
-          .insert(itemsData);
-
-        if (itemsError) throw itemsError;
+        if (itemsError) {
+          console.error("Draft saved but invoice_items failed:", itemsError);
+          toast.warning("Draft saved, but items had an issue. Please reopen and verify.");
+        }
 
         return invoice;
       } else {
@@ -373,22 +375,14 @@ export default function Invoices() {
 
         if (invoiceError) throw invoiceError;
 
-        const itemsData = data.items.map((item: any) => ({
-          invoice_id: invoice.id,
-          sku: item.name,
-          name: item.name,
-          qty: parseFloat(item.qty),
-          unit_price: parseFloat(item.unit_price),
-          total: parseFloat(item.qty) * parseFloat(item.unit_price),
-          reference_name: item.reference_name ?? null, // ✅ added
-
-        }));
-
-        const { error: itemsError } = await (supabase as any)
+        const { error: itemsError } = await supabase
           .from("invoice_items")
-          .insert(itemsData);
+          .insert(normalizeItems(data.items).map(i => ({ ...i, invoice_id: invoice.id })));
 
-        if (itemsError) throw itemsError;
+        if (itemsError) {
+          console.error("Draft saved but invoice_items failed:", itemsError);
+          toast.warning("Draft saved, but items had an issue. Please reopen and verify.");
+        }
 
         return invoice;
       }
@@ -396,7 +390,7 @@ export default function Invoices() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       toast.success(editingDraftId ? "Draft updated" : "Invoice saved as draft");
-      setOpen(false);
+      setOpen(false); // ALWAYS close, even if items insert failed
       setEditingDraftId(null);
       resetForm();
     },
@@ -709,7 +703,7 @@ export default function Invoices() {
   const handleSaveDraft = (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isSubmitting) return; // 🔒
+    if (saveDraftMutation.isPending) return;
 
     // Recalculate payment status before saving
     const paidAmount = parseFloat(formData.paid_amount || "0");
@@ -722,14 +716,9 @@ export default function Invoices() {
           ? "partial"
           : "unpaid";
 
-    setIsSubmitting(true);
     saveDraftMutation.mutate(
       { ...formData, items, payment_status },
-      {
-        onSettled: () => {
-          setIsSubmitting(false);
-        },
-      }
+      {}
     );
   };
 
@@ -1269,9 +1258,9 @@ export default function Invoices() {
                   variant="outline"
                   className="flex-1 order-2 md:order-1 h-11"
                   onClick={handleSaveDraft}
-                  disabled={isSubmitting}
+                  disabled={saveDraftMutation.isPending}
                 >
-                  {isSubmitting ? "Saving..." : editingDraftId ? "Update Draft" : "Save as Draft"}
+                  {saveDraftMutation.isPending ? "Saving..." : editingDraftId ? "Update Draft" : "Save as Draft"}
                 </Button>
                 <Button
                   type="submit"

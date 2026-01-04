@@ -196,6 +196,15 @@ export default function PublicInvoiceTracking() {
                     <p className="text-muted-foreground">
                         Please contact the store for assistance.
                     </p>
+                    <Button
+                        className="w-full mt-6"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open("https://wa.me/+919274741003?text=Hello%2C%20I%20need%20help%20with%20my%20order%20%23", "_blank")}
+                    >
+                        Need Help? Contact Store on WhatsApp
+                    </Button>
+
                 </div>
             </div>
         );
