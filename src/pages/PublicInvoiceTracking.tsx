@@ -79,6 +79,10 @@ export default function PublicInvoiceTracking() {
     //     Number(invoice?.total || 0) - totalPaid
     // );
 
+    const formatCurrency = (value: any) =>
+        `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+
+
     const STORE_UPI_ID = "9925041003@okbizaxis";
     const STORE_NAME = "SAREE PALACE ELITE";
     const WHATSAPP_NUMBER = "919274741003";
@@ -137,6 +141,8 @@ export default function PublicInvoiceTracking() {
         switch (stage.toLowerCase()) {
             case "packed":
                 return "Ready to pickup";
+            case "ordered":
+                return "Order Received";
             default:
                 return stage;
         }
@@ -211,170 +217,181 @@ export default function PublicInvoiceTracking() {
     })();
 
     return (
-        <TooltipProvider delayDuration={200}>
-            <div className="min-h-screen bg-background p-6">
-                <div className="max-w-3xl mx-auto space-y-6">
-                    {/* Branding */}
-                    <div className="text-center space-y-2">
-                        <img
-                            src={Logo}
-                            alt="Saree Palace Elite"
-                            className="max-h-60 w-auto mx-auto p-61"
-                        />
-                        <h1 className="text-2xl font-bold">
-                            Invoice #{invoice.invoice_number}
-                        </h1>
-                        <p className="text-muted-foreground">
-                            Hello {invoice.customers?.name}
-                        </p>
-                        {overallLastUpdated && (
-                            <p className="text-xs text-muted-foreground">
-                                Last updated:{" "}
-                                {overallLastUpdated.toLocaleString("en-IN", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    year: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    hour12: true,
-                                })}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Payment Summary */}
-                    <div className="border rounded-lg p-4 bg-muted/40 space-y-2">
-                        <p>
-                            <strong>Order date:</strong>{" "}
-                            {new Date(invoice.date).toLocaleDateString("en-IN", {
+        <div className="min-h-screen bg-background p-6">
+            <div className="max-w-3xl mx-auto space-y-6">
+                {/* Branding */}
+                <div className="text-center space-y-2">
+                    <img
+                        src={Logo}
+                        alt="Saree Palace Elite"
+                        className="max-h-60 w-auto mx-auto p-61"
+                    />
+                    <h1 className="text-2xl font-bold">
+                        Invoice #{invoice.invoice_number}
+                    </h1>
+                    <p>
+                        Order Date:{" "}
+                        {new Date(invoice.date).toLocaleDateString("en-IN", {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                        })}
+                    </p>
+                    <p className="text-muted-foreground">
+                        Hello {invoice.customers?.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        Order status updates automatically as your items progress.
+                    </p>
+                    {overallLastUpdated && (
+                        <p className="text-xs text-muted-foreground">
+                            Last updated:{" "}
+                            {overallLastUpdated.toLocaleString("en-IN", {
                                 day: "2-digit",
-                                month: "long",
+                                month: "short",
                                 year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: true,
                             })}
                         </p>
+                    )}
+                </div>
 
-                        <div className="flex justify-between text-sm">
-                            <span>Total</span>
-                            <span className="font-medium">
-                                ₹{Number(invoice.total).toLocaleString("en-IN")}
-                            </span>
-                        </div>
+                {/* <p className="bg-muted px-4 py-2 font-semibold">
+                    <strong>Order Date:</strong>{" "}
+                    {new Date(invoice.date).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                    })}
+                </p> */}
 
-                        <div className="flex justify-between text-sm">
-                            <span>Paid</span>
-                            <span className="font-medium text-emerald-600">
-                                ₹{paidAmount.toLocaleString("en-IN")}
-                            </span>
-                        </div>
-
-                        <div className="flex justify-between text-base font-semibold pt-1 border-t">
-                            <span>Due</span>
-                            <span className={remaining > 0 ? "text-destructive" : "text-emerald-600"}>
-                                ₹{remaining.toLocaleString("en-IN")}
-                            </span>
-                        </div>
-
-                        {remaining > 0 ? (
-                            <Button
-                                className="w-full mt-3"
-                                onClick={() => {
-                                    if (upiPaymentUrl) {
-                                        window.location.href = upiPaymentUrl;
-                                    }
-                                }}
-                            >
-
-                                Pay ₹{remaining.toLocaleString("en-IN")} via UPI
-                            </Button>
-                        ) : (
-                            <div className="mt-3 text-center text-sm font-medium text-emerald-600">
-                                Paid in full ✓
-                            </div>
-                        )}
+                {/* Items */}
+                <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-muted px-4 py-2 font-semibold">
+                        Order Items
                     </div>
 
-                    <div className="flex justify-end">
+                    <div className="divide-y">
+                        {items.map((item: any, idx: number) => {
+                            // Find linked order using Index first, then fall back to Name matching
+                            const linked = typeof item.item_index === "number"
+                                ? orderIndexMap.get(item.item_index)
+                                : orderNameMap.get(normalize(item.name));
+
+                            return (
+                                <div
+                                    key={idx}
+                                    className="flex justify-between items-center px-4 py-3"
+                                >
+                                    <div>
+                                        <p className="font-medium">{item.name}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            Qty: {item.qty}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                            Estimated delivery:{" "}
+                                            {item.delivery_date
+                                                ? new Date(
+                                                    item.delivery_date
+                                                ).toLocaleDateString("en-IN", {
+                                                    day: "2-digit",
+                                                    month: "short",
+                                                    year: "numeric",
+                                                })
+                                                : "—"}
+                                        </p>
+                                        <p className="font-medium">{formatCurrency(item.unit_price)}</p>
+                                    </div>
+
+                                    {linked ? (
+                                        <Badge
+                                            variant="secondary"
+                                        >
+                                            {linked.stage}
+                                        </Badge>
+
+                                    ) : (
+                                        <Badge variant="outline">N/A</Badge>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Payment Summary */}
+                <div className="border rounded-lg p-4 bg-muted/40 space-y-2">
+
+                    <div className="flex justify-between text-sm">
+                        <span>Order Total</span>
+                        <span className="font-medium">
+                            ₹{Number(invoice.total).toLocaleString("en-IN")}
+                        </span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                        <span>Amount Received</span>
+                        <span className="font-medium text-emerald-600">
+                            ₹{paidAmount.toLocaleString("en-IN")}
+                        </span>
+                    </div>
+
+                    <div className="flex justify-between text-base font-semibold pt-1 border-t pb-6">
+                        <span>Balance Due</span>
+                        <span className={remaining > 0 ? "text-destructive" : "text-emerald-600"}>
+                            ₹{remaining.toLocaleString("en-IN")}
+                        </span>
+                    </div>
+
+                    {remaining > 0 ? (
                         <Button
-                            className="mr-2"
-                            variant="outline"
-                            size="sm"
+                            className="w-full mt-3 "
                             onClick={() => {
-                                if (invoice.file_url) {
-                                    window.open(invoice.file_url, "_blank");
+                                if (upiPaymentUrl) {
+                                    window.location.href = upiPaymentUrl;
                                 }
                             }}
-                            disabled={!invoice.file_url}
                         >
-                            View Full Invoice PDF
+                            Pay ₹{remaining.toLocaleString("en-IN")} via UPI
                         </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(whatsappUrl, "_blank")}
-                        >
-                            Contact Store on WhatsApp
-                        </Button>
-                    </div>
-
-                    {/* Items */}
-                    <div className="border rounded-lg overflow-hidden">
-                        <div className="bg-muted px-4 py-2 font-semibold">
-                            Order Items
+                    ) : (
+                        <div className="mt-3 text-center text-sm font-medium text-emerald-600">
+                            Paid in full ✓
                         </div>
-
-                        <div className="divide-y">
-                            {items.map((item: any, idx: number) => {
-                                // Find linked order using Index first, then fall back to Name matching
-                                const linked = typeof item.item_index === "number"
-                                    ? orderIndexMap.get(item.item_index)
-                                    : orderNameMap.get(normalize(item.name));
-
-                                return (
-                                    <div
-                                        key={idx}
-                                        className="flex justify-between items-center px-4 py-3"
-                                    >
-                                        <div>
-                                            <p className="font-medium">{item.name}</p>
-                                            <p className="text-sm text-muted-foreground">
-                                                Qty: {item.qty}
-                                            </p>
-                                            <p className="text-sm text-muted-foreground">
-                                                Expected delivery:{" "}
-                                                {item.delivery_date
-                                                    ? new Date(
-                                                        item.delivery_date
-                                                    ).toLocaleDateString("en-IN", {
-                                                        day: "2-digit",
-                                                        month: "short",
-                                                        year: "numeric",
-                                                    })
-                                                    : "—"}
-                                            </p>
-                                        </div>
-
-                                        {linked ? (
-                                            <Badge
-                                                variant="secondary"
-                                            >
-                                                {linked.stage}
-                                            </Badge>
-
-                                        ) : (
-                                            <Badge variant="outline">N/A</Badge>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Footer */}
-                    <p className="text-xs text-center text-muted-foreground">
-                        © 2025 Saree Palace Elite. Designed with love. Worn with pride.
-                    </p>
+                    )}
                 </div>
+
+                <div className="flex justify-end">
+                    <Button
+                        className="mr-2 w-full"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            if (invoice.file_url) {
+                                window.open(invoice.file_url, "_blank");
+                            }
+                        }}
+                        disabled={!invoice.file_url}
+                    >
+                        View Full Invoice PDF
+                    </Button>
+                    <Button
+                        className="w-full"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(whatsappUrl, "_blank")}
+                    >
+                        Need Help? Contact Store on WhatsApp
+                    </Button>
+                </div>
+
+                {/* Footer */}
+                <p className="text-xs text-center text-muted-foreground">
+                    © 2025 Saree Palace Elite. Designed with love. Worn with pride.
+                </p>
             </div>
-        </TooltipProvider>
+        </div>
     );
 }

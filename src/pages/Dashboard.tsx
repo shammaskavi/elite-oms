@@ -8,8 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InvoiceView } from "@/components/InvoiceView";
-import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
-import { getOrderItems } from "@/lib/getOrderItems";
+import { derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 
 export default function Dashboard() {
   const [timePeriod, setTimePeriod] = useState<string>("today");
@@ -77,31 +76,42 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     const startDate = getDateRange();
 
-    // Load stats based on selected time period
-    const { count: totalOrders } = await (supabase as any)
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .gte("created_at", startDate);
+    // Load stats based on selected time period (parallelized)
+    const [
+      { count: totalOrders },
+      { count: pendingOrders },
+      { count: dispatchedOrders },
+      { data: ordersData },
+    ] = await Promise.all([
+      (supabase as any)
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", startDate),
 
-    const { count: pendingOrders } = await (supabase as any)
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .neq("order_status", "delivered")
-      .neq("order_status", "cancelled")
-      .gte("created_at", startDate);
+      (supabase as any)
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .neq("order_status", "delivered")
+        .neq("order_status", "cancelled")
+        .gte("created_at", startDate),
 
-    const { count: dispatchedOrders } = await (supabase as any)
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .in("order_status", ["dispatched", "delivered"])
-      .gte("created_at", startDate);
+      (supabase as any)
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .in("order_status", ["dispatched", "delivered"])
+        .gte("created_at", startDate),
 
-    const { data: ordersData } = await (supabase as any)
-      .from("orders")
-      .select("total_amount")
-      .gte("created_at", startDate);
+      (supabase as any)
+        .from("orders")
+        .select("total_amount")
+        .gte("created_at", startDate),
+    ]);
 
-    const revenue = ordersData?.reduce((sum, order) => sum + Number(order.total_amount), 0) || 0;
+    const revenue =
+      ordersData?.reduce(
+        (sum: number, order: any) => sum + Number(order.total_amount),
+        0
+      ) || 0;
 
     setStats({
       totalOrders: totalOrders || 0,
@@ -136,12 +146,31 @@ export default function Dashboard() {
       .order("created_at", { ascending: false })
       .limit(30);
 
+
+    const invoiceIds = invoicesData?.map(i => i.id) || [];
+
+    const { data: invoicePayments } = invoiceIds.length
+      ? await (supabase as any)
+        .from("invoice_payments")
+        .select("*")
+        .in("invoice_id", invoiceIds)
+      : { data: [] };
+
+
+    const paymentsByInvoice = Object.groupBy(
+      invoicePayments || [],
+      p => p.invoice_id
+    );
+
     const enrichedInvoices =
       (invoicesData && invoicesData.length > 0)
         ? await Promise.all(
           invoicesData.map(async (inv: any) => ({
             ...inv,
-            __payment: await derivePaymentStatus(inv),
+            __payment: derivePaymentStatusFromData(
+              inv,
+              paymentsByInvoice[inv.id] || []
+            )
           }))
         )
         : [];
@@ -180,9 +209,6 @@ export default function Dashboard() {
     return <Badge variant={variants[status] || "default"}>{status}</Badge>;
   };
 
-  useEffect(() => {
-    getOrderItems().then(console.log);
-  }, []);
 
 
   return (
@@ -225,31 +251,18 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-
         {/* Total Orders Card */}
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Orders</p>
               <h3 className="text-3xl font-bold mt-2">{stats.totalOrders}</h3>
-              {/* <p className="text-xs text-muted-foreground mt-1">All orders in system</p> */}
             </div>
             <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
               <Package className="h-6 w-6 text-primary" />
             </div>
           </div>
         </Card>
-        {/* older  */}
-        {/* <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalOrders}</div>
-          </CardContent>
-        </Card> */}
-
         {/* Pending Orders Card */}
         <Card className="p-6">
           <div className="flex items-center justify-between">
@@ -271,29 +284,7 @@ export default function Dashboard() {
             </div>
           </div>
         </Card>
-        {/* olders */}
-        {/* <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending {timePeriod === "today" ? "Today" :
-              timePeriod === "week" ? "This week" :
-                timePeriod === "month" ? "This month" :
-                  timePeriod === "quarter" ? "This quarter" :
-                    timePeriod === "year" ? "This year" : "All time"}</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingOrders}</div>
-            <p className="text-xs text-muted-foreground mt-1">Active orders {timePeriod === "today" ? "Today" :
-              timePeriod === "week" ? "This week" :
-                timePeriod === "month" ? "This month" :
-                  timePeriod === "quarter" ? "This quarter" :
-                    timePeriod === "year" ? "This year" : "All time"}</p>
-          </CardContent>
-        </Card> */}
-
         {/* Dispatched Orders Card */}
-
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -305,19 +296,6 @@ export default function Dashboard() {
             </div>
           </div>
         </Card>
-
-        {/* older  */}
-        {/* <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Dispatched</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.dispatchedOrders}</div>
-          </CardContent>
-        </Card> */}
-
-
         {/* Revenue Card */}
         <Card className="p-6">
           <div className="flex items-center justify-between">
@@ -339,28 +317,6 @@ export default function Dashboard() {
             </div>
           </div>
         </Card>
-
-        {/* older */}
-        {/* <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenue {timePeriod === "today" ? "Today" :
-              timePeriod === "week" ? "This week" :
-                timePeriod === "month" ? "This month" :
-                  timePeriod === "quarter" ? "This quarter" :
-                    timePeriod === "year" ? "This year" : "All time"}</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{stats.revenue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {timePeriod === "today" ? "Today" :
-                timePeriod === "week" ? "This week" :
-                  timePeriod === "month" ? "This month" :
-                    timePeriod === "quarter" ? "This quarter" :
-                      timePeriod === "year" ? "This year" : "All time"}
-            </p>
-          </CardContent>
-        </Card> */}
       </div>
 
       {/* Pending Activity */}

@@ -104,6 +104,7 @@ export default function Invoices() {
   const [items, setItems] = useState<any[]>([
     { name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" },
   ]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
   // Auto-generate invoice number when dialog opens
@@ -660,6 +661,7 @@ export default function Invoices() {
 
   const handleAddCustomer = (e: React.FormEvent) => {
     e.preventDefault();
+    if (createCustomerMutation.isPending) return;
     createCustomerMutation.mutate(newCustomer);
   };
 
@@ -686,17 +688,28 @@ export default function Invoices() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return; // 🔒 hard stop
+
     // Require a customer before finalizing invoice
     if (!formData.customer_id) {
       toast.error("Please select a customer before creating the invoice.");
       return;
     }
-    createMutation.mutate({ ...formData, items });
+    setIsSubmitting(true);
+    createMutation.mutate(
+      { ...formData, items },
+      {
+        onSettled: () => {
+          setIsSubmitting(false); // 🔓 unlock always
+        },
+      }
+    );
   };
 
   const handleSaveDraft = (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isSubmitting) return; // 🔒
 
     // Recalculate payment status before saving
     const paidAmount = parseFloat(formData.paid_amount || "0");
@@ -709,8 +722,15 @@ export default function Invoices() {
           ? "partial"
           : "unpaid";
 
-    // Correct mutation (THIS WAS WRONG BEFORE)
-    saveDraftMutation.mutate({ ...formData, items, payment_status });
+    setIsSubmitting(true);
+    saveDraftMutation.mutate(
+      { ...formData, items, payment_status },
+      {
+        onSettled: () => {
+          setIsSubmitting(false);
+        },
+      }
+    );
   };
 
 
@@ -1244,11 +1264,22 @@ export default function Invoices() {
 
               {/* Action Buttons */}
               <div className="flex flex-col md:flex-row gap-3 pt-4">
-                <Button type="button" variant="outline" className="flex-1 order-2 md:order-1 h-11" onClick={handleSaveDraft}>
-                  {editingDraftId ? "Update Draft" : "Save as Draft"}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 order-2 md:order-1 h-11"
+                  onClick={handleSaveDraft}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Saving..." : editingDraftId ? "Update Draft" : "Save as Draft"}
                 </Button>
-                <Button type="submit" className="flex-1 order-1 md:order-2 h-11">
-                  {editingDraftId ? "Finalize & Create Order" : "Create Invoice & Order"}
+                <Button
+                  type="submit"
+                  className="flex-1 order-1 md:order-2 h-11"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting
+                    ? "Processing..." : editingDraftId ? "Finalize & Create Order" : "Create Invoice & Order"}
                 </Button>
               </div>
             </form>
@@ -1297,10 +1328,17 @@ export default function Invoices() {
                 />
               </div>
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setCustomerDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCustomerDialogOpen(false)}
+
+                >
                   Cancel
                 </Button>
-                <Button type="submit">Add Customer</Button>
+                <Button type="submit" disabled={createCustomerMutation.isPending}>
+                  {createCustomerMutation.isPending ? "Adding..." : "Add Customer"}
+                </Button>
               </div>
             </form>
           </DialogContent>
