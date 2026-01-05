@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Package, TrendingUp, DollarSign, Plus } from "lucide-react";
+import { FileText, Package, DollarSign, Plus, HandCoins, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,7 +15,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState({
     totalOrders: 0,
     pendingOrders: 0,
-    dispatchedOrders: 0,
+    cashInflow: 0,
     revenue: 0,
   });
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([]);
@@ -80,7 +80,7 @@ export default function Dashboard() {
     const [
       { count: totalOrders },
       { count: pendingOrders },
-      { count: dispatchedOrders },
+      { data: paymentsData },
       { data: ordersData },
     ] = await Promise.all([
       (supabase as any)
@@ -95,10 +95,15 @@ export default function Dashboard() {
         .neq("order_status", "cancelled")
         .gte("created_at", startDate),
 
+      // (supabase as any)
+      //   .from("orders")
+      //   .select("*", { count: "exact", head: true })
+      //   .in("order_status", ["dispatched", "delivered"])
+      //   .gte("created_at", startDate),
+
       (supabase as any)
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .in("order_status", ["dispatched", "delivered"])
+        .from("invoice_payments")
+        .select("amount")
         .gte("created_at", startDate),
 
       (supabase as any)
@@ -106,6 +111,12 @@ export default function Dashboard() {
         .select("total_amount")
         .gte("created_at", startDate),
     ]);
+
+    const cashInflow =
+      paymentsData?.reduce(
+        (sum: number, p: any) => sum + Number(p.amount),
+        0
+      ) || 0;
 
     const revenue =
       ordersData?.reduce(
@@ -116,7 +127,8 @@ export default function Dashboard() {
     setStats({
       totalOrders: totalOrders || 0,
       pendingOrders: pendingOrders || 0,
-      dispatchedOrders: dispatchedOrders || 0,
+      cashInflow,
+      // dispatchedOrders: dispatchedOrders || 0,
       revenue,
     });
 
@@ -279,7 +291,7 @@ export default function Dashboard() {
                       timePeriod === "year" ? "This year" : "All time"}</p>
             </div>
             <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-primary" />
+              <TrendingDown className="h-6 w-6 text-primary" />
             </div>
           </div>
         </Card>
@@ -287,11 +299,11 @@ export default function Dashboard() {
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Dispatched</p>
-              <h3 className="text-3xl font-bold mt-2">{stats.dispatchedOrders}</h3>
+              <p className="text-sm text-muted-foreground">Cash Inflow</p>
+              <h3 className="text-3xl font-bold mt-2">₹{stats.cashInflow.toLocaleString()}</h3>
             </div>
             <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <FileText className="h-6 w-6 text-primary" />
+              <HandCoins className="h-6 w-6 text-primary" />
             </div>
           </div>
         </Card>
