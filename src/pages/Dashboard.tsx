@@ -176,7 +176,6 @@ export default function Dashboard() {
         : [];
 
 
-
     // Only keep invoices that are NOT fully paid
     const pending = enrichedInvoices.filter(
       (inv: any) => inv.__payment?.status !== "paid"

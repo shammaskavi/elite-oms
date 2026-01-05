@@ -18,6 +18,7 @@ export function InvoiceRow({
     onDelete: () => void;
 }) {
     const isDraft = invoice.status === "draft";
+    const isSettled = invoice.settled === true;
 
     // ✅ use the unified resolver
     const { data: paymentInfo } = useQuery({
@@ -42,7 +43,9 @@ export function InvoiceRow({
         invoice.paid_amount ??
         0
     );
-    const dueAmount = Math.max(0, total - paidAmount);
+    const remaining =
+        paymentInfo?.remaining ??
+        Math.max(0, invoice.total - paidAmount);
 
     return (
         <TableRow
@@ -70,20 +73,23 @@ export function InvoiceRow({
                 <span
                     className="font-medium"
                 >
-                    ₹{dueAmount.toLocaleString()}
+                    ₹{remaining.toLocaleString()}
                 </span>
             </TableCell>
 
             <TableCell>
-                {isDraft ? (
-                    <Badge variant="secondary">Draft</Badge>
-                ) : isPaid ? (
-                    <Badge variant="success">Paid</Badge>
-                ) : isPartial ? (
-                    <Badge variant="info">Partial</Badge>
-                ) : (
-                    <Badge variant="warning">Unpaid</Badge>
-                )}
+                {
+                    isSettled ? (
+                        <Badge variant="success">Settled</Badge>
+                    ) : isDraft ? (
+                        <Badge variant="secondary">Draft</Badge>
+                    ) : isPaid ? (
+                        <Badge variant="success">Paid</Badge>
+                    ) : isPartial ? (
+                        <Badge variant="info">Partial</Badge>
+                    ) : (
+                        <Badge variant="warning">Unpaid</Badge>
+                    )}
             </TableCell>
 
             <TableCell onClick={(e) => e.stopPropagation()}>

@@ -65,6 +65,8 @@ export function InvoiceView({
   const [paymentDate, setPaymentDate] = useState(
     () => new Date().toISOString().split("T")[0]
   );
+  const [isSettling, setIsSettling] = useState(false);
+  const [settlementReason, setSettlementReason] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -165,6 +167,7 @@ export function InvoiceView({
   const status =
     paymentInfo?.status ??
     (invoice.raw_payload?.payment_status || "unpaid");
+  const isSettled = invoice.settled === true;
 
   // const isPaid =
   //   invoice.raw_payload?.payment_status === "paid" ||
@@ -544,6 +547,35 @@ ${trackingUrl}
     },
   });
 
+  const settleInvoiceMutation = useMutation({
+    mutationFn: async () => {
+      if (!invoice.id) throw new Error("Missing invoice id");
+      if (!settlementReason.trim()) throw new Error("Settlement reason required");
+
+      const { error } = await supabase
+        .from("invoices")
+        .update({
+          settled: true,
+          settlement_reason: settlementReason.trim(),
+        })
+        .eq("id", invoice.id);
+
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Invoice settled successfully");
+      setIsSettling(false);
+      setSettlementReason("");
+    },
+    onError: (err: any) => {
+      console.error("Settlement failed:", err);
+      toast.error(err.message || "Failed to settle invoice");
+    },
+  });
+
   return (
     <TooltipProvider delayDuration={200}>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -563,37 +595,25 @@ ${trackingUrl}
                   {new Date(invoice.date).toLocaleDateString()}
                 </p>
               </div>
-              {/* <Badge
-              variant={
-                isPaid
-                  ? "success"
-                  : invoice.raw_payload?.payment_status === "partial"
-                    ? "warning"
-                    : "destructive"
-              }
-              className="text-lg px-4 py-2"
-            >
-              {isPaid
-                ? "PAID"
-                : invoice.raw_payload?.payment_status === "partial"
-                  ? "PARTIALLY PAID"
-                  : "UNPAID"}
-            </Badge> */}
               <Badge
                 variant={
-                  status === "paid"
-                    ? "success"
-                    : status === "partial"
-                      ? "warning"
-                      : "destructive"
+                  isSettled
+                    ? "secondary"
+                    : status === "paid"
+                      ? "success"
+                      : status === "partial"
+                        ? "warning"
+                        : "destructive"
                 }
                 className="text-lg px-4 py-2"
               >
-                {status === "paid"
-                  ? "PAID"
-                  : status === "partial"
-                    ? "PARTIALLY PAID"
-                    : "UNPAID"}
+                {isSettled
+                  ? "SETTLED"
+                  : status === "paid"
+                    ? "PAID"
+                    : status === "partial"
+                      ? "PARTIALLY PAID"
+                      : "UNPAID"}
               </Badge>
             </div>
 
@@ -753,7 +773,7 @@ ${trackingUrl}
                 <span>{formatCurrency(invoice.total)}</span>
               </div>
 
-              {remainingBalance > 0 && (
+              {!invoice.settled && remainingBalance > 0 && (
                 <>
                   <div className="flex justify-between text-success border-t pt-2">
                     <span>Paid Amount:</span>
@@ -763,6 +783,26 @@ ${trackingUrl}
                     <span>Remaining:</span>
                     <span>{formatCurrency(remainingBalance)}</span>
                   </div>
+                </>
+              )}
+              {invoice.settled && (
+                <>
+                  <div className="flex justify-between text-success border-t pt-2">
+                    <span>Paid Amount:</span>
+                    <span className="font-medium">{formatCurrency(paidAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-amber-700 font-semibold">
+                    <span>Settled Amount:</span>
+                    <span>{formatCurrency(remainingBalance)}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Unpaid amount of {formatCurrency(remainingBalance)} has been settled manually.
+                  </p>
+                  {invoice.settlement_reason && (
+                    <p className="text-sm italic text-muted-foreground">
+                      Reason: {invoice.settlement_reason}
+                    </p>
+                  )}
                 </>
               )}
 
@@ -791,14 +831,25 @@ ${trackingUrl}
             )}
 
             {/* Partial Payment Section */}
-            {!isPaid && remainingBalance > 0 && (
+            {!isPaid && !invoice.settled && remainingBalance > 0 && (
               <div className="border rounded-lg p-4 bg-muted/30">
                 <h3 className="font-semibold mb-3">Update Payment</h3>
                 {!isEditingPayment ? (
-                  <Button onClick={() => setIsEditingPayment(true)} variant="outline" size="sm">
-                    <DollarSign className="w-4 h-4 mr-2" />
-                    Add Payment
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={() => setIsEditingPayment(true)} variant="outline" size="sm">
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Add Payment
+                    </Button>
+                    {!invoice.settled && (
+                      <Button
+                        onClick={() => setIsSettling(true)}
+                        variant="destructive"
+                        size="sm"
+                      >
+                        Settle Invoice
+                      </Button>
+                    )}
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     <div>
@@ -808,15 +859,12 @@ ${trackingUrl}
                         type="number"
                         step="0.01"
                         min="0"
-                        // max={parseFloat(invoice.total) - parseFloat(invoice.raw_payload?.paid_amount || 0)}
                         max={parseFloat(invoice.total) - paidAmount}
-
                         value={partialPaymentAmount}
                         onChange={(e) => setPartialPaymentAmount(e.target.value)}
                         placeholder="Enter amount"
                       />
                       <p className="text-sm text-muted-foreground mt-1">
-                        {/* Current: {formatCurrency(invoice.raw_payload?.paid_amount || 0)} | Remaining: {formatCurrency(remainingBalance)} */}
                         Current: {formatCurrency(paidAmount)} | Remaining: {formatCurrency(remainingBalance)}
                       </p>
                     </div>
@@ -929,6 +977,51 @@ ${trackingUrl}
             </div>
 
           </div>
+          {/* Settlement Confirmation Dialog */}
+          <Dialog open={isSettling} onOpenChange={setIsSettling}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Settle Invoice</DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  This will permanently settle the invoice even if some balance remains.
+                  This action cannot be undone.
+                </p>
+
+                <div>
+                  <Label htmlFor="settlement_reason">Settlement Reason</Label>
+                  <Input
+                    id="settlement_reason"
+                    value={settlementReason}
+                    onChange={(e) => setSettlementReason(e.target.value)}
+                    placeholder="Enter reason for settling invoice"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsSettling(false);
+                      setSettlementReason("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+
+                  <Button
+                    variant="destructive"
+                    onClick={() => settleInvoiceMutation.mutate()}
+                    disabled={!settlementReason.trim() || settleInvoiceMutation.isLoading}
+                  >
+                    {settleInvoiceMutation.isLoading ? "Settling..." : "Confirm Settlement"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </DialogContent>
       </Dialog>
     </TooltipProvider>
