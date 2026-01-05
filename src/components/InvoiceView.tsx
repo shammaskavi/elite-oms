@@ -831,6 +831,11 @@ ${trackingUrl}
             )}
 
             {/* Partial Payment Section */}
+            {isDraft && (
+              <div className="border border-amber-300 bg-amber-50 text-amber-800 rounded-lg p-3 text-sm">
+                Payments can be added only after the invoice is finalized.
+              </div>
+            )}
             {!isDraft && !isPaid && !invoice.settled && remainingBalance > 0 && (
               <div className="border rounded-lg p-4 bg-muted/30">
                 <h3 className="font-semibold mb-3">Update Payment</h3>

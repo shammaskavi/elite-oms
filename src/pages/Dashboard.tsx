@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { InvoiceView } from "@/components/InvoiceView";
 import { derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 
+
 export default function Dashboard() {
   const [timePeriod, setTimePeriod] = useState<string>("today");
   const [stats, setStats] = useState({
@@ -19,12 +20,14 @@ export default function Dashboard() {
     revenue: 0,
   });
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([]);
+  // const [payments, setPayments] = useState<any[]>([]);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const openInvoiceId = (location.state as any)?.openInvoiceId;
+  const [deliveriesToday, setDeliveriesToday] = useState<any[]>([]);
 
 
   useEffect(() => {
@@ -206,6 +209,23 @@ export default function Dashboard() {
       .limit(10);
 
     setPendingOrders(ordersDataPending || []);
+
+    const { data: deliveries } = await (supabase as any)
+      .from("order_items_calendar_view")
+      .select(`
+    order_id,
+    invoice_number,
+    item_name,
+    delivery_date,
+    customer_name,
+    stage,
+    vendor_name
+  `)
+      .eq("delivery_date", new Date().toISOString().slice(0, 10))
+      .neq("stage", "Delivered")
+      .order("invoice_number");
+
+    setDeliveriesToday(deliveries || []);
   };
 
   const getStatusBadge = (status: string) => {
@@ -220,6 +240,32 @@ export default function Dashboard() {
     return <Badge variant={variants[status] || "default"}>{status}</Badge>;
   };
 
+  const getTimeContext = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "morning";
+    if (hour < 17) return "afternoon";
+    return "evening";
+  };
+
+  const context = getTimeContext();
+
+  const greetings = {
+    morning: {
+      title: "Good morning, Meera!",
+      subtitle: `Yesterday was a win with ₹${stats.revenue?.toLocaleString() || '0'}. Today, you have ${stats.pendingOrders} deliveries to handle.`,
+      icon: "☕️",
+    },
+    afternoon: {
+      title: "Good afternoon!",
+      subtitle: `You've already processed ${stats.totalOrders} orders today. You're at 60% of your daily goal!`,
+      icon: "🌤️",
+    },
+    evening: {
+      title: "Great work today!",
+      subtitle: `You served ${stats.totalOrders} customers. ₹${stats.cashInflow.toLocaleString()} hit your bank account today.`,
+      icon: "🌙"
+    }
+  };
 
 
   return (
@@ -331,7 +377,61 @@ export default function Dashboard() {
       </div>
 
       {/* Pending Activity */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
+        {/*  Deliveries Today */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Deliveries Today</CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-3">
+                {deliveriesToday.map((item) => (
+                  <div
+                    key={`${item.order_id}-${item.item_name}`}
+                    className="flex items-start justify-between p-2 rounded-lg cursor-pointer hover:bg-muted transition"
+                    onClick={() => navigate(`/orders/${item.order_id}`)}
+                  >
+                    <div className="space-y-0.5">
+                      <p className="font-medium text-sm">
+                        {item.invoice_number}
+                      </p>
+
+                      <p className="text-sm">
+                        {item.item_name}
+                      </p>
+
+                      <p className="text-xs text-muted-foreground">
+                        {item.customer_name}
+                      </p>
+                    </div>
+
+                    <div className="text-right space-y-1">
+                      <Badge variant="outline" className="text-xs">
+                        {item.stage}
+                      </Badge>
+
+                      {item.vendor_name && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {item.vendor_name}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {deliveriesToday.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No deliveries scheduled for today
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        {/* Pending invoices */}
         <Card>
           <CardHeader>
             <CardTitle>Pending Invoices</CardTitle>
@@ -373,6 +473,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Pending Orders */}
         <Card>
           <CardHeader>
             <CardTitle>Pending Orders</CardTitle>
