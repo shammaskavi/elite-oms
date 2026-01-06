@@ -595,6 +595,7 @@ ${trackingUrl}
                   {new Date(invoice.date).toLocaleDateString()}
                 </p>
               </div>
+
               <Badge
                 variant={
                   isSettled
@@ -602,8 +603,8 @@ ${trackingUrl}
                     : status === "paid"
                       ? "success"
                       : status === "partial"
-                        ? "warning"
-                        : "destructive"
+                        ? "info"
+                        : "warning"
                 }
                 className="text-lg px-4 py-2"
               >
@@ -612,7 +613,7 @@ ${trackingUrl}
                   : status === "paid"
                     ? "PAID"
                     : status === "partial"
-                      ? "PARTIALLY PAID"
+                      ? "PARTIALLY"
                       : "UNPAID"}
               </Badge>
             </div>

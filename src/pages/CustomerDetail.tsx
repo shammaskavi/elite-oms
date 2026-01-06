@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
+import { deriveInvoiceState } from "@/lib/deriveInvoiceState";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -129,10 +130,15 @@ export default function CustomerDetail() {
 
         const loadStatuses = async () => {
             const enriched = await Promise.all(
-                invoices.map(async inv => ({
-                    ...inv,
-                    __payment: await derivePaymentStatus(inv)
-                }))
+                invoices.map(async inv => {
+                    const payment = await derivePaymentStatus(inv);
+                    const state = deriveInvoiceState(inv, payment);
+                    return {
+                        ...inv,
+                        __payment: payment,
+                        __state: state,
+                    };
+                })
             );
 
             setInvoicesWithStatus(enriched);
@@ -142,8 +148,13 @@ export default function CustomerDetail() {
     }, [invoices]);
 
     const totalPaid = invoicesWithStatus.reduce((sum, inv) => sum + inv.__payment.paid, 0);
-    const outstandingBalance = invoicesWithStatus.reduce((sum, inv) => sum + inv.__payment.remaining, 0);
-    const hasUnpaidInvoices = invoicesWithStatus.some(inv => inv.__payment.status !== "paid");
+    const outstandingBalance = invoicesWithStatus.reduce(
+        (sum, inv) => sum + (inv.__state?.collectibleDue ?? 0),
+        0
+    );
+    const hasUnpaidInvoices = invoicesWithStatus.some(
+        inv => inv.__state?.collectibleDue > 0
+    );
 
 
     // ---- payment history ----
@@ -155,11 +166,34 @@ export default function CustomerDetail() {
         amount: parseFloat(String(p.amount || 0)),
     }));
 
+    // const getPaymentStatusBadge = (invoice: any) => {
+    //     const isSettled = invoice.settled === true;
+    //     const state = invoice.__state?.state;
+    //     if (isSettled) {
+    //         return <Badge variant="success">SETTLED</Badge>;
+    //     }
+    //     switch (invoice.__payment.status) {
+    //         case "paid": return <Badge variant="success">PAID</Badge>;
+    //         case "partial": return <Badge variant="warning">PARTIAL</Badge>;
+    //         default: return <Badge variant="destructive">UNPAID</Badge>;
+    //     }
+    // };
     const getPaymentStatusBadge = (invoice: any) => {
-        const status = invoice.__payment.status;
-        if (status === "paid") return <Badge variant="success">PAID</Badge>;
-        if (status === "partial") return <Badge variant="warning">PARTIAL</Badge>;
-        return <Badge variant="destructive">UNPAID</Badge>;
+        const state = invoice.__state?.label;
+        // Business override always wins
+        if (state === "settled") {
+            return <Badge variant="success">SETTLED</Badge>;
+        }
+
+        // Otherwise show payment truth
+        switch (invoice.__payment.status) {
+            case "paid":
+                return <Badge variant="success">PAID</Badge>;
+            case "partial":
+                return <Badge variant="info">PARTIAL</Badge>;
+            default:
+                return <Badge variant="warning">UNPAID</Badge>;
+        }
     };
 
     const getOrderStatusBadge = (status: string) => {
@@ -349,7 +383,8 @@ export default function CustomerDetail() {
                                     </TableHeader>
                                     <TableBody>
                                         {invoicesWithStatus.map((invoice) => {
-                                            const { status, paid, remaining } = invoice.__payment;
+                                            const { paid } = invoice.__payment;
+                                            const remaining = invoice.__state?.collectibleDue ?? invoice.__payment.remaining;
                                             const total = parseFloat(String(invoice.total ?? 0)) || 0;
                                             return (
                                                 <TableRow key={invoice.id}>
