@@ -1258,7 +1258,7 @@ export default function Invoices() {
                   variant="outline"
                   className="flex-1 order-2 md:order-1 h-11"
                   onClick={handleSaveDraft}
-                  disabled={saveDraftMutation.isPending}
+                  disabled={saveDraftMutation.isPending || isSubmitting}
                 >
                   {saveDraftMutation.isPending ? "Saving..." : editingDraftId ? "Update Draft" : "Save as Draft"}
                 </Button>

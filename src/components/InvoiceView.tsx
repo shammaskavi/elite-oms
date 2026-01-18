@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -592,7 +593,8 @@ ${trackingUrl}
               <div>
                 <h2 className="text-3xl font-bold">{invoice.invoice_number}</h2>
                 <p className="text-muted-foreground mt-1">
-                  {new Date(invoice.date).toLocaleDateString()}
+                  {format(new Date(invoice.date), "dd/MM/yyyy")}
+                  {/* format(new Date(invoice.date), "dd/MM/yyyy") */}
                 </p>
               </div>
 
@@ -613,7 +615,7 @@ ${trackingUrl}
                   : status === "paid"
                     ? "PAID"
                     : status === "partial"
-                      ? "PARTIALLY"
+                      ? "PARTIAL"
                       : "UNPAID"}
               </Badge>
             </div>
@@ -640,6 +642,7 @@ ${trackingUrl}
                 <table className="w-full">
                   <thead className="bg-muted">
                     <tr>
+                      <th className="text-left p-3">No.</th>
                       <th className="text-left p-3">Item</th>
                       <th className="text-right p-3">Products</th>
                       <th className="text-right p-3">Qty</th>
@@ -650,14 +653,6 @@ ${trackingUrl}
                   </thead>
                   <tbody>
                     {(invoice.raw_payload?.items || []).map((item: any, i: number) => {
-                      // const linkedOrder = orderByItemName.get(
-                      //   normalize(item.name)
-                      // );
-
-                      // const linkedOrder =
-                      //   orderByItemIndex.get(i + 1) ??
-                      //   orderByItemName.get(normalize(item.name));
-
                       const linkedOrder =
                         typeof item.item_index === "number"
                           ? orderByItemIndex.get(item.item_index)
@@ -679,6 +674,7 @@ ${trackingUrl}
                             });
                           }}
                         >
+                          <td className="p-3">{i + 1}</td>
                           <td className="p-3">{item.name}</td>
                           <td className="p-3 text-right">{item.num_products || 1}</td>
                           <td className="p-3 text-right">{item.qty}</td>

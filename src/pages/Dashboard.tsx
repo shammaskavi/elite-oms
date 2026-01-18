@@ -19,6 +19,12 @@ export default function Dashboard() {
     cashInflow: 0,
     revenue: 0,
   });
+  const [dailyStats, setDailyStats] = useState({
+    totalOrders: 0,
+    pendingOrders: 0,
+    cashInflow: 0,
+    revenue: 0,
+  });
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([]);
   // const [payments, setPayments] = useState<any[]>([]);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
@@ -75,8 +81,48 @@ export default function Dashboard() {
 
     return startDate.toISOString();
   };
+  const fetchStatsForRange = async (startDate: string) => {
+    const [
+      { count: totalOrders },
+      { count: pendingOrders },
+      { data: paymentsData },
+      { data: ordersData },
+    ] = await Promise.all([
+      (supabase as any).from("orders").select("*", { count: "exact", head: true }).gte("created_at", startDate),
+      (supabase as any).from("orders").select("*", { count: "exact", head: true }).neq("order_status", "delivered").neq("order_status", "cancelled").gte("created_at", startDate),
+      (supabase as any).from("invoice_payments").select("amount").gte("created_at", startDate),
+      (supabase as any).from("orders").select("total_amount").gte("created_at", startDate),
+    ]);
+
+    return {
+      totalOrders: totalOrders || 0,
+      pendingOrders: pendingOrders || 0,
+      cashInflow: paymentsData?.reduce((sum, p: any) => sum + Number(p.amount), 0) || 0,
+      revenue: ordersData?.reduce((sum, order: any) => sum + Number(order.total_amount), 0) || 0,
+    };
+  };
 
   const loadDashboardData = async () => {
+    const selectedStartDate = getDateRange();
+
+    // Hardcoded date for "Today" to keep the summary card consistent
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayISO = todayStart.toISOString();
+
+    const [
+      periodStats,
+      todayStatsData
+    ] = await Promise.all([
+      // FETCH 1: Data for the selected dropdown (Today, Week, Month, etc.)
+      fetchStatsForRange(selectedStartDate),
+
+      // FETCH 2: Data specifically for the Summary Card (Always Today)
+      fetchStatsForRange(todayISO)
+    ]);
+
+    setStats(periodStats);
+    setDailyStats(todayStatsData);
     const startDate = getDateRange();
 
     // Load stats based on selected time period (parallelized)
@@ -97,12 +143,6 @@ export default function Dashboard() {
         .neq("order_status", "delivered")
         .neq("order_status", "cancelled")
         .gte("created_at", startDate),
-
-      // (supabase as any)
-      //   .from("orders")
-      //   .select("*", { count: "exact", head: true })
-      //   .in("order_status", ["dispatched", "delivered"])
-      //   .gte("created_at", startDate),
 
       (supabase as any)
         .from("invoice_payments")
@@ -134,18 +174,6 @@ export default function Dashboard() {
       // dispatchedOrders: dispatchedOrders || 0,
       revenue,
     });
-
-    // Load pending invoices (unpaid or partial paid)
-    // const { data: invoicesData } = await (supabase as any)
-    //   .from("invoices")
-    //   .select("*, customers(name)")
-    //   .in("payment_status", ["unpaid", "partial"])
-    //   .order("created_at", { ascending: false })
-    //   .limit(10);
-
-    // setPendingInvoices(invoicesData || []);
-
-    // ----
 
     // Load recent invoices (we'll derive pending status from payments)
     const { data: invoicesData } = await (supabase as any)
@@ -249,50 +277,59 @@ export default function Dashboard() {
 
   const context = getTimeContext();
 
-  const greetings = {
-    morning: {
-      title: "Good morning, Meera!",
-      subtitle: `Yesterday was a win with ₹${stats.revenue?.toLocaleString() || '0'}. Today, you have ${stats.pendingOrders} deliveries to handle.`,
-      icon: "☕️",
-    },
-    afternoon: {
-      title: "Good afternoon!",
-      subtitle: `You've already processed ${stats.totalOrders} orders today. You're at 60% of your daily goal!`,
-      icon: "🌤️",
-    },
-    evening: {
-      title: "Great work today!",
-      subtitle: `You served ${stats.totalOrders} customers. ₹${stats.cashInflow.toLocaleString()} hit your bank account today.`,
-      icon: "🌙"
-    }
-  };
+  const activeGreeting = useMemo(() => {
+    const greetings = {
+      morning: {
+        title: "Good morning, Maaz!",
+        subtitle: `Today, you have ${stats.pendingOrders} deliveries to handle. Total revenue for this period is ₹${stats.revenue?.toLocaleString()}.`,
+        icon: "☕️",
+      },
+      afternoon: {
+        title: "Good afternoon!",
+        subtitle: `You've already processed ${stats.totalOrders} orders. You're at 60% of your daily goal!`,
+        icon: "🌤️",
+      },
+      evening: {
+        title: "Great work today!",
+        subtitle: `You served ${stats.totalOrders} customers. ₹${stats.cashInflow.toLocaleString()} hit your bank account.`,
+        icon: "🌙"
+      }
+    };
+    return greetings[context];
+  }, [stats, context]); // This ensures it updates when stats are fetched
 
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="flex gap-2">
-          <Link to="/invoices">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Invoice
-            </Button>
-          </Link>
-          {/* <Link to="/invoices">
-            <Button variant="outline">
-              <Plus className="mr-2 h-4 w-4" />
-              New Order
-            </Button>
-          </Link> */}
-        </div>
       </div>
+      {/* add a summary card below that shows greetings and stats in it */}
+      <Card className="p-6 ">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold mb-2">
+              {activeGreeting.title} <span>{activeGreeting.icon}</span>
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {/* {activeGreeting.subtitle} */}
+              Timeley delivery insights at your fingertips!
+              <br />
+              Hang tight as we prepare your personalized dashboard.
+            </p>
+          </div>
+          <div>
+            <FileText className="h-12 w-12 text-primary" />
+          </div>
+        </div>
+      </Card>
+
 
       {/* Time Period Filter */}
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium">Time Period:</span>
         <Select value={timePeriod} onValueChange={setTimePeriod}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[150px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

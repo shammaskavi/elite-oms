@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import Logo from "../assets/logo-full.png"
 import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
+import { ShopifyWidget } from "@/components/ShopifyWidget";
 
 export default function PublicInvoiceTracking() {
     const { token } = useParams<{ token: string }>();
@@ -206,7 +207,7 @@ export default function PublicInvoiceTracking() {
                     </Button>
 
                 </div>
-            </div>
+            </div >
         );
     }
 
@@ -278,9 +279,17 @@ export default function PublicInvoiceTracking() {
 
                 {/* Items */}
                 <div className="border rounded-lg overflow-hidden">
-                    <div className="bg-muted px-4 py-2 font-semibold">
-                        Order Items
+                    <div className="bg-muted px-4 py-2 font-semibold justify-between flex">
+
+                        <div>
+                            Order Items
+                        </div>
+                        <div>
+
+                            Current Stage
+                        </div>
                     </div>
+
 
                     <div className="divide-y">
                         {items.map((item: any, idx: number) => {
@@ -316,7 +325,10 @@ export default function PublicInvoiceTracking() {
 
                                     {linked ? (
                                         <Badge
-                                            variant="secondary"
+                                            // make the badge blink 
+                                            // if order stage is anything but packed or delivered make it blink
+                                            className={`${linked.stage !== "Ready to pickup" && linked.stage !== "Delivered" ? "animate-pulse" : ""}`}
+                                            variant="default"
                                         >
                                             {linked.stage}
                                         </Badge>
@@ -386,14 +398,18 @@ export default function PublicInvoiceTracking() {
                     >
                         View Full Invoice PDF
                     </Button>
-                    <Button
-                        className="w-full"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(whatsappUrl, "_blank")}
-                    >
-                        Need Help? Contact Store on WhatsApp
-                    </Button>
+                </div>
+                <p
+                    className="w-full underline text-center"
+                    // variant="outline"
+                    // size="sm"
+                    onClick={() => window.open(whatsappUrl, "_blank")}
+                >
+                    Need Help? Click to Contact Store on WhatsApp
+                </p>
+
+                <div className="mt-8 space-y-4">
+                    <ShopifyWidget />
                 </div>
 
                 {/* Footer */}

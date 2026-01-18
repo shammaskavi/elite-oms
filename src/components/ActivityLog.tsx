@@ -93,10 +93,10 @@ export function ActivityLog({ orderId, productNumber }: ActivityLogProps) {
                     <div key={idx} className="flex items-start gap-2 text-xs">
                         <div
                             className={`w-1.5 h-1.5 rounded-full mt-1.5 ${item.type === "complete"
-                                    ? "bg-green-500"
-                                    : item.type === "delivered"
-                                        ? "bg-blue-500"
-                                        : "bg-orange-500"
+                                ? "bg-green-500"
+                                : item.type === "delivered"
+                                    ? "bg-blue-500"
+                                    : "bg-orange-500"
                                 }`}
                         />
 

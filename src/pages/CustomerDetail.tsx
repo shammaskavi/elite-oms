@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { allocatePaymentFIFO } from "@/lib/allocatePaymentFIFO";
 import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
 import { deriveInvoiceState } from "@/lib/deriveInvoiceState";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,9 +13,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { ArrowLeft, Mail, Phone, MapPin, FileText, ShoppingBag, DollarSign, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { InvoiceView } from "@/components/InvoiceView";
+
+import { allocateCustomerPayment } from "@/lib/allocateCustomerPayment";
+import { ReceiptView } from "@/components/ReceiptView";
 
 function safeParsePayload(raw: any) {
     if (!raw) return {};
@@ -32,8 +37,19 @@ export default function CustomerDetail() {
     const { toast } = useToast();
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
     const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+    // --- Receipt Modal State ---
+    const [selectedReceipt, setSelectedReceipt] = useState<any | null>(null);
+    const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
+    const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
     const [reminderMessage, setReminderMessage] = useState("");
     const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+    const [collectPaymentOpen, setCollectPaymentOpen] = useState(false);
+    const [paymentAmount, setPaymentAmount] = useState("");
+    const [paymentMethod, setPaymentMethod] = useState("");
+    const [paymentReference, setPaymentReference] = useState("");
+    const [paymentNotes, setPaymentNotes] = useState("");
+
+    const queryClient = useQueryClient();
 
     // ---- customer ----
     const { data: customer } = useQuery({
@@ -91,6 +107,21 @@ export default function CustomerDetail() {
                 .eq("invoices.customer_id", id)     // only this customer's invoices
                 .order("date", { ascending: false });
 
+            if (error) throw error;
+            return data ?? [];
+        },
+        enabled: !!id,
+    });
+
+    // --- ADD QUERY ---
+    const { data: customerPayments } = useQuery({
+        queryKey: ["customer-payments", id],
+        queryFn: async () => {
+            const { data, error } = await (supabase as any)
+                .from("customer_payments")
+                .select("*")
+                .eq("customer_id", id)
+                .order("received_at", { ascending: false });
             if (error) throw error;
             return data ?? [];
         },
@@ -166,6 +197,16 @@ export default function CustomerDetail() {
         amount: parseFloat(String(p.amount || 0)),
     }));
 
+    // --- ADD RECEIPTS MAPPING ---
+    const receipts = (customerPayments || []).map((r: any) => ({
+        id: r.id,
+        date: r.received_at,
+        method: r.payment_method,
+        amount: parseFloat(String(r.amount || 0)),
+        reference: r.reference,
+        notes: r.notes,
+    }));
+
     // const getPaymentStatusBadge = (invoice: any) => {
     //     const isSettled = invoice.settled === true;
     //     const state = invoice.__state?.state;
@@ -217,6 +258,103 @@ export default function CustomerDetail() {
         setReminderDialogOpen(false);
     };
 
+    // --- Save Payment Mutation ---
+    const savePaymentMutation = useMutation({
+        mutationFn: async (payload: {
+            customer_id: string,
+            amount: number,
+            payment_method: string,
+            reference?: string,
+            notes?: string,
+        }) => {
+            const { customer_id, amount, payment_method, reference, notes } = payload;
+            const { data, error } = await (supabase as any)
+                .from("customer_payments")
+                .insert([
+                    {
+                        customer_id,
+                        amount,
+                        payment_method,
+                        reference,
+                        notes,
+                        received_at: new Date().toISOString(), // Save as now
+                    }
+                ])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: async (data) => {
+            try {
+                if (!data?.id) {
+                    throw new Error("Customer payment ID missing");
+                }
+
+                await allocateCustomerPayment({
+                    customerPaymentId: data.id,
+                    customerId: data.customer_id,
+                    amount: Number(data.amount),
+                });
+
+                setCollectPaymentOpen(false);
+                setPaymentAmount("");
+                setPaymentMethod("");
+                setPaymentReference("");
+                setPaymentNotes("");
+
+                queryClient.invalidateQueries({ queryKey: ["invoice-payments", id] });
+                queryClient.invalidateQueries({ queryKey: ["customer-invoices", id] });
+                queryClient.invalidateQueries({ queryKey: ["customer", id] });
+
+                toast({
+                    title: "Payment Collected",
+                    description: "Payment received and allocated to invoices.",
+                });
+            } catch (err: any) {
+                console.error("Allocation failed", err);
+                toast({
+                    title: "Payment Saved (Allocation Pending)",
+                    description: "Payment saved but could not be allocated automatically.",
+                });
+            }
+        },
+        onError: (err: any) => {
+            toast({
+                title: "Error Saving Payment",
+                description: err?.message || "Could not save payment.",
+                variant: "destructive",
+            });
+        },
+    });
+
+    const handleSavePayment = () => {
+        if (!id) return;
+        if (!paymentAmount || isNaN(Number(paymentAmount)) || Number(paymentAmount) <= 0) {
+            toast({
+                title: "Invalid Amount",
+                description: "Please enter a valid payment amount.",
+                variant: "destructive",
+            });
+            return;
+        }
+        if (!paymentMethod) {
+            toast({
+                title: "Payment Method Required",
+                description: "Please enter a payment method.",
+                variant: "destructive",
+            });
+            return;
+        }
+        savePaymentMutation.mutate({
+            customer_id: id,
+            amount: Number(paymentAmount),
+            payment_method: paymentMethod,
+            reference: paymentReference,
+            notes: paymentNotes,
+        });
+    };
+
     if (!customer) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -237,6 +375,17 @@ export default function CustomerDetail() {
                     onOpenChange={(open) => {
                         setInvoiceDialogOpen(open);
                         if (!open) setSelectedInvoice(null);
+                    }}
+                />
+            )}
+            {/* Receipt Dialog */}
+            {selectedReceiptId && (
+                <ReceiptView
+                    receiptId={selectedReceiptId}
+                    open={receiptDialogOpen}
+                    onOpenChange={(open) => {
+                        setReceiptDialogOpen(open);
+                        if (!open) setSelectedReceiptId(null);
                     }}
                 />
             )}
@@ -271,6 +420,18 @@ export default function CustomerDetail() {
                         </div>
                     </div>
                 </div>
+                {/* Collect Payment Button */}
+                {hasUnpaidInvoices && (
+                    <Button
+                        variant="default"
+                        className="w-full sm:w-auto"
+                        onClick={() => setCollectPaymentOpen(true)}
+                    >
+                        <DollarSign className="mr-2 h-4 w-4" />
+                        <span className="hidden sm:inline">Collect Payment</span>
+                        <span className="sm:hidden">Collect</span>
+                    </Button>
+                )}
                 {hasUnpaidInvoices && (
                     <Dialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>
                         <DialogTrigger asChild>
@@ -299,6 +460,58 @@ export default function CustomerDetail() {
                         </DialogContent>
                     </Dialog>
                 )}
+                {/* Collect Payment Dialog */}
+                <Dialog open={collectPaymentOpen} onOpenChange={setCollectPaymentOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Collect Payment</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div>
+                                <Label>Amount</Label>
+                                <Input
+                                    type="number"
+                                    placeholder="Amount received"
+                                    value={paymentAmount}
+                                    onChange={e => setPaymentAmount(e.target.value)}
+                                    min="0"
+                                    step="0.01"
+                                />
+                            </div>
+                            <div>
+                                <Label>Payment Method</Label>
+                                <Input
+                                    placeholder="Cash / UPI / Card"
+                                    value={paymentMethod}
+                                    onChange={e => setPaymentMethod(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <Label>Reference (optional)</Label>
+                                <Input
+                                    placeholder="Transaction reference"
+                                    value={paymentReference}
+                                    onChange={e => setPaymentReference(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <Label>Notes (optional)</Label>
+                                <Textarea
+                                    placeholder="Notes"
+                                    value={paymentNotes}
+                                    onChange={e => setPaymentNotes(e.target.value)}
+                                />
+                            </div>
+                            <Button
+                                className="w-full"
+                                onClick={handleSavePayment}
+                                disabled={savePaymentMutation.isLoading}
+                            >
+                                {savePaymentMutation.isLoading ? "Saving..." : "Save Payment"}
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
 
             {/* Summary Cards */}
@@ -356,10 +569,11 @@ export default function CustomerDetail() {
 
             {/* Tabs */}
             <Tabs defaultValue="invoices" className="w-full">
-                <TabsList className="w-full grid grid-cols-3">
+                <TabsList className="w-full grid grid-cols-4">
                     <TabsTrigger value="invoices" className="text-xs sm:text-sm">Invoices</TabsTrigger>
                     <TabsTrigger value="orders" className="text-xs sm:text-sm">Orders</TabsTrigger>
                     <TabsTrigger value="payments" className="text-xs sm:text-sm">Payments</TabsTrigger>
+                    <TabsTrigger value="receipts" className="text-xs sm:text-sm">Receipts</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="invoices" className="space-y-4">
@@ -485,7 +699,15 @@ export default function CustomerDetail() {
                                     <TableBody>
                                         {payments.length > 0 ? (
                                             payments.map(payment => (
-                                                <TableRow key={payment.id}>
+
+                                                // add receipt click here 
+                                                <TableRow key={payment.id}
+                                                // onClick={() => {
+                                                //     console.log("Opening receipt", payment.id);
+                                                //     setSelectedReceiptId(payment.id);
+                                                //     setReceiptDialogOpen(true);
+                                                // }}
+                                                >
                                                     <TableCell>{payment.date ? new Date(payment.date).toLocaleDateString() : "-"}</TableCell>
                                                     <TableCell className="font-medium">{payment.invoice_number}</TableCell>
                                                     <TableCell>{payment.method}</TableCell>
@@ -496,6 +718,68 @@ export default function CustomerDetail() {
                                             <TableRow>
                                                 <TableCell colSpan={4} className="text-center text-muted-foreground">
                                                     No payments found
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                {/* tabs contnet for receipts */}
+
+                {/* --- ADD RECEIPTS TAB CONTENT --- */}
+                <TabsContent value="receipts" className="space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Receipts</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Receipt</TableHead>
+                                            <TableHead>Payment Method</TableHead>
+                                            <TableHead className="text-right">Amount</TableHead>
+                                            <TableHead></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {receipts.length > 0 ? (
+                                            receipts.map(r => (
+                                                <TableRow key={r.id}>
+                                                    <TableCell>
+                                                        {r.date ? new Date(r.date).toLocaleDateString() : "-"}
+                                                    </TableCell>
+                                                    <TableCell className="font-medium">
+                                                        {r.id.slice(0, 8).toUpperCase()}
+                                                    </TableCell>
+                                                    <TableCell>{r.method}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        ₹{r.amount.toFixed(2)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                                console.log("Opening receipt", r.id);
+                                                                setSelectedReceiptId(r.id);
+                                                                setReceiptDialogOpen(true);
+                                                            }}
+                                                        >
+                                                            View
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                                                    No receipts found
                                                 </TableCell>
                                             </TableRow>
                                         )}

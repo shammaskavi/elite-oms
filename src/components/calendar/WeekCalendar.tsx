@@ -109,7 +109,7 @@ export default function WeekCalendar({
                         >
                             {dayItems.length === 0 && (
                                 <div className="text-xs text-muted-foreground text-center mt-4">
-                                    —
+                                    No items
                                 </div>
                             )}
 
