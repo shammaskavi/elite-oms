@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import Logo from "../assets/logo-full.png"
 import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
 import { ShopifyWidget } from "@/components/ShopifyWidget";
+import { GoogleReviewCard } from "@/components/GoogleReviewCard";
+
 
 export default function PublicInvoiceTracking() {
     const { token } = useParams<{ token: string }>();
@@ -407,6 +409,7 @@ export default function PublicInvoiceTracking() {
                 >
                     Need Help? Click to Contact Store on WhatsApp
                 </p>
+                <GoogleReviewCard />
 
                 <div className="mt-8 space-y-4">
                     <ShopifyWidget />

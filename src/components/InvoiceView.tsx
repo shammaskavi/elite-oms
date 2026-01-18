@@ -413,17 +413,23 @@ export function InvoiceView({
         })
         : null;
       const message = `
-Hello ${invoice.customers?.name || ""}! 👋
+Hello ${invoice.customers?.name || ""} ✨
 
-Here is your Saree Palace Elite invoice.
+Thank you for choosing Saree Palace Elite.
+We're delighted to be creating this piece for you.
+
+Here are your order details:
 
 🧾 Invoice No: ${invoice.invoice_number}
-💰 Total Invoice Amount: ₹${invoice.total.toLocaleString("en-IN")}
+💰 Total Amount: ₹${invoice.total.toLocaleString("en-IN")}
 ${formattedDelivery ? `📅 Expected Delivery: ${formattedDelivery}` : ""}
 
 
-📦 To know the status of your oder click below:
+📦 You may track your order anytime here:
 ${trackingUrl}
+
+Warm regards,
+Saree Palace Elite
     `.trim();
 
       // const waUrl = `https://wa.me/91${phone}?text=${encodeURIComponent(message)}`;
