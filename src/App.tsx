@@ -17,6 +17,7 @@ import OrderDetailNew from "./pages/OrderDetailNew";
 import NotFound from "./pages/NotFound";
 import CustomerDetail from "./pages/CustomerDetail";
 import PublicInvoiceTracking from "./pages/PublicInvoiceTracking";
+import Payments from "./pages/Payments";
 
 const queryClient = new QueryClient();
 
@@ -96,6 +97,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <OrderDetailNew />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/payments"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Payments />
                   </Layout>
                 </ProtectedRoute>
               }

@@ -1,1 +1,22 @@
 project_id = "trcjjhwxzsuilamxnzbm"
+[functions.delivery-reminder]
+enabled = true
+verify_jwt = true
+import_map = "./functions/delivery-reminder/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/delivery-reminder/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/delivery-reminder/*.html" ]
+
+[functions.payments-register]
+enabled = true
+verify_jwt = true
+import_map = "./functions/payments-register/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/payments-register/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/payments-register/*.html" ]

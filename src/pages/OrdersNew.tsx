@@ -34,7 +34,7 @@ export default function OrdersNew() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const [viewMode, setViewMode] =
-    useState<"list" | "kanban" | "calendar" | "table">("list");
+    useState<"list" | "kanban" | "calendar" | "table">("table");
   // Calendar anchor date (controls visible week/month)
   const [anchorDate, setAnchorDate] = useState<Date>(() => {
     const d = new Date();
