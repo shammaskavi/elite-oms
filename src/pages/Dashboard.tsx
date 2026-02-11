@@ -253,7 +253,7 @@ export default function Dashboard() {
       .neq("stage", "Delivered")
       .order("invoice_number");
 
-    setDeliveriesToday(deliveries || []);
+    setDeliveriesToday(deliveries || []); ƒ
   };
 
   const getStatusBadge = (status: string) => {

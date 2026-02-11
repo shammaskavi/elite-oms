@@ -41,6 +41,8 @@ export default function OrderDetailNew() {
     // const openInvoiceId = location.state?.openInvoiceId as string | undefined;
 
     const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: "delivered" | "cancelled" | "delete" }>({ open: false, action: "delivered" });
+    const [rescheduleOpen, setRescheduleOpen] = useState(false);
+    const [newDeliveryDate, setNewDeliveryDate] = useState("");
     const queryClient = useQueryClient();
 
     // --- get current order by id ---
@@ -272,6 +274,33 @@ export default function OrderDetailNew() {
         },
     });
 
+    const rescheduleDeliveryMutation = useMutation({
+        mutationFn: async () => {
+            if (!id || !newDeliveryDate) return;
+
+            const { error } = await (supabase as any)
+                .from("orders")
+                .update({
+                    metadata: {
+                        ...currentOrder?.metadata,
+                        delivery_date: newDeliveryDate,
+                    },
+                })
+                .eq("id", id);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["order", id] });
+            queryClient.invalidateQueries({ queryKey: ["calendar-items"] });
+            toast.success("Delivery date updated");
+            setRescheduleOpen(false);
+        },
+        onError: () => {
+            toast.error("Failed to update delivery date");
+        },
+    });
+
     const deleteAllOrdersMutation = useMutation({
         mutationFn: async () => {
             if (!orders) return;
@@ -321,10 +350,6 @@ export default function OrderDetailNew() {
     return (
         <div className="space-y-6 p-4 md:p-6">
             <div className="flex items-center justify-between">
-                {/* <Button variant="ghost" size="sm" onClick={() => navigate("/orders")}>
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Orders
-                </Button> */}
                 <Button
                     variant="ghost"
                     onClick={() => {
@@ -332,35 +357,23 @@ export default function OrderDetailNew() {
                             navigate(-1);
                             return;
                         }
-
                         navigate(returnTo, {
-                            state: {
-                                openInvoiceId,
-                                ordersView,
-                                anchorDate,
-                            },
+                            state: { openInvoiceId, ordersView, anchorDate },
                         });
                     }}
                 >
                     ← Back
                 </Button>
-                {/* old back button */}
-                {/* <Button
-                    variant="ghost"
+
+                <Button
+                    variant="outline"
                     onClick={() => {
-                        if (returnTo && openInvoiceId) {
-                            navigate(returnTo, {
-                                state: { openInvoiceId },
-                            });
-                        } else if (returnTo) {
-                            navigate(returnTo);
-                        } else {
-                            navigate(-1);
-                        }
+                        setNewDeliveryDate(currentOrder?.metadata?.delivery_date || "");
+                        setRescheduleOpen(true);
                     }}
                 >
-                    ← Back
-                </Button> */}
+                    Change delivery date
+                </Button>
             </div>
 
             <div>
@@ -474,6 +487,34 @@ export default function OrderDetailNew() {
                             }}
                         >
                             Confirm
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Change delivery date</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Update the delivery date for this order. This will reflect everywhere in the system.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+
+                    <input
+                        type="date"
+                        className="border rounded-md px-3 py-2 text-sm"
+                        value={newDeliveryDate}
+                        onChange={(e) => setNewDeliveryDate(e.target.value)}
+                    />
+
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => rescheduleDeliveryMutation.mutate()}
+                            disabled={!newDeliveryDate}
+                        >
+                            Save
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -38,13 +38,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* ====================== MOBILE SIDEBAR (UNCHANGED) ====================== */}
       <div
         className={cn(
-          "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm lg:hidden",
-          sidebarOpen ? "block" : "hidden"
+          "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm lg:hidden transition-opacity duration-300",
+          sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         )}
         onClick={() => setSidebarOpen(false)}
       >
         <div
-          className="fixed inset-y-0 left-0 w-64 bg-card shadow-lg"
+          className={cn(
+            "fixed inset-y-0 left-0 w-64 bg-card shadow-lg transform transition-transform duration-300",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          )}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex h-16 items-center justify-between border-b px-6">
