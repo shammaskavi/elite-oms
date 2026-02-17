@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Pulsar } from 'ldrs/react'
@@ -68,6 +68,10 @@ export default function PublicInvoiceTracking() {
         invoice?.raw_payload?.payment_status ??
         "unpaid";
 
+    // Razorpay custom payment amount state
+    const [payAmount, setPayAmount] = useState<number>(remaining);
+    const [isProcessing, setIsProcessing] = useState(false);
+
     // const totalPaid = useMemo(() => {
     //     if (!invoice?.invoice_payments) return 0;
 
@@ -85,31 +89,154 @@ export default function PublicInvoiceTracking() {
     const formatCurrency = (value: any) =>
         `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 
-
-    const STORE_UPI_ID = "9925041003@okbizaxis";
-    const STORE_NAME = "SAREE PALACE ELITE";
     const WHATSAPP_NUMBER = "919274741003";
-
-    const upiPaymentUrl = useMemo(() => {
-        if (!invoice || remaining <= 0) return null;
-
-        const params = new URLSearchParams({
-            pa: STORE_UPI_ID,
-            pn: STORE_NAME,
-            am: remaining.toFixed(2),
-            cu: "INR",
-            tn: `${invoice.customers.name} ${invoice.invoice_number}`,
-
-        });
-
-        return `upi://pay?${params.toString()}`;
-    }, [invoice, remaining]);
 
     const whatsappUrl = useMemo(() => {
         if (!invoice) return "#";
         const text = `Hello Saree Palace Elite, I need help with Invoice ${invoice.invoice_number}.`;
         return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
     }, [invoice]);
+    // Razorpay checkout script loader
+    useEffect(() => {
+        // Only load once
+        if (document.getElementById("razorpay-checkout-js")) return;
+        const script = document.createElement("script");
+        script.id = "razorpay-checkout-js";
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.async = true;
+        document.body.appendChild(script);
+        return () => {
+            // Optionally clean up
+            // document.body.removeChild(script);
+        };
+    }, []);
+
+    // Razorpay payment handler
+    // async function handleRazorpayPayment() {
+    //     if (!invoice || remaining <= 0) return;
+    //     try {
+    //         // Call Supabase Edge Function to create Razorpay order
+    //         const response = await fetch(
+    //             `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-razorpay-order`,
+    //             {
+    //                 method: "POST",
+    //                 headers: {
+    //                     "Content-Type": "application/json",
+    //                     apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    //                     Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+    //                 },
+    //                 body: JSON.stringify({
+    //                     invoice_id: invoice.id,
+    //                     amount: remaining,
+    //                 }),
+    //             }
+    //         );
+    //         const data = await response.json();
+    //         const order_id = data.order_id;
+    //         if (!order_id) throw new Error("Failed to create Razorpay order");
+
+    //         // Open Razorpay Checkout
+    //         const rzp = new (window as any).Razorpay({
+    //             key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+    //             amount: Math.round(remaining * 100), // paise
+    //             currency: "INR",
+    //             name: "Saree Palace Elite",
+    //             description: `Invoice #${invoice.invoice_number}`,
+    //             order_id,
+    //             notes: {
+    //                 invoice_id: invoice.id,
+    //                 invoice_number: invoice.invoice_number
+    //             },
+    //             handler: function (response: any) {
+    //                 // Optionally show success UI or refresh
+    //                 window.location.reload();
+    //             },
+    //             prefill: {
+    //                 name: invoice.customers?.name || "",
+
+    //             },
+    //             theme: {
+    //                 color: "#ec4899"
+    //             }
+    //         });
+    //         rzp.open();
+    //     } catch (err) {
+    //         alert("Failed to start payment. Please try again.");
+    //     }
+    // }
+
+    async function handleRazorpayPayment() {
+        // 1. Validation and Guard
+        if (!invoice || remaining <= 0 || isProcessing) return;
+
+        setIsProcessing(true); // Start loading
+
+        try {
+            // 2. Call Edge Function with the full remaining balance
+            // Inside handleRazorpayPayment in PublicInvoiceTracking.tsx
+            const response = await fetch(
+                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-razorpay-order`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+                    },
+                    body: JSON.stringify({
+                        invoice_id: invoice.id,
+                        amount: remaining,
+                        // ✅ Pass the number here
+                        invoice_number: invoice.invoice_number
+                    }),
+                }
+            );
+
+            if (!response.ok) throw new Error("Network response was not ok");
+
+            const data = await response.json();
+            const order_id = data.order_id;
+
+            if (!order_id) throw new Error("Failed to create Razorpay order");
+
+            // 3. Initialize Razorpay Checkout
+            const rzp = new (window as any).Razorpay({
+                key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+                amount: Math.round(remaining * 100), // Convert to paise
+                currency: "INR",
+                name: "Saree Palace Elite",
+                description: `Invoice #${invoice.invoice_number}`,
+                order_id,
+                notes: {
+                    invoice_id: invoice.id,
+                    invoice_number: invoice.invoice_number
+                },
+                handler: function (response: any) {
+                    // Optional: show a success message before reload
+                    window.location.reload();
+                },
+                prefill: {
+                    name: invoice.customers?.name || "",
+                    contact: invoice.customers?.phone || "",
+                    email: invoice.customers?.email || ""
+                },
+                theme: {
+                    color: "#ec4899"
+                },
+                modal: {
+                    ondismiss: function () {
+                        setIsProcessing(false); // Reset loader if user closes popup
+                    }
+                }
+            });
+
+            rzp.open();
+        } catch (err) {
+            console.error("Payment error:", err);
+            alert("Failed to start payment. Please try again.");
+            setIsProcessing(false); // Reset loader on error
+        }
+    }
 
     const { data: orders = [] } = useQuery({
         queryKey: ["public-invoice-orders", invoice?.id],
@@ -345,22 +472,55 @@ export default function PublicInvoiceTracking() {
                 </div>
 
                 {/* Payment Summary */}
-                <div className="border rounded-lg p-4 bg-muted/40 space-y-2">
-
+                {/* <div className="border rounded-lg p-4 bg-muted/40 space-y-2">
                     <div className="flex justify-between text-sm">
                         <span>Order Total</span>
                         <span className="font-medium">
                             ₹{Number(invoice.total).toLocaleString("en-IN")}
                         </span>
                     </div>
-
                     <div className="flex justify-between text-sm">
                         <span>Amount Received</span>
                         <span className="font-medium text-emerald-600">
                             ₹{paidAmount.toLocaleString("en-IN")}
                         </span>
                     </div>
-
+                    <div className="flex justify-between text-base font-semibold pt-1 border-t pb-6">
+                        <span>Balance Due</span>
+                        <span className={remaining > 0 ? "text-destructive" : "text-emerald-600"}>
+                            ₹{remaining.toLocaleString("en-IN")}
+                        </span>
+                    </div>
+                    {remaining > 0 ? (
+                        <div className="mt-3 flex flex-col gap-2">
+                            <Button
+                                className="w-full"
+                                onClick={handleRazorpayPayment}
+                            // disabled={payAmount <= 0 || payAmount > remaining}
+                            >
+                                Pay Securely with Razorpay
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="mt-3 text-center text-sm font-medium text-emerald-600">
+                            Paid in full ✓
+                        </div>
+                    )}
+                </div> */}
+                {/* Payment Summary */}
+                <div className="border rounded-lg p-4 bg-muted/40 space-y-2">
+                    <div className="flex justify-between text-sm">
+                        <span>Order Total</span>
+                        <span className="font-medium">
+                            ₹{Number(invoice.total).toLocaleString("en-IN")}
+                        </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                        <span>Amount Received</span>
+                        <span className="font-medium text-emerald-600">
+                            ₹{paidAmount.toLocaleString("en-IN")}
+                        </span>
+                    </div>
                     <div className="flex justify-between text-base font-semibold pt-1 border-t pb-6">
                         <span>Balance Due</span>
                         <span className={remaining > 0 ? "text-destructive" : "text-emerald-600"}>
@@ -369,19 +529,28 @@ export default function PublicInvoiceTracking() {
                     </div>
 
                     {remaining > 0 ? (
-                        <Button
-                            className="w-full mt-3 "
-                            onClick={() => {
-                                if (upiPaymentUrl) {
-                                    window.location.href = upiPaymentUrl;
-                                }
-                            }}
-                        >
-                            Pay ₹{remaining.toLocaleString("en-IN")} via UPI
-                        </Button>
+                        <div className="mt-3">
+                            <Button
+                                className="w-full relative"
+                                onClick={handleRazorpayPayment}
+                                disabled={isProcessing}
+                            >
+                                {isProcessing ? (
+                                    <span className="flex items-center gap-2">
+                                        <Pulsar size="18" speed="1.5" color="white" />
+                                        Preparing Secure Payment...
+                                    </span>
+                                ) : (
+                                    `Pay Balance ₹${remaining.toLocaleString("en-IN")} via Razorpay`
+                                )}
+                            </Button>
+                            <p className="text-[10px] text-center text-muted-foreground mt-2">
+                                Secure 128-bit encrypted payment via Razorpay
+                            </p>
+                        </div>
                     ) : (
                         <div className="mt-3 text-center text-sm font-medium text-emerald-600">
-                            Paid in full ✓
+                            Fully Paid ✓
                         </div>
                     )}
                 </div>

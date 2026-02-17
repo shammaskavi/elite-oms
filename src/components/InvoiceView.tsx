@@ -522,22 +522,49 @@ Saree Palace Elite
 
   const addPaymentMutation = useMutation({
     mutationFn: async (amount: number) => {
-      if (!invoice.id) throw new Error("Missing invoice id");
+      console.log("🔍 ADD PAYMENT DEBUG START");
+      console.log("Raw partialPaymentAmount state:", partialPaymentAmount);
+      console.log("Amount passed to mutation:", amount, typeof amount);
+      console.log("Invoice ID:", invoice?.id);
+      console.log("Payment Method:", paymentMethod);
+      console.log("Payment Date (raw state):", paymentDate);
 
-      // 1️⃣ Insert new payment record
+      if (!invoice?.id) throw new Error("Missing invoice id");
+
+      const safeAmount = Number(amount);
+      console.log("Safe Amount after Number():", safeAmount, typeof safeAmount);
+
+      if (isNaN(safeAmount) || safeAmount <= 0) {
+        console.error("❌ Invalid amount detected before insert");
+        throw new Error("Invalid payment amount");
+      }
+
+      const safeDate = paymentDate
+        ? new Date(paymentDate).toISOString()
+        : new Date().toISOString();
+
+      console.log("Safe Date ISO:", safeDate);
+
+      const payload = {
+        invoice_id: invoice.id,
+        amount: safeAmount,
+        method: paymentMethod || "cash",
+        date: safeDate,
+      };
+
+      console.log("Final payload being inserted:", payload);
+
       const { error: insertErr } = await (supabase as any)
         .from("invoice_payments")
-        .insert({
-          invoice_id: invoice.id,
-          amount,
-          method: paymentMethod,
-          date: paymentDate,
-        });
+        .insert(payload);
 
-      if (insertErr) throw insertErr;
+      if (insertErr) {
+        console.error("❌ Supabase insert error:", insertErr);
+        throw insertErr;
+      }
 
-      // 2️⃣ Do NOT update raw_payload anymore — legacy stays for reference only
-      // derivePaymentStatus will now pick up DB payments
+      console.log("✅ Insert successful");
+      console.log("🔍 ADD PAYMENT DEBUG END");
 
       return true;
     },
@@ -907,16 +934,26 @@ Saree Palace Elite
                     <div className="flex gap-2">
                       <Button
                         onClick={() => {
+                          console.log("🔎 BUTTON CLICK DEBUG");
+                          console.log("partialPaymentAmount (raw):", partialPaymentAmount);
+                          console.log("remainingBalance:", remainingBalance);
+
                           const amount = parseFloat(partialPaymentAmount);
-                          // ensure valid amount and does not exceed remaining
+
+                          console.log("Parsed amount:", amount, typeof amount);
+
                           if (isNaN(amount) || amount <= 0) {
+                            console.error("❌ Invalid amount at button level");
                             toast.error("Enter a valid amount");
                             return;
                           }
+
                           if (amount > remainingBalance) {
+                            console.error("❌ Amount exceeds remaining");
                             toast.error("Amount exceeds remaining balance");
                             return;
                           }
+
                           addPaymentMutation.mutate(amount);
                         }}
                         disabled={!partialPaymentAmount || parseFloat(partialPaymentAmount) <= 0}
