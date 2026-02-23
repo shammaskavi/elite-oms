@@ -633,23 +633,25 @@ Saree Palace Elite
 
               <Badge
                 variant={
-                  isSettled
-                    ? "secondary"
-                    : status === "paid"
-                      ? "success"
-                      : status === "partial"
-                        ? "info"
-                        : "warning"
+                  isDraft ? "outline" :
+                    isSettled
+                      ? "secondary"
+                      : status === "paid"
+                        ? "success"
+                        : status === "partial"
+                          ? "info"
+                          : "warning"
                 }
                 className="text-lg px-4 py-2"
               >
-                {isSettled
-                  ? "SETTLED"
-                  : status === "paid"
-                    ? "PAID"
-                    : status === "partial"
-                      ? "PARTIAL"
-                      : "UNPAID"}
+                {isDraft ? "DRAFT" :
+                  isSettled
+                    ? "SETTLED"
+                    : status === "paid"
+                      ? "PAID"
+                      : status === "partial"
+                        ? "PARTIAL"
+                        : "UNPAID"}
               </Badge>
             </div>
 
