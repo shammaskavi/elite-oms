@@ -90,7 +90,7 @@ export default function Dashboard() {
     ] = await Promise.all([
       (supabase as any).from("orders").select("*", { count: "exact", head: true }).gte("created_at", startDate),
       (supabase as any).from("orders").select("*", { count: "exact", head: true }).neq("order_status", "delivered").neq("order_status", "cancelled").gte("created_at", startDate),
-      (supabase as any).from("invoice_payments").select("amount").gte("created_at", startDate),
+      (supabase as any).from("invoice_payments").select("amount, date").gte("date", startDate),
       (supabase as any).from("orders").select("total_amount").gte("created_at", startDate),
     ]);
 
@@ -123,57 +123,6 @@ export default function Dashboard() {
 
     setStats(periodStats);
     setDailyStats(todayStatsData);
-    const startDate = getDateRange();
-
-    // Load stats based on selected time period (parallelized)
-    const [
-      { count: totalOrders },
-      { count: pendingOrders },
-      { data: paymentsData },
-      { data: ordersData },
-    ] = await Promise.all([
-      (supabase as any)
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", startDate),
-
-      (supabase as any)
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .neq("order_status", "delivered")
-        .neq("order_status", "cancelled")
-        .gte("created_at", startDate),
-
-      (supabase as any)
-        .from("invoice_payments")
-        .select("amount")
-        .gte("created_at", startDate),
-
-      (supabase as any)
-        .from("orders")
-        .select("total_amount")
-        .gte("created_at", startDate),
-    ]);
-
-    const cashInflow =
-      paymentsData?.reduce(
-        (sum: number, p: any) => sum + Number(p.amount),
-        0
-      ) || 0;
-
-    const revenue =
-      ordersData?.reduce(
-        (sum: number, order: any) => sum + Number(order.total_amount),
-        0
-      ) || 0;
-
-    setStats({
-      totalOrders: totalOrders || 0,
-      pendingOrders: pendingOrders || 0,
-      cashInflow,
-      // dispatchedOrders: dispatchedOrders || 0,
-      revenue,
-    });
 
     // Load recent invoices (we'll derive pending status from payments)
     const { data: invoicesData } = await (supabase as any)
@@ -253,7 +202,7 @@ export default function Dashboard() {
       .neq("stage", "Delivered")
       .order("invoice_number");
 
-    setDeliveriesToday(deliveries || []); ƒ
+    setDeliveriesToday(deliveries || []);
   };
 
   const getStatusBadge = (status: string) => {

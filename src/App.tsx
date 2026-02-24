@@ -18,6 +18,8 @@ import NotFound from "./pages/NotFound";
 import CustomerDetail from "./pages/CustomerDetail";
 import PublicInvoiceTracking from "./pages/PublicInvoiceTracking";
 import Payments from "./pages/Payments";
+import Reports from "./pages/Reports";
+import AnotherReports from "./pages/AnotherReports";
 
 const queryClient = new QueryClient();
 
@@ -107,6 +109,26 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <Payments />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports-dusra"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <AnotherReports />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Reports />
                   </Layout>
                 </ProtectedRoute>
               }

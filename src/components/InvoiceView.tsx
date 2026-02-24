@@ -651,7 +651,8 @@ Saree Palace Elite
                       ? "PAID"
                       : status === "partial"
                         ? "PARTIAL"
-                        : "UNPAID"}
+                        : "UNPAID"
+                }
               </Badge>
             </div>
 
