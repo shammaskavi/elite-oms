@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
     LineChart,
     Line,
@@ -26,380 +28,398 @@ import {
     TrendingUp,
     AlertTriangle,
     Wallet,
-    ArrowUpRight,
     FileText,
-    Download
+    Download,
+    Loader2,
+    CalendarDays,
+    ArrowUpRight,
+    CheckCircle2
 } from "lucide-react";
 
 export default function Reports() {
-    const [chartView, setChartView] = useState("revenue"); // Toggle for Analytics section
+    /* =========================
+       1. STATE & DATE LOGIC
+    ========================== */
+    type ReportPeriod = "today" | "last_7_days" | "this_month" | "this_year";
+    const [period, setPeriod] = useState<ReportPeriod>("this_month");
+    const [chartView, setChartView] = useState("revenue");
+    const [isExporting, setIsExporting] = useState(false);
+
+    const { fromDate, toDate } = useMemo(() => {
+        const now = new Date();
+        const start = new Date(now);
+        switch (period) {
+            case "today": start.setHours(0, 0, 0, 0); break;
+            case "last_7_days": start.setDate(now.getDate() - 6); break;
+            case "this_month": start.setDate(1); break;
+            case "this_year": start.setMonth(0, 1); break;
+        }
+        return {
+            fromDate: start.toISOString().slice(0, 10),
+            toDate: now.toISOString().slice(0, 10),
+        };
+    }, [period]);
+
+    const isRangeReady = Boolean(fromDate && toDate);
 
     /* =========================
-       DATA FETCHING (AS PER ORIGINAL)
+       2. DATA FETCHING (FILTERED)
     ========================== */
-    const { data: overview } = useQuery({
-        queryKey: ["monthly-owner-summary"],
+    const { data: ownerInsights, isLoading: loadingInsights } = useQuery({
+        enabled: isRangeReady,
+        queryKey: ["owner-insights", fromDate, toDate],
         queryFn: async () => {
-            const { data, error } = await (supabase as any).rpc("get_monthly_owner_summary");
-            if (error) throw error;
-            return Array.isArray(data) ? data?.[0]?.get_monthly_owner_summary ?? data?.[0] : data?.get_monthly_owner_summary ?? data;
-        },
-    });
-
-    const { data: ownerInsights } = useQuery({
-        queryKey: ["owner-insights"],
-        queryFn: async () => {
-            const { data, error } = await (supabase as any).rpc("get_owner_insights");
+            const { data, error } = await (supabase as any).rpc("get_owner_insights", { from_date: fromDate, to_date: toDate });
             if (error) throw error;
             return Array.isArray(data) ? data?.[0]?.get_owner_insights ?? data?.[0] : data?.get_owner_insights ?? data;
         },
     });
 
-    const { data: cashTrend = [] } = useQuery({
-        queryKey: ["cash-inflow-trend"],
+    const { data: overview, isLoading: loadingOverview } = useQuery({
+        enabled: isRangeReady,
+        queryKey: ["owner-summary", fromDate, toDate],
         queryFn: async () => {
-            const { data, error } = await (supabase as any).rpc("get_cash_inflow_daily");
+            const { data, error } = await (supabase as any).rpc("get_owner_summary", { from_date: fromDate, to_date: toDate });
             if (error) throw error;
-            return data;
+            return Array.isArray(data) ? data?.[0]?.get_owner_summary ?? data?.[0] : data?.get_owner_summary ?? data;
         },
     });
 
     const { data: revenueTrend = [] } = useQuery({
-        queryKey: ["revenue-trend"],
+        enabled: isRangeReady,
+        queryKey: ["revenue-trend", fromDate, toDate],
         queryFn: async () => {
-            const { data, error } = await (supabase as any).rpc("get_revenue_trend");
-            if (error) throw error;
-            return data;
-        },
+            const { data, error } = await (supabase as any).rpc("get_revenue_trend", { from_date: fromDate, to_date: toDate });
+            return error ? [] : data;
+        }
     });
 
-    const { data: processData = [] } = useQuery({
-        queryKey: ["process-breakdown"],
+    const { data: cashTrend = [] } = useQuery({
+        enabled: isRangeReady,
+        queryKey: ["cash-trend", fromDate, toDate],
         queryFn: async () => {
+            const { data, error } = await (supabase as any).rpc("get_cash_inflow_daily", { from_date: fromDate, to_date: toDate });
+            return error ? [] : data;
+        }
+    });
+
+    // Operational context (Stage, Vendor, Risk)
+    const { data: processData = [] } = useQuery({
+        queryKey: ["process-breakdown"], queryFn: async () => {
             const { data, error } = await (supabase as any).rpc("get_process_breakdown");
-            if (error) throw error;
-            return data;
-        },
+            return error ? [] : data;
+        }
     });
 
     const { data: vendorLoad = [] } = useQuery({
-        queryKey: ["vendor-load"],
-        queryFn: async () => {
+        queryKey: ["vendor-load"], queryFn: async () => {
             const { data, error } = await (supabase as any).rpc("get_vendor_load");
-            if (error) throw error;
-            return data;
-        },
+            return error ? [] : data;
+        }
     });
 
     const { data: deliveryRisk = [] } = useQuery({
-        queryKey: ["delivery-risk"],
-        queryFn: async () => {
+        queryKey: ["delivery-risk"], queryFn: async () => {
             const { data, error } = await (supabase as any).rpc("get_delivery_risk");
-            if (error) throw error;
-            return data;
-        },
+            return error ? [] : data;
+        }
     });
 
     /* =========================
-       DERIVED VALUES
+       3. IN-DEPTH PDF ENGINE
     ========================== */
-    const money = overview?.money || null;
-    const invoices = overview?.invoices || null;
+    const handleExport = async () => {
+        setIsExporting(true);
+        const doc = new jsPDF();
+        const brandPink = [236, 72, 153]; // #ec4899
 
-    const revenueChartData = (revenueTrend || []).map((row: any) => ({
-        date: row.date,
-        booked: Number(row.booked_revenue || 0),
-        confirmed: Number(row.confirmed_revenue || 0),
-    }));
+        // --- PAGE 1: EXECUTIVE SUMMARY ---
+        doc.setFillColor(brandPink[0], brandPink[1], brandPink[2]);
+        doc.rect(0, 0, 210, 40, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(22);
+        doc.text("STRATEGIC BUSINESS REPORT", 14, 25);
+        doc.setFontSize(10);
+        doc.text(`PERIOD: ${fromDate} TO ${toDate} | GENERATED ON: ${new Date().toLocaleDateString()}`, 14, 32);
 
-    const cashInflowData = (cashTrend || []).map((row: any) => ({
-        date: row.date,
-        total: Number(row.total || 0),
-    }));
+        // Strategic Health Check Paragraph
+        doc.setTextColor(40, 40, 40);
+        doc.setFontSize(14);
+        doc.text("I. Financial Health Assessment", 14, 55);
 
-    const processChartData = (processData || []).map((row: any) => ({
-        stage: row.stage_name,
-        total: Number(row.total_orders || 0),
-    }));
+        const efficiency = ownerInsights?.collection_efficiency || 0;
+        const healthStatus = efficiency > 85 ? "EXCELLENT" : efficiency > 60 ? "STABLE" : "CRITICAL";
 
-    const vendorChartData = (vendorLoad || [])
-        .filter((row: any) => row.vendor_name !== "Unassigned")
-        .map((row: any) => ({
-            vendor: row.vendor_name,
-            total: Number(row.active_orders || 0),
-        }))
-        .sort((a, b) => b.total - a.total);
+        doc.setFontSize(10);
+        const introText = `This report provides a multi-layer analysis of business liquidity and operational pipeline. 
+Currently, collection efficiency is at ${efficiency}%, which is considered ${healthStatus}. 
+There is a total of INR ${ownerInsights?.outstanding_due?.toLocaleString() || 0} currently stuck in receivables.`;
+        doc.text(doc.splitTextToSize(introText, 180), 14, 62);
 
-    const deliveryRiskData = (deliveryRisk || []).map((row: any) => ({
-        risk: row.risk,
-        total: Number(row.total_orders || 0),
-    }));
+        autoTable(doc, {
+            startY: 75,
+            head: [['Financial Core Metric', 'Current Value', 'Status']],
+            body: [
+                ['Collection Efficiency', `${efficiency}%`, healthStatus],
+                ['At-Risk Receivables', `INR ${ownerInsights?.outstanding_due?.toLocaleString() || 0}`, 'High Risk'],
+                ['Total Liquid Cash Realized', `INR ${ownerInsights?.total_collected?.toLocaleString() || 0}`, 'In-Bank'],
+                ['Average Order Value', `INR ${Math.round((overview?.money?.total_invoiced || 0) / (overview?.invoices?.total || 1)).toLocaleString()}`, 'Ticket Size'],
+            ],
+            theme: 'grid',
+            headStyles: { fillStyle: brandPink }
+        });
 
-    const RISK_COLORS: Record<string, string> = {
-        Delayed: "#ef4444",
-        "Due Soon": "#f59e0b",
-        "On Track": "#22c55e",
+        // --- PAGE 2: OPERATIONAL REALITY ---
+        doc.addPage();
+        doc.setTextColor(brandPink[0], brandPink[1], brandPink[2]);
+        doc.setFontSize(16);
+        doc.text("II. Production & Logistics Audit", 14, 20);
+
+        doc.setTextColor(100);
+        doc.setFontSize(10);
+        doc.text("Factory Floor stage breakdown and vendor leverage analysis.", 14, 26);
+
+        // Production Stages Table
+        autoTable(doc, {
+            startY: 35,
+            head: [['Production Stage', 'Active Orders', 'Bottleneck Risk']],
+            body: processData.map((p: any) => [
+                p.stage_name,
+                p.total_orders,
+                p.total_orders > 10 ? 'HIGH' : 'LOW'
+            ]),
+            theme: 'striped'
+        });
+
+        // Vendor Table
+        doc.text("Vendor Load Distribution", 14, (doc as any).lastAutoTable.finalY + 15);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 20,
+            head: [['Vendor Name', 'Assigned Orders', 'Capacity Usage']],
+            body: vendorLoad.filter((v: any) => v.vendor_name !== 'Unassigned').map((v: any) => [
+                v.vendor_name,
+                v.active_orders,
+                `${Math.min(100, (v.active_orders / 15) * 100).toFixed(0)}%`
+            ]),
+        });
+
+        // --- PAGE 3: RISK ASSESSMENT ---
+        doc.addPage();
+        doc.text("III. Delivery Risk Analysis", 14, 20);
+        autoTable(doc, {
+            startY: 30,
+            head: [['Risk Level', 'Orders Affected', 'Action Required']],
+            body: deliveryRisk.map((r: any) => [
+                r.risk,
+                r.total_orders,
+                r.risk === 'Delayed' ? 'IMMEDIATE EXPEDITE' : 'MONITOR'
+            ]),
+            styles: { fontSize: 10 },
+            columnStyles: { 2: { fontStyle: 'bold', textColor: [239, 68, 68] } }
+        });
+
+        doc.save(`Executive_Report_${period}.pdf`);
+        setIsExporting(false);
     };
 
+    /* =========================
+       4. UI THEME
+    ========================== */
+    const BRAND = { primary: "#ec4899", secondary: "#6366f1", success: "#22c55e", danger: "#ef4444", warning: "#f59e0b" };
+    const RISK_COLORS: Record<string, string> = { Delayed: BRAND.danger, "Due Soon": BRAND.warning, "On Track": BRAND.success };
+
     return (
-        <div className="p-6 space-y-12 max-w-7xl mx-auto bg-slate-50/30 min-h-screen pb-20">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b pb-8">
-                <div>
-                    <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">Reports & Analytics</h1>
-                    <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-indigo-500" />
-                        Monitoring Financial Health, Performance, and Operations
-                    </p>
+        <div className="p-6 space-y-12 max-w-7xl mx-auto bg-slate-50/50 min-h-screen pb-20">
+
+            {/* --- GLOBAL HEADER --- */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b pb-8">
+                <div className="space-y-1">
+                    <h1 className="text-4xl font-black tracking-tighter text-slate-900 uppercase">Reports Library</h1>
+                    <div className="flex items-center gap-3 text-slate-500 font-medium text-sm">
+                        <CalendarDays className="w-4 h-4 text-pink-500" />
+                        Analyzing period: <span className="text-pink-600 font-bold underline decoration-pink-200 uppercase">{period.replace('_', ' ')}</span>
+                    </div>
                 </div>
-                <div className="flex gap-3">
-                    <Button variant="outline" className="shadow-sm">This Month</Button>
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-sm flex items-center gap-2">
-                        <Download className="w-4 h-4" /> Export Summary
+
+                <div className="flex items-center gap-3">
+                    <div className="flex p-1 bg-white border rounded-lg shadow-sm">
+                        {["today", "last_7_days", "this_month", "this_year"].map((p) => (
+                            <Button
+                                key={p}
+                                variant={period === p ? "default" : "ghost"}
+                                size="sm"
+                                className={period === p ? "bg-pink-500 text-white shadow-md hover:bg-pink-600" : "text-slate-500"}
+                                onClick={() => setPeriod(p as ReportPeriod)}
+                            >
+                                {p.replace(/_/g, ' ')}
+                            </Button>
+                        ))}
+                    </div>
+                    <Button
+                        onClick={handleExport}
+                        disabled={isExporting || loadingInsights}
+                        className="bg-slate-900 hover:bg-slate-800 text-white gap-2 shadow-lg min-w-[140px]"
+                    >
+                        {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        {isExporting ? "Building..." : "Get PDF"}
                     </Button>
                 </div>
             </div>
 
-            {/* 1️⃣ LAYER ONE: OWNER INSIGHTS (Financial Health) */}
-            <section className="space-y-6">
-                <div className="flex items-center gap-2 border-l-4 border-indigo-600 pl-4">
-                    <ShieldCheck className="w-6 h-6 text-indigo-600" />
-                    <div>
-                        <h2 className="text-2xl font-bold text-slate-900">Owner Insights</h2>
-                        <p className="text-sm text-slate-500 font-medium italic">"Is my business financially safe?"</p>
-                    </div>
+            {/* --- LAYER 1: OWNER INSIGHTS (Financial Health) --- */}
+            <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <div className="flex items-center gap-2 text-slate-900">
+                    <ShieldCheck className="w-6 h-6 text-pink-500" />
+                    <h2 className="text-2xl font-black uppercase tracking-tight">Owner Insights</h2>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="bg-white shadow-sm border-none ring-1 ring-slate-200">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Collection Efficiency</CardTitle>
-                        </CardHeader>
+                    <Card className="relative overflow-hidden border-none ring-1 ring-slate-200 shadow-sm">
+                        <div className="absolute top-0 left-0 w-1.5 h-full bg-pink-500" />
+                        <CardHeader className="pb-1"><CardTitle className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Collection Efficiency</CardTitle></CardHeader>
                         <CardContent>
-                            <div className="text-4xl font-bold text-slate-900">{ownerInsights?.collection_efficiency ?? "—"}%</div>
-                            <p className="text-xs text-slate-400 mt-2 font-medium">Cash Collected vs. Amount Billed</p>
+                            <div className="text-4xl font-black text-slate-900">{ownerInsights?.collection_efficiency ?? 0}%</div>
+                            <p className="text-[10px] text-slate-400 mt-1">Cash Realization Rate</p>
                             <div className="mt-4 w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-indigo-500 rounded-full transition-all duration-1000"
-                                    style={{ width: `${ownerInsights?.collection_efficiency || 0}%` }}
-                                />
+                                <div className="h-full bg-pink-500 transition-all duration-1000" style={{ width: `${ownerInsights?.collection_efficiency || 0}%` }} />
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="bg-white shadow-sm border-none ring-1 ring-slate-200">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-semibold text-red-500 uppercase tracking-wider flex items-center gap-2">
-                                <AlertTriangle className="w-4 h-4" /> At-Risk Receivables
-                            </CardTitle>
-                        </CardHeader>
+                    <Card className="relative overflow-hidden border-none ring-1 ring-slate-200 shadow-sm">
+                        <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500" />
+                        <CardHeader className="pb-1"><CardTitle className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">At-Risk Receivables</CardTitle></CardHeader>
                         <CardContent>
-                            <div className="text-4xl font-bold text-slate-900">₹ {(ownerInsights?.outstanding_due || 0).toLocaleString("en-IN")}</div>
-                            <p className="text-xs text-slate-400 mt-2 font-medium">Money stuck outside the business</p>
+                            <div className="text-4xl font-black text-slate-900">₹{(ownerInsights?.outstanding_due || 0).toLocaleString("en-IN")}</div>
+                            <p className="text-[10px] text-red-500 mt-1 font-bold flex items-center gap-1 uppercase tracking-tighter">
+                                <AlertTriangle className="w-3 h-3" /> Capital Stuck Outside
+                            </p>
                         </CardContent>
                     </Card>
 
-                    <Card className="bg-white shadow-sm border-none ring-1 ring-slate-200">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-2">
-                                <Wallet className="w-4 h-4" /> Cash Received (Liquidity)
-                            </CardTitle>
-                        </CardHeader>
+                    <Card className="relative overflow-hidden border-none ring-1 ring-slate-200 shadow-sm">
+                        <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500" />
+                        <CardHeader className="pb-1"><CardTitle className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Cash Received (Liquidity)</CardTitle></CardHeader>
                         <CardContent>
-                            <div className="text-4xl font-bold text-slate-900">₹ {(ownerInsights?.total_collected || 0).toLocaleString("en-IN")}</div>
-                            <p className="text-xs text-slate-400 mt-2 font-medium">Actual bank/cash reality</p>
+                            <div className="text-4xl font-black text-slate-900">₹{(ownerInsights?.total_collected || 0).toLocaleString("en-IN")}</div>
+                            <p className="text-[10px] text-emerald-600 mt-1 font-bold flex items-center gap-1 uppercase tracking-tighter">
+                                <CheckCircle2 className="w-3 h-3" /> Actual Bank Inflow
+                            </p>
                         </CardContent>
                     </Card>
                 </div>
             </section>
 
-            {/* 2️⃣ LAYER TWO: BUSINESS OVERVIEW (Operational Performance) */}
+            {/* --- LAYER 2: BUSINESS OVERVIEW (Performance) --- */}
             <section className="space-y-6">
-                <div className="flex items-center gap-2 border-l-4 border-slate-400 pl-4">
-                    <Briefcase className="w-6 h-6 text-slate-600" />
-                    <div>
-                        <h2 className="text-2xl font-bold text-slate-900">Business Overview</h2>
-                        <p className="text-sm text-slate-500 font-medium italic">"How much business did we actually do?"</p>
-                    </div>
+                <div className="flex items-center gap-2 text-slate-900 border-l-4 border-indigo-500 pl-4">
+                    <Briefcase className="w-6 h-6 text-indigo-500" />
+                    <h2 className="text-2xl font-black uppercase tracking-tight">Business Overview</h2>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Card className="shadow-sm border-slate-200">
-                        <CardHeader className="p-4 pb-0"><CardDescription>Cash Generated</CardDescription></CardHeader>
-                        <CardContent className="p-4 pt-2">
-                            <div className="text-2xl font-bold text-slate-900">₹{(money?.total_collected || 0).toLocaleString("en-IN")}</div>
-                            <div className="text-[10px] text-indigo-500 font-bold mt-1 uppercase tracking-tighter">Operational Output</div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="shadow-sm border-slate-200">
-                        <CardHeader className="p-4 pb-0"><CardDescription>Expected Pipeline</CardDescription></CardHeader>
-                        <CardContent className="p-4 pt-2">
-                            <div className="text-2xl font-bold text-slate-900">₹{(money?.outstanding_due || 0).toLocaleString("en-IN")}</div>
-                            <div className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">Total Outstanding Due</div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="shadow-sm border-slate-200">
-                        <CardHeader className="p-4 pb-0"><CardDescription>Orders Completed</CardDescription></CardHeader>
-                        <CardContent className="p-4 pt-2">
-                            <div className="text-2xl font-bold text-slate-900">{invoices?.paid || 0}</div>
-                            <div className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">Invoices Fully Paid</div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="shadow-sm border-slate-200">
-                        <CardHeader className="p-4 pb-0"><CardDescription>Avg. Ticket Size</CardDescription></CardHeader>
-                        <CardContent className="p-4 pt-2">
-                            <div className="text-2xl font-bold text-slate-900">₹{Math.round((money?.total_invoiced || 0) / (invoices?.total || 1)).toLocaleString("en-IN")}</div>
-                            <div className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">Average Order Value</div>
-                        </CardContent>
-                    </Card>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[
+                        { label: "Ops Cash", val: overview?.money?.total_collected, sub: "Generated", icon: Wallet },
+                        { label: "Pipeline", val: overview?.money?.outstanding_due, sub: "Expected", icon: TrendingUp },
+                        { label: "Paid", val: overview?.invoices?.paid, sub: "Invoices Closed", isCurr: false, icon: CheckCircle2 },
+                        { label: "Avg Ticket", val: Math.round((overview?.money?.total_invoiced || 0) / (overview?.invoices?.total || 1)), sub: "Avg. Order Val", icon: ArrowUpRight }
+                    ].map((m, i) => (
+                        <Card key={i} className="border-slate-200 shadow-none hover:border-indigo-200 transition-colors">
+                            <CardContent className="p-5 flex items-center gap-4">
+                                <div className="p-2 bg-slate-50 rounded-lg"><m.icon className="w-4 h-4 text-slate-400" /></div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{m.label}</p>
+                                    <div className="text-xl font-black text-slate-900 mt-0.5">
+                                        {m.isCurr === false ? m.val : `₹${(m.val || 0).toLocaleString("en-IN")}`}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
                 </div>
             </section>
 
-            {/* 3️⃣ LAYER THREE: ANALYTICS (Operational Reality) */}
+            {/* --- LAYER 3: ANALYTICS (Factory Floor) --- */}
             <section className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 border-l-4 border-amber-500 pl-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex items-center gap-2 text-slate-900 border-l-4 border-amber-500 pl-4">
                         <Activity className="w-6 h-6 text-amber-500" />
-                        <div>
-                            <h2 className="text-2xl font-bold text-slate-900">Analytics</h2>
-                            <p className="text-sm text-slate-500 font-medium italic">"The Factory Floor Reality"</p>
-                        </div>
+                        <h2 className="text-2xl font-black uppercase tracking-tight">Operational Reality</h2>
                     </div>
-
-                    {/* TOGGLE FOR TREND VIEW */}
-                    <Tabs value={chartView} onValueChange={setChartView} className="w-[400px]">
+                    <Tabs value={chartView} onValueChange={setChartView} className="w-[350px]">
                         <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="revenue">Revenue Trends</TabsTrigger>
-                            <TabsTrigger value="cash">Cash Inflow</TabsTrigger>
+                            <TabsTrigger value="revenue">Revenue Mix</TabsTrigger>
+                            <TabsTrigger value="cash">Inflow Timing</TabsTrigger>
                         </TabsList>
                     </Tabs>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    {/* TOGGLEABLE TREND CHART */}
-                    <Card className="xl:col-span-2 shadow-md overflow-hidden">
-                        <CardHeader className="bg-slate-50/50 border-b">
-                            <CardTitle className="text-lg">
-                                {chartView === "revenue" ? "Revenue Visibility (Booked vs Confirmed)" : "Cash Flow Timing (Actual Inflow)"}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* CHART AREA */}
+                    <Card className="lg:col-span-2 shadow-sm border-none ring-1 ring-slate-200">
+                        <CardHeader className="bg-slate-50/50 border-b py-3 px-6">
+                            <CardTitle className="text-xs uppercase font-bold text-slate-500">
+                                {chartView === "revenue" ? "Revenue Visibility (Booked vs Confirmed)" : "Actual Cash Collection Flow"}
                             </CardTitle>
-                            <CardDescription>
-                                {chartView === "revenue"
-                                    ? "Gap between lines shows sales conversion speed"
-                                    : "Reveals payment cycles and seasonal spikes"}
-                            </CardDescription>
                         </CardHeader>
-                        <CardContent className="pt-6 h-[400px]">
+                        <CardContent className="h-[400px] pt-8">
                             <ResponsiveContainer width="100%" height="100%">
                                 {chartView === "revenue" ? (
-                                    <LineChart data={revenueChartData}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} />
-                                        <YAxis tickFormatter={(v) => `₹${v / 1000}k`} />
-                                        <Tooltip formatter={(v: any) => `₹ ${v.toLocaleString()}`} />
-                                        <Legend verticalAlign="top" height={36} />
-                                        <Line name="Booked (Draft + Final)" type="monotone" dataKey="booked" stroke="#6366f1" strokeWidth={3} dot={false} />
-                                        <Line name="Confirmed (Final Only)" type="monotone" dataKey="confirmed" stroke="#6366f1" strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                                    <LineChart data={revenueTrend}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString("en-IN", { day: 'numeric', month: 'short' })} tick={{ fontSize: 10 }} />
+                                        <YAxis tickFormatter={(v) => `₹${v / 1000}k`} tick={{ fontSize: 10 }} />
+                                        <Tooltip />
+                                        <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ fontSize: '10px', paddingBottom: '20px' }} />
+                                        <Line name="Booked (Pipeline)" type="monotone" dataKey="booked_revenue" stroke={BRAND.primary} strokeWidth={4} dot={false} />
+                                        <Line name="Confirmed (Billed)" type="monotone" dataKey="confirmed_revenue" stroke={BRAND.secondary} strokeDasharray="5 5" strokeWidth={2} dot={false} />
                                     </LineChart>
                                 ) : (
-                                    <LineChart data={cashInflowData}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} />
-                                        <YAxis tickFormatter={(v) => `₹${v / 1000}k`} />
-                                        <Tooltip formatter={(v: any) => `₹ ${v.toLocaleString()}`} />
-                                        <Line name="Cash Received" type="monotone" dataKey="total" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} />
+                                    <LineChart data={cashTrend}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString("en-IN", { day: 'numeric', month: 'short' })} tick={{ fontSize: 10 }} />
+                                        <YAxis tickFormatter={(v) => `₹${v / 1000}k`} tick={{ fontSize: 10 }} />
+                                        <Tooltip />
+                                        <Line name="Cash Inflow" type="monotone" dataKey="total" stroke={BRAND.success} strokeWidth={4} dot={{ r: 4, fill: BRAND.success }} />
                                     </LineChart>
                                 )}
                             </ResponsiveContainer>
                         </CardContent>
                     </Card>
 
-                    {/* OPERATIONS HEALTH */}
-                    <Card className="shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-lg flex items-center gap-2">
-                                <Activity className="w-4 h-4 text-slate-400" /> Factory Control Panel
-                            </CardTitle>
-                            <CardDescription>Order distribution by production stage</CardDescription>
-                        </CardHeader>
-                        <CardContent className="h-[300px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={processChartData} layout="vertical">
-                                    <XAxis type="number" hide />
-                                    <YAxis dataKey="stage" type="category" width={100} axisLine={false} tickLine={false} />
-                                    <Tooltip />
-                                    <Bar dataKey="total" fill="#94a3b8" radius={[0, 4, 4, 0]} barSize={20} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-
-                    {/* DELIVERY RISK */}
-                    <Card className="shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-lg">Delivery Risk (Future Problem Detector)</CardTitle>
-                            <CardDescription>Spot delays before they become customer complaints</CardDescription>
-                        </CardHeader>
-                        <CardContent className="h-[300px] flex items-center justify-center">
+                    {/* RISK PROFILE */}
+                    <Card className="shadow-sm border-none ring-1 ring-slate-200">
+                        <CardHeader className="py-3 px-6"><CardTitle className="text-xs uppercase font-bold text-slate-500 tracking-widest">Future Problem Detector</CardTitle></CardHeader>
+                        <CardContent className="h-[350px]">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                    <Pie data={deliveryRiskData} dataKey="total" nameKey="risk" innerRadius={60} outerRadius={90} paddingAngle={5}>
-                                        {deliveryRiskData.map((entry, index) => (
+                                    <Pie data={deliveryRisk} dataKey="total_orders" nameKey="risk" innerRadius={70} outerRadius={90} paddingAngle={10}>
+                                        {deliveryRisk.map((entry: any, index: number) => (
                                             <Cell key={`cell-${index}`} fill={RISK_COLORS[entry.risk] || "#cbd5e1"} />
                                         ))}
                                     </Pie>
                                     <Tooltip />
-                                    <Legend />
+                                    <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
                                 </PieChart>
                             </ResponsiveContainer>
                         </CardContent>
                     </Card>
 
-                    {/* VENDOR LOAD */}
-                    <Card className="xl:col-span-2 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-lg">Vendor Load Distribution</CardTitle>
-                            <CardDescription>Who is overloaded? Who can take more work?</CardDescription>
-                        </CardHeader>
-                        <CardContent className="h-[300px]">
+                    {/* VENDOR LOAD - FULL WIDTH */}
+                    <Card className="lg:col-span-3 shadow-sm border-none ring-1 ring-slate-200">
+                        <CardHeader className="py-3 px-6"><CardTitle className="text-xs uppercase font-bold text-slate-500 tracking-widest">Vendor Load Distribution (Factory Leverage)</CardTitle></CardHeader>
+                        <CardContent className="h-[300px] pt-6">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={vendorChartData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="vendor" axisLine={false} tickLine={false} />
-                                    <YAxis axisLine={false} tickLine={false} />
-                                    <Tooltip />
-                                    <Bar dataKey="total" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={40} />
+                                <BarChart data={vendorLoad.filter((v: any) => v.vendor_name !== 'Unassigned')}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="vendor_name" tick={{ fontSize: 11, fontWeight: 'bold' }} axisLine={false} />
+                                    <YAxis tick={{ fontSize: 10 }} axisLine={false} />
+                                    <Tooltip cursor={{ fill: '#f8fafc' }} />
+                                    <Bar dataKey="active_orders" name="Active Orders" fill={BRAND.secondary} radius={[6, 6, 0, 0]} barSize={45} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </CardContent>
                     </Card>
-                </div>
-            </section>
-
-            {/* 4️⃣ REPORTS LIBRARY */}
-            <section className="space-y-4">
-                <h2 className="text-xl font-bold text-slate-900">Reports Library (Export Center)</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[
-                        { title: "Cash Flow Report", desc: "Payments received analysis", icon: Wallet },
-                        { title: "Sales Report", desc: "Invoiced revenue performance", icon: TrendingUp },
-                        { title: "Outstanding Report", desc: "Dues and collection risks", icon: AlertTriangle },
-                        { title: "Operations Report", desc: "Vendor efficiency & workflow", icon: FileText },
-                    ].map((item) => (
-                        <Card key={item.title} className="hover:ring-2 hover:ring-indigo-500 transition-all cursor-pointer group">
-                            <CardContent className="p-6 flex items-start gap-4">
-                                <div className="p-2 bg-slate-100 rounded group-hover:bg-indigo-50">
-                                    <item.icon className="w-5 h-5 text-slate-500 group-hover:text-indigo-600" />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-slate-900">{item.title}</h3>
-                                    <p className="text-xs text-slate-500">{item.desc}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
                 </div>
             </section>
         </div>
