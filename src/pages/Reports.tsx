@@ -17,31 +17,105 @@ import {
     Pie,
     Cell,
 } from "recharts";
+import React from "react";
+import { useMemo } from "react";
 
 export default function Reports() {
+    /* =========================
+       REPORT PERIOD STATE (LOCAL TO REPORTS PAGE)
+    ========================== */
+
+    type ReportPeriod =
+        | "today"
+        | "last_7_days"
+        | "this_month"
+        | "this_year"
+        | "custom";
+
+    const [period, setPeriod] = React.useState<ReportPeriod>("this_month");
+
+    const [customRange, setCustomRange] = React.useState<{
+        startDate: string | null;
+        endDate: string | null;
+    }>({
+        startDate: null,
+        endDate: null,
+    });
+
+    /* =========================
+       DERIVE DATE RANGE (REPORTS ONLY)
+    ========================== */
+
+    const { fromDate, toDate } = useMemo(() => {
+        const now = new Date();
+        const start = new Date(now);
+
+        switch (period) {
+            case "today":
+                start.setHours(0, 0, 0, 0);
+                break;
+
+            case "last_7_days":
+                start.setDate(now.getDate() - 6);
+                break;
+
+            case "this_month":
+                start.setDate(1);
+                break;
+
+            case "this_year":
+                start.setMonth(0, 1);
+                break;
+
+            case "custom":
+                return {
+                    fromDate: customRange.startDate,
+                    toDate: customRange.endDate,
+                };
+        }
+
+        return {
+            fromDate: start.toISOString().slice(0, 10),
+            toDate: now.toISOString().slice(0, 10),
+        };
+    }, [period, customRange]);
+
+    /* =========================
+       PERIOD READY CHECK
+    ========================== */
+
+    const isRangeReady =
+        fromDate !== null &&
+        toDate !== null &&
+        fromDate !== undefined &&
+        toDate !== undefined;
     /* =========================
        BUSINESS OVERVIEW DATA
     ========================== */
 
     const { data: overview } = useQuery({
-        queryKey: ["monthly-owner-summary"],
+        enabled: isRangeReady,
+        queryKey: ["monthly-owner-summary", period, fromDate, toDate],
         queryFn: async () => {
             const { data, error } = await (supabase as any)
-                .rpc("get_monthly_owner_summary");
+                .rpc("get_owner_summary", {
+                    from_date: fromDate,
+                    to_date: toDate,
+                });
 
             if (error) throw error;
 
             // Supabase RPC can return:
-            // 1) [{ get_monthly_owner_summary: {...} }]
-            // 2) { get_monthly_owner_summary: {...} }
+            // 1) [{ get_owner_summary: {...} }]
+            // 2) { get_owner_summary: {...} }
             // 3) {...} (direct object depending on client/runtime)
 
             let result: any = null;
 
             if (Array.isArray(data)) {
-                result = data?.[0]?.get_monthly_owner_summary ?? data?.[0];
-            } else if (data?.get_monthly_owner_summary) {
-                result = data.get_monthly_owner_summary;
+                result = data?.[0]?.get_owner_summary ?? data?.[0];
+            } else if (data?.get_owner_summary) {
+                result = data.get_owner_summary;
             } else {
                 result = data;
             }
@@ -55,10 +129,14 @@ export default function Reports() {
     ========================== */
 
     const { data: ownerInsights } = useQuery({
-        queryKey: ["owner-insights"],
+        enabled: isRangeReady,
+        queryKey: ["owner-insights", period, fromDate, toDate],
         queryFn: async () => {
             const { data, error } = await (supabase as any)
-                .rpc("get_owner_insights");
+                .rpc("get_owner_insights", {
+                    from_date: fromDate,
+                    to_date: toDate,
+                });
 
             if (error) throw error;
 
@@ -124,10 +202,14 @@ export default function Reports() {
     ========================== */
 
     const { data: cashTrend = [] } = useQuery({
-        queryKey: ["cash-inflow-trend"],
+        enabled: isRangeReady,
+        queryKey: ["cash-inflow-trend", period, fromDate, toDate],
         queryFn: async () => {
             const { data, error } = await (supabase as any)
-                .rpc("get_cash_inflow_daily");
+                .rpc("get_cash_inflow_daily", {
+                    from_date: fromDate,
+                    to_date: toDate,
+                });
 
             if (error) throw error;
 
@@ -140,10 +222,14 @@ export default function Reports() {
     ========================== */
 
     const { data: revenueTrend = [] } = useQuery({
-        queryKey: ["revenue-trend"],
+        enabled: isRangeReady,
+        queryKey: ["revenue-trend", period, fromDate, toDate],
         queryFn: async () => {
             const { data, error } = await (supabase as any)
-                .rpc("get_revenue_trend");
+                .rpc("get_revenue_trend", {
+                    from_date: fromDate,
+                    to_date: toDate,
+                });
 
             if (error) throw error;
 
@@ -156,7 +242,8 @@ export default function Reports() {
     ========================== */
 
     const { data: processData = [] } = useQuery({
-        queryKey: ["process-breakdown"],
+        enabled: isRangeReady,
+        queryKey: ["process-breakdown", period, fromDate, toDate],
         queryFn: async () => {
             const { data, error } = await (supabase as any)
                 .rpc("get_process_breakdown");
@@ -171,7 +258,8 @@ export default function Reports() {
     ========================== */
 
     const { data: vendorLoad = [] } = useQuery({
-        queryKey: ["vendor-load"],
+        enabled: isRangeReady,
+        queryKey: ["vendor-load", period, fromDate, toDate],
         queryFn: async () => {
             const { data, error } = await (supabase as any)
                 .rpc("get_vendor_load");
@@ -186,7 +274,8 @@ export default function Reports() {
     ========================== */
 
     const { data: deliveryRisk = [] } = useQuery({
-        queryKey: ["delivery-risk"],
+        enabled: isRangeReady,
+        queryKey: ["delivery-risk", period, fromDate, toDate],
         queryFn: async () => {
             const { data, error } = await (supabase as any)
                 .rpc("get_delivery_risk");
@@ -225,10 +314,23 @@ export default function Reports() {
         total: Number(row.total_orders || 0),
     }));
 
+    /* =========================
+       CHART COLOR SYSTEM (CONSISTENT BRANDING)
+    ========================== */
+
+    const BRAND_PRIMARY = "#ec4899";      // pink (brand)
+    const BRAND_SECONDARY = "#6366f1";    // indigo
+    const BRAND_MUTED = "#94a3b8";        // slate
+    const BRAND_SUCCESS = "#22c55e";      // green
+    const BRAND_WARNING = "#f59e0b";      // amber
+    const BRAND_DANGER = "#ef4444";       // red
+
+    const GRID_COLOR = "#e5e7eb";
+
     const RISK_COLORS: Record<string, string> = {
-        Delayed: "#ef4444",
-        "Due Soon": "#f59e0b",
-        "On Track": "#22c55e",
+        Delayed: BRAND_DANGER,
+        "Due Soon": BRAND_WARNING,
+        "On Track": BRAND_SUCCESS,
     };
 
     return (
@@ -242,9 +344,38 @@ export default function Reports() {
                     </p>
                 </div>
 
-                <div className="flex gap-2">
-                    <Button variant="outline">This Month</Button>
-                    <Button variant="outline">Export Summary</Button>
+                <div className="flex gap-2 flex-wrap">
+                    <Button
+                        variant={period === "today" ? "default" : "outline"}
+                        onClick={() => setPeriod("today")}
+                    >
+                        Today
+                    </Button>
+
+                    <Button
+                        variant={period === "last_7_days" ? "default" : "outline"}
+                        onClick={() => setPeriod("last_7_days")}
+                    >
+                        Last 7 Days
+                    </Button>
+
+                    <Button
+                        variant={period === "this_month" ? "default" : "outline"}
+                        onClick={() => setPeriod("this_month")}
+                    >
+                        This Month
+                    </Button>
+
+                    <Button
+                        variant={period === "this_year" ? "default" : "outline"}
+                        onClick={() => setPeriod("this_year")}
+                    >
+                        This Year
+                    </Button>
+
+                    <Button variant="outline">
+                        Export Summary
+                    </Button>
                 </div>
             </div>
 
@@ -407,9 +538,9 @@ export default function Reports() {
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart
                                             data={revenueChartData}
-                                            margin={{ top: 10, right: 20, left: 0, bottom: 80 }}
+                                            margin={{ top: 20, right: 20, left: 10, bottom: 20 }}
                                         >
-                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" />
 
                                             <XAxis
                                                 dataKey="date"
@@ -420,7 +551,7 @@ export default function Reports() {
                                                     })
                                                 }
                                                 tick={{ fontSize: 12 }}
-                                                height={30}
+                                                height={40}
                                             />
 
                                             <YAxis
@@ -430,8 +561,16 @@ export default function Reports() {
                                             />
 
                                             <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: "#ffffff",
+                                                    borderRadius: "8px",
+                                                    border: "1px solid #e5e7eb",
+                                                    boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+                                                }}
                                                 formatter={(value: number) =>
-                                                    `₹ ${value.toLocaleString("en-IN")}`
+                                                    typeof value === "number"
+                                                        ? `₹ ${value.toLocaleString("en-IN")}`
+                                                        : value
                                                 }
                                                 labelFormatter={(date) =>
                                                     new Date(date).toLocaleDateString("en-IN", {
@@ -446,6 +585,7 @@ export default function Reports() {
                                             <Line
                                                 type="monotone"
                                                 dataKey="booked"
+                                                stroke={BRAND_PRIMARY}
                                                 strokeWidth={3}
                                                 dot={false}
                                                 activeDot={{ r: 6 }}
@@ -455,6 +595,7 @@ export default function Reports() {
                                             <Line
                                                 type="monotone"
                                                 dataKey="confirmed"
+                                                stroke={BRAND_SECONDARY}
                                                 strokeDasharray="5 5"
                                                 strokeWidth={2}
                                                 dot={false}
@@ -480,9 +621,9 @@ export default function Reports() {
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart
                                             data={chartData}
-                                            margin={{ top: 10, right: 20, left: 0, bottom: 80 }}
+                                            margin={{ top: 20, right: 20, left: 10, bottom: 20 }}
                                         >
-                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" />
 
                                             <XAxis
                                                 dataKey="date"
@@ -493,7 +634,7 @@ export default function Reports() {
                                                     })
                                                 }
                                                 tick={{ fontSize: 12 }}
-                                                height={30}
+                                                height={40}
                                             />
 
                                             <YAxis
@@ -503,8 +644,16 @@ export default function Reports() {
                                             />
 
                                             <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: "#ffffff",
+                                                    borderRadius: "8px",
+                                                    border: "1px solid #e5e7eb",
+                                                    boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+                                                }}
                                                 formatter={(value: number) =>
-                                                    `₹ ${value.toLocaleString("en-IN")}`
+                                                    typeof value === "number"
+                                                        ? `₹ ${value.toLocaleString("en-IN")}`
+                                                        : value
                                                 }
                                                 labelFormatter={(date) =>
                                                     new Date(date).toLocaleDateString("en-IN", {
@@ -518,6 +667,7 @@ export default function Reports() {
                                             <Line
                                                 type="monotone"
                                                 dataKey="total"
+                                                stroke={BRAND_SUCCESS}
                                                 strokeWidth={3}
                                                 dot={false}
                                                 activeDot={{ r: 6 }}
@@ -529,39 +679,52 @@ export default function Reports() {
                         </CardContent>
                     </Card>
 
-                    <Card className="h-[340px] xl:col-span-2">
+                    <Card className="xl:col-span-2">
                         <CardHeader>
                             <CardTitle>Operations Health</CardTitle>
                         </CardHeader>
-                        <CardContent className="h-full min-h-0">
+                        <CardContent className="pt-0">
                             {processChartData.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-muted-foreground">
                                     No active orders
                                 </div>
                             ) : (
-                                <div className="w-full h-full min-h-0">
+                                <div className="w-full h-[300px]">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart
                                             data={processChartData}
                                             layout="vertical"
-                                            margin={{ top: 10, right: 20, left: 20, bottom: 10 }}
+                                            margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
                                         >
-                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" />
 
                                             <XAxis type="number" />
 
                                             <YAxis
                                                 type="category"
                                                 dataKey="stage"
-                                                width={120}
+                                                width={100}
                                                 tick={{ fontSize: 12 }}
                                             />
 
-                                            <Tooltip formatter={(value: number) => `${value} orders`} />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: "#ffffff",
+                                                    borderRadius: "8px",
+                                                    border: "1px solid #e5e7eb",
+                                                    boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+                                                }}
+                                                formatter={(value: number) =>
+                                                    typeof value === "number"
+                                                        ? `${value} orders`
+                                                        : value
+                                                }
+                                            />
 
                                             <Bar
                                                 dataKey="total"
-                                                radius={[6, 6, 6, 6]}
+                                                fill={BRAND_SECONDARY}
+                                                radius={[8, 8, 8, 8]}
                                             />
                                         </BarChart>
                                     </ResponsiveContainer>
@@ -570,25 +733,25 @@ export default function Reports() {
                         </CardContent>
                     </Card>
 
-                    <Card className="h-[340px] xl:col-span-2">
+                    <Card className="xl:col-span-2">
                         <CardHeader>
                             <CardTitle>Vendor Load</CardTitle>
                         </CardHeader>
-                        <CardContent className="h-full min-h-0">
+                        <CardContent className="pt-0">
                             {vendorChartData.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-muted-foreground">
                                     No vendor activity
                                 </div>
                             ) : (
-                                <div className="w-full h-full min-h-0">
+                                <div className="w-full h-[300px]">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart
                                             data={vendorChartData}
-                                            margin={{ top: 10, right: 20, left: 0, bottom: 20 }}
-                                            barCategoryGap="30%"
+                                            margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
+                                            barCategoryGap="40%"
                                             barGap={4}
                                         >
-                                            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                                            <CartesianGrid vertical={false} stroke={GRID_COLOR} strokeDasharray="3 3" />
 
                                             <XAxis
                                                 dataKey="vendor"
@@ -596,7 +759,7 @@ export default function Reports() {
                                                 interval={0}
                                                 angle={0}
                                                 textAnchor="middle"
-                                                height={30}
+                                                height={50}
                                                 tickMargin={8}
                                             />
 
@@ -605,13 +768,24 @@ export default function Reports() {
                                                 tick={{ fontSize: 12 }}
                                             />
 
-                                            <Tooltip formatter={(value: number) => `${value} active orders`} />
-
-                                            <Legend />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: "#ffffff",
+                                                    borderRadius: "8px",
+                                                    border: "1px solid #e5e7eb",
+                                                    boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+                                                }}
+                                                formatter={(value: number) =>
+                                                    typeof value === "number"
+                                                        ? `${value} active orders`
+                                                        : value
+                                                }
+                                            />
 
                                             <Bar
                                                 dataKey="total"
                                                 name="Active Orders"
+                                                fill={BRAND_PRIMARY}
                                                 radius={[6, 6, 0, 0]}
                                                 barSize={30}
                                             />
@@ -622,18 +796,17 @@ export default function Reports() {
                         </CardContent>
                     </Card>
 
-                    <Card className="h-[340px] xl:col-span-2">
+                    <Card className="xl:col-span-2">
                         <CardHeader>
                             <CardTitle>Delivery Risk</CardTitle>
                         </CardHeader>
-
-                        <CardContent className="h-full min-h-0">
+                        <CardContent className="pt-0">
                             {deliveryRiskData.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-muted-foreground">
                                     No delivery data
                                 </div>
                             ) : (
-                                <div className="w-full h-full flex items-center justify-center">
+                                <div className="w-full h-[320px] flex items-center justify-center">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
                                             <Pie
@@ -653,10 +826,33 @@ export default function Reports() {
                                             </Pie>
 
                                             <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: "#ffffff",
+                                                    borderRadius: "8px",
+                                                    border: "1px solid #e5e7eb",
+                                                    boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+                                                }}
                                                 formatter={(value: number) =>
-                                                    `${value} orders`
+                                                    typeof value === "number"
+                                                        ? `${value} orders`
+                                                        : value
                                                 }
                                             />
+
+                                            {(() => {
+                                                const total = deliveryRiskData.reduce((sum: number, r: any) => sum + r.total, 0);
+                                                return (
+                                                    <text
+                                                        x="50%"
+                                                        y="50%"
+                                                        textAnchor="middle"
+                                                        dominantBaseline="middle"
+                                                        style={{ fontSize: "16px", fontWeight: 600 }}
+                                                    >
+                                                        {total}
+                                                    </text>
+                                                );
+                                            })()}
 
                                             <Legend />
                                         </PieChart>

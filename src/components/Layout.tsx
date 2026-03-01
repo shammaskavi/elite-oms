@@ -12,7 +12,8 @@ import {
   LogOut,
   Menu,
   X,
-  BadgeIndianRupee
+  BadgeIndianRupee,
+  FileChartPie
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ const navigation = [
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Products", href: "/products", icon: ShoppingBag },
   { name: "Payments", href: "/payments", icon: BadgeIndianRupee },
+  { name: "Reports", href: "/reports", icon: FileChartPie },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
