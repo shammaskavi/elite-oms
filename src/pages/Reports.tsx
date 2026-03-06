@@ -494,6 +494,291 @@ export default function Reports() {
         doc.save(`sales-report-${fromDate}-to-${toDate}.pdf`);
     }
 
+    /* =========================
+       OUTSTANDING REPORT GENERATOR
+    ========================== */
+
+    const generateOutstandingReport = async () => {
+        if (!fromDate || !toDate) return;
+
+        const { data: invoices, error } = await (supabase as any)
+            .from("invoices")
+            .select(`
+                id,
+                invoice_number,
+                date,
+                total,
+                customers(name, phone),
+                invoice_payments(amount)
+            `)
+            .gte("date", fromDate)
+            .lte("date", toDate)
+            .order("date", { ascending: true });
+
+        if (error) {
+            console.error("Outstanding report error:", error);
+            return;
+        }
+
+        const today = new Date();
+
+        const rows = (invoices || [])
+            .map((inv: any) => {
+                const paid = (inv.invoice_payments || []).reduce(
+                    (sum: number, p: any) => sum + Number(p.amount || 0),
+                    0
+                );
+
+                const total = Number(inv.total || 0);
+                const due = Math.max(total - paid, 0);
+
+                if (due <= 0) return null;
+
+                const invDate = new Date(inv.date);
+
+                const ageDays = Math.floor(
+                    (today.getTime() - invDate.getTime()) /
+                    (1000 * 60 * 60 * 24)
+                );
+
+                return {
+                    invoice: inv.invoice_number,
+                    date: invDate,
+                    dateStr: invDate.toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                    }),
+                    customer: inv.customers?.name || "",
+                    phone: inv.customers?.phone || "",
+                    total,
+                    paid,
+                    due,
+                    age: ageDays,
+                };
+            })
+            .filter(Boolean);
+
+        const formatCurrency = (value: number) =>
+            `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
+
+        const totalOutstanding = rows.reduce(
+            (sum: number, r: any) => sum + r.due,
+            0
+        );
+
+        const invoiceCount = rows.length;
+
+        const customerSet = new Set(rows.map((r: any) => r.customer));
+        const customerCount = customerSet.size;
+
+        const avgDue =
+            invoiceCount > 0
+                ? Math.round(totalOutstanding / invoiceCount)
+                : 0;
+
+        /* =========================
+           AGING BUCKETS
+        ========================== */
+
+        const aging = {
+            "0-7": 0,
+            "8-15": 0,
+            "16-30": 0,
+            "30+": 0,
+        };
+
+        rows.forEach((r: any) => {
+            if (r.age <= 7) aging["0-7"] += r.due;
+            else if (r.age <= 15) aging["8-15"] += r.due;
+            else if (r.age <= 30) aging["16-30"] += r.due;
+            else aging["30+"] += r.due;
+        });
+
+        /* =========================
+           CUSTOMER SUMMARY
+        ========================== */
+
+        const customerMap: Record<
+            string,
+            { phone: string; invoices: number; due: number }
+        > = {};
+
+        rows.forEach((r: any) => {
+            if (!customerMap[r.customer]) {
+                customerMap[r.customer] = {
+                    phone: r.phone,
+                    invoices: 0,
+                    due: 0,
+                };
+            }
+
+            customerMap[r.customer].invoices += 1;
+            customerMap[r.customer].due += r.due;
+        });
+
+        const customerSummary = Object.entries(customerMap)
+            .map(([name, data]) => ({
+                customer: name,
+                phone: data.phone,
+                invoices: data.invoices,
+                due: data.due,
+            }))
+            .sort((a, b) => b.due - a.due)
+            .slice(0, 20);
+
+        /* =========================
+           PDF GENERATION
+        ========================== */
+
+        const doc = new jsPDF();
+
+        doc.setFontSize(18);
+        doc.text("Saree Palace Elite", 14, 18);
+
+        doc.setFontSize(14);
+        doc.text("Outstanding Report", 14, 26);
+
+        doc.setFontSize(10);
+
+        doc.text(
+            `Period: ${new Date(fromDate).toLocaleDateString(
+                "en-IN",
+                { day: "2-digit", month: "short", year: "numeric" }
+            )} - ${new Date(toDate).toLocaleDateString(
+                "en-IN",
+                { day: "2-digit", month: "short", year: "numeric" }
+            )}`,
+            14,
+            34
+        );
+
+        doc.text(
+            `Generated: ${new Date().toLocaleDateString(
+                "en-IN",
+                { day: "2-digit", month: "short", year: "numeric" }
+            )}`,
+            14,
+            40
+        );
+
+        /* =========================
+           SUMMARY SECTION
+        ========================== */
+
+        doc.setFontSize(12);
+        doc.text("SUMMARY", 14, 52);
+
+        doc.setFontSize(10);
+
+        doc.text(`Total Outstanding : ${formatCurrency(totalOutstanding)}`, 14, 60);
+        doc.text(`Invoices Pending  : ${invoiceCount}`, 14, 66);
+        doc.text(`Customers with Dues : ${customerCount}`, 14, 72);
+        doc.text(`Average Due per Invoice : ${formatCurrency(avgDue)}`, 14, 78);
+
+        /* =========================
+           AGING ANALYSIS
+        ========================== */
+
+        doc.setFontSize(12);
+        doc.text("AGING ANALYSIS", 14, 94);
+
+        doc.setFontSize(10);
+
+        doc.text(`0–7 days  : ${formatCurrency(aging["0-7"])}`, 14, 102);
+        doc.text(`8–15 days : ${formatCurrency(aging["8-15"])}`, 14, 108);
+        doc.text(`16–30 days : ${formatCurrency(aging["16-30"])}`, 14, 114);
+        doc.text(`30+ days  : ${formatCurrency(aging["30+"])}`, 14, 120);
+
+        /* =========================
+           CUSTOMER SUMMARY TABLE
+        ========================== */
+
+        doc.setFontSize(12);
+        doc.text("CUSTOMER SUMMARY", 14, 128);
+        autoTable(doc, {
+            startY: 134,
+            head: [["Customer", "Phone", "Invoices", "Due"]],
+            body: customerSummary.map((c) => [
+                c.customer,
+                c.phone,
+                c.invoices,
+                formatCurrency(c.due),
+            ]),
+            theme: "grid",
+            styles: { fontSize: 9, cellPadding: 3 },
+            headStyles: {
+                fillColor: [236, 72, 153],
+                textColor: 255,
+            },
+            columnStyles: {
+                0: { cellWidth: 70 }, // Customer
+                1: { cellWidth: 40 }, // Phone
+                2: { halign: "center", cellWidth: 28 }, // Invoices
+                3: { halign: "right", cellWidth: 42 }, // Due
+            },
+        });
+
+        /* =========================
+           OUTSTANDING INVOICE TABLE
+        ========================== */
+
+        doc.setFontSize(12);
+        doc.text("OUTSTANDING INVOICE DETAILS", 14, doc.lastAutoTable.finalY + 8);
+        autoTable(doc, {
+            startY: doc.lastAutoTable.finalY + 14,
+            head: [[
+                "Invoice",
+                "Date",
+                "Customer",
+                "Phone",
+                "Total",
+                "Paid",
+                "Due",
+                "Age",
+            ]],
+            body: rows.map((r: any) => [
+                r.invoice,
+                r.dateStr,
+                r.customer,
+                r.phone,
+                formatCurrency(r.total),
+                formatCurrency(r.paid),
+                formatCurrency(r.due),
+                `${r.age}d`,
+            ]),
+            theme: "grid",
+            styles: { fontSize: 9, cellPadding: 3 },
+            headStyles: {
+                fillColor: [236, 72, 153],
+                textColor: 255,
+                fontStyle: "bold",
+            },
+            columnStyles: {
+                0: { cellWidth: 20 }, // Invoice
+                1: { cellWidth: 20 }, // Date
+                2: { cellWidth: 38 }, // Customer
+                3: { cellWidth: 30 }, // Phone
+                4: { halign: "right", cellWidth: 20 }, // Total
+                5: { halign: "right", cellWidth: 20 }, // Paid
+                6: { halign: "right", cellWidth: 20 }, // Due
+                7: { halign: "center", cellWidth: 12 }, // Age
+            },
+            didDrawPage: (data) => {
+                const pageHeight = doc.internal.pageSize.height;
+
+                doc.setFontSize(9);
+                doc.text(
+                    "Generated by Elite OMS",
+                    data.settings.margin.left,
+                    pageHeight - 10
+                );
+            },
+        });
+
+        doc.save(`outstanding-report-${fromDate}-to-${toDate}.pdf`);
+    };
+
     return (
         <div className="p-6 space-y-8 max-w-7xl mx-auto">
             {/* Page Header */}
@@ -1053,7 +1338,10 @@ export default function Reports() {
                         </CardContent>
                     </Card>
 
-                    <Card className="cursor-pointer hover:shadow-md transition">
+                    <Card
+                        className="cursor-pointer hover:shadow-md transition"
+                        onClick={generateOutstandingReport}
+                    >
                         <CardContent className="p-6">
                             <h3 className="font-semibold">Outstanding Report</h3>
                             <p className="text-sm text-muted-foreground mt-1">
