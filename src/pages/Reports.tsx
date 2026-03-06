@@ -19,6 +19,8 @@ import {
 } from "recharts";
 import React from "react";
 import { useMemo } from "react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function Reports() {
     /* =========================
@@ -332,6 +334,165 @@ export default function Reports() {
         "Due Soon": BRAND_WARNING,
         "On Track": BRAND_SUCCESS,
     };
+
+    /* =========================
+       SALES REPORT GENERATOR
+    ========================== */
+
+    const generateSalesReport = async () => {
+        if (!fromDate || !toDate) return;
+
+        const { data: invoices, error } = await (supabase as any)
+            .from("invoices")
+            .select(`
+                invoice_number,
+                date,
+                total,
+                payment_status,
+                customers(name, phone),
+                invoice_items(id)
+            `)
+            .gte("date", fromDate)
+            .lte("date", toDate)
+            .order("total", { ascending: false });
+
+        if (error) {
+            console.error("Sales report error:", error);
+            return;
+        }
+
+        const rows = (invoices || []).map((inv: any) => ({
+            invoice: inv.invoice_number,
+            date: new Date(inv.date).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            }),
+            customer: inv.customers?.name || "",
+            phone: inv.customers?.phone || "",
+            items: inv.invoice_items?.length || 0,
+            total: Number(inv.total || 0),
+            status: inv.payment_status,
+        }));
+
+        const totalRevenue = rows.reduce(
+            (sum: number, r: any) => sum + r.total,
+            0
+        );
+
+        const avgInvoice =
+            rows.length > 0 ? Math.round(totalRevenue / rows.length) : 0;
+
+        const formatCurrency = (value: number) =>
+            `Rs. ${value.toLocaleString("en-IN")}`;
+
+        const doc = new jsPDF();
+
+        /* =========================
+           HEADER
+        ========================== */
+
+        doc.setFontSize(18);
+        doc.text("Saree Palace Elite", 14, 18);
+
+        doc.setFontSize(14);
+        doc.text("Sales Report", 14, 26);
+
+        doc.setFontSize(10);
+        doc.text(
+            `Period: ${new Date(fromDate).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            })} - ${new Date(toDate).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            })}`,
+            14,
+            34
+        );
+
+        doc.text(
+            `Generated: ${new Date().toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            })}`,
+            14,
+            40
+        );
+
+        /* =========================
+           SUMMARY
+        ========================== */
+
+        doc.setFontSize(12);
+        doc.text("Summary", 14, 52);
+
+        doc.setFontSize(10);
+        doc.text(`Total Revenue : ${formatCurrency(totalRevenue)}`, 14, 60);
+        doc.text(`Invoices      : ${rows.length}`, 14, 66);
+        doc.text(`Avg Invoice   : ${formatCurrency(avgInvoice)}`, 14, 72);
+
+        /* =========================
+           TABLE
+        ========================== */
+
+        autoTable(doc, {
+            startY: 82,
+            head: [[
+                "Invoice",
+                "Date",
+                "Customer",
+                "Phone",
+                "Items",
+                "Total",
+                "Status"
+            ]],
+            body: rows.map((r: any) => [
+                r.invoice,
+                r.date,
+                r.customer,
+                r.phone,
+                r.items,
+                formatCurrency(r.total),
+                r.status
+            ]),
+            theme: "grid",
+            styles: {
+                fontSize: 9,
+                cellPadding: 3,
+            },
+            headStyles: {
+                fillColor: [236, 72, 153],
+                textColor: 255,
+                fontStyle: "bold",
+            },
+            columnStyles: {
+                0: { cellWidth: 30 },
+                1: { cellWidth: 28 },
+                2: { cellWidth: 40 },
+                3: { cellWidth: 30 },
+                4: { halign: "center", cellWidth: 16 },
+                5: { halign: "right", cellWidth: 28 },
+                6: { halign: "center", cellWidth: 22 },
+            },
+            didDrawPage: (data) => {
+                const pageSize = doc.internal.pageSize;
+                const pageHeight = pageSize.height || pageSize.getHeight();
+
+                doc.setFontSize(9);
+                doc.text(
+                    "Generated by Elite OMS",
+                    data.settings.margin.left,
+                    pageHeight - 10
+                );
+            },
+        });
+
+        doc.save(`sales-report-${fromDate}-to-${toDate}.pdf`);
+    }
 
     return (
         <div className="p-6 space-y-8 max-w-7xl mx-auto">
@@ -880,7 +1041,10 @@ export default function Reports() {
                         </CardContent>
                     </Card>
 
-                    <Card className="cursor-pointer hover:shadow-md transition">
+                    <Card
+                        className="cursor-pointer hover:shadow-md transition"
+                        onClick={generateSalesReport}
+                    >
                         <CardContent className="p-6">
                             <h3 className="font-semibold">Sales Report</h3>
                             <p className="text-sm text-muted-foreground mt-1">
