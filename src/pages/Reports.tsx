@@ -336,6 +336,212 @@ export default function Reports() {
     };
 
     /* =========================
+       CASH FLOW REPORT GENERATOR
+    ========================== */
+
+    const generateCashFlowReport = async () => {
+        if (!fromDate || !toDate) return;
+
+        const { data: payments, error } = await (supabase as any)
+            .from("invoice_payments")
+            .select(`
+                amount,
+                method,
+                date,
+                invoices(
+                    invoice_number,
+                    customers(name, phone)
+                )
+            `)
+            .gte("date", fromDate)
+            .lte("date", toDate)
+            .order("date", { ascending: false });
+
+        if (error) {
+            console.error("Cash flow report error:", error);
+            return;
+        }
+
+        const rows = (payments || []).map((p: any) => ({
+            date: new Date(p.date).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            }),
+            invoice: p.invoices?.invoice_number || "",
+            customer: p.invoices?.customers?.name || "",
+            phone: p.invoices?.customers?.phone || "",
+            method: p.method || "",
+            amount: Number(p.amount || 0),
+        }));
+
+        const formatCurrency = (value: number) =>
+            `Rs. ${value.toLocaleString("en-IN")}`;
+
+        const totalReceived = rows.reduce(
+            (sum: number, r: any) => sum + r.amount,
+            0
+        );
+
+        const paymentCount = rows.length;
+
+        const avgPayment =
+            paymentCount > 0
+                ? Math.round(totalReceived / paymentCount)
+                : 0;
+
+        const customerSet = new Set(rows.map((r: any) => r.customer));
+        const uniqueCustomers = customerSet.size;
+
+        const methodMap: Record<string, number> = {};
+
+        rows.forEach((r: any) => {
+            if (!methodMap[r.method]) methodMap[r.method] = 0;
+            methodMap[r.method] += r.amount;
+        });
+
+        const methodRows = Object.entries(methodMap)
+            .map(([method, amount]) => ({ method, amount }))
+            .sort((a, b) => b.amount - a.amount);
+
+        const customerMap: Record<
+            string,
+            { phone: string; payments: number; amount: number }
+        > = {};
+
+        rows.forEach((r: any) => {
+            if (!customerMap[r.customer]) {
+                customerMap[r.customer] = {
+                    phone: r.phone,
+                    payments: 0,
+                    amount: 0,
+                };
+            }
+
+            customerMap[r.customer].payments += 1;
+            customerMap[r.customer].amount += r.amount;
+        });
+
+        const topCustomers = Object.entries(customerMap)
+            .map(([name, data]) => ({
+                customer: name,
+                phone: data.phone,
+                payments: data.payments,
+                amount: data.amount,
+            }))
+            .sort((a, b) => b.amount - a.amount)
+            .slice(0, 20);
+
+        const doc = new jsPDF();
+
+        doc.setFontSize(18);
+        doc.text("Saree Palace Elite", 14, 18);
+
+        doc.setFontSize(14);
+        doc.text("Cash Flow Report", 14, 26);
+
+        doc.setFontSize(10);
+
+        doc.text(
+            `Period: ${new Date(fromDate).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            })} - ${new Date(toDate).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            })}`,
+            14,
+            34
+        );
+
+        doc.text(
+            `Generated: ${new Date().toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+            })}`,
+            14,
+            40
+        );
+
+        doc.setFontSize(12);
+        doc.text("SUMMARY", 14, 52);
+
+        doc.setFontSize(10);
+        doc.text(`Total Cash Received : ${formatCurrency(totalReceived)}`, 14, 60);
+        doc.text(`Total Payments      : ${paymentCount}`, 14, 66);
+        doc.text(`Average Payment     : ${formatCurrency(avgPayment)}`, 14, 72);
+        doc.text(`Unique Customers    : ${uniqueCustomers}`, 14, 78);
+
+        doc.setFontSize(12);
+        doc.text("PAYMENT METHOD BREAKDOWN", 14, 94);
+
+        doc.setFontSize(10);
+
+        methodRows.forEach((m, i) => {
+            doc.text(
+                `${m.method} : ${formatCurrency(m.amount)}`,
+                14,
+                102 + i * 6
+            );
+        });
+
+        autoTable(doc, {
+            startY: 120 + methodRows.length * 6,
+            head: [["Customer", "Phone", "Payments", "Amount"]],
+            body: topCustomers.map((c) => [
+                c.customer,
+                c.phone,
+                c.payments,
+                formatCurrency(c.amount),
+            ]),
+            theme: "grid",
+            styles: { fontSize: 9, cellPadding: 3 },
+            headStyles: { fillColor: [236, 72, 153], textColor: 255 },
+        });
+
+        const startY = doc.lastAutoTable.finalY + 12;
+
+        autoTable(doc, {
+            startY,
+            head: [["Date", "Invoice", "Customer", "Phone", "Method", "Amount"]],
+            body: rows.map((r: any) => [
+                r.date,
+                r.invoice,
+                r.customer,
+                r.phone,
+                r.method,
+                formatCurrency(r.amount),
+            ]),
+            theme: "grid",
+            styles: { fontSize: 9, cellPadding: 3 },
+            headStyles: { fillColor: [236, 72, 153], textColor: 255 },
+            columnStyles: {
+                0: { cellWidth: 24 },
+                1: { cellWidth: 28 },
+                2: { cellWidth: 40 },
+                3: { cellWidth: 32 },
+                4: { cellWidth: 28 },
+                5: { halign: "right", cellWidth: 28 },
+            },
+            didDrawPage: (data) => {
+                const pageHeight = doc.internal.pageSize.height;
+
+                doc.setFontSize(9);
+                doc.text(
+                    "Generated by Elite OMS",
+                    data.settings.margin.left,
+                    pageHeight - 10
+                );
+            },
+        });
+
+        doc.save(`cash-flow-report-${fromDate}-to-${toDate}.pdf`);
+    };
+
+    /* =========================
        SALES REPORT GENERATOR
     ========================== */
 
@@ -508,6 +714,8 @@ export default function Reports() {
                 invoice_number,
                 date,
                 total,
+                payment_status,
+                settled,
                 customers(name, phone),
                 invoice_payments(amount)
             `)
@@ -531,6 +739,11 @@ export default function Reports() {
 
                 const total = Number(inv.total || 0);
                 const due = Math.max(total - paid, 0);
+
+                // Skip invoices that are already closed (paid or settled/waived)
+                if (inv.payment_status === "paid" || inv.settled === true) {
+                    return null;
+                }
 
                 if (due <= 0) return null;
 
@@ -1317,7 +1530,10 @@ export default function Reports() {
                 <h2 className="text-xl font-semibold">Reports Library</h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                    <Card className="cursor-pointer hover:shadow-md transition">
+                    <Card
+                        className="cursor-pointer hover:shadow-md transition"
+                        onClick={generateCashFlowReport}
+                    >
                         <CardContent className="p-6">
                             <h3 className="font-semibold">Cash Flow Report</h3>
                             <p className="text-sm text-muted-foreground mt-1">
