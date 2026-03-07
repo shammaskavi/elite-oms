@@ -30,6 +30,7 @@ export default function Reports() {
     type ReportPeriod =
         | "today"
         | "last_7_days"
+        | "last_30_days"
         | "this_month"
         | "this_year"
         | "custom";
@@ -59,6 +60,10 @@ export default function Reports() {
 
             case "last_7_days":
                 start.setDate(now.getDate() - 6);
+                break;
+
+            case "last_30_days":
+                start.setDate(now.getDate() - 29);
                 break;
 
             case "this_month":
@@ -1003,38 +1008,81 @@ export default function Reports() {
                     </p>
                 </div>
 
-                <div className="flex gap-2 flex-wrap">
-                    <Button
-                        variant={period === "today" ? "default" : "outline"}
-                        onClick={() => setPeriod("today")}
-                    >
-                        Today
-                    </Button>
+                <div className="flex flex-col gap-3 items-end">
 
-                    <Button
-                        variant={period === "last_7_days" ? "default" : "outline"}
-                        onClick={() => setPeriod("last_7_days")}
-                    >
-                        Last 7 Days
-                    </Button>
+                    <div className="flex gap-2 flex-wrap">
+                        <Button
+                            variant={period === "today" ? "default" : "outline"}
+                            onClick={() => setPeriod("today")}
+                        >
+                            Today
+                        </Button>
 
-                    <Button
-                        variant={period === "this_month" ? "default" : "outline"}
-                        onClick={() => setPeriod("this_month")}
-                    >
-                        This Month
-                    </Button>
+                        <Button
+                            variant={period === "last_7_days" ? "default" : "outline"}
+                            onClick={() => setPeriod("last_7_days")}
+                        >
+                            Last 7 Days
+                        </Button>
 
-                    <Button
-                        variant={period === "this_year" ? "default" : "outline"}
-                        onClick={() => setPeriod("this_year")}
-                    >
-                        This Year
-                    </Button>
+                        <Button
+                            variant={period === "last_30_days" ? "default" : "outline"}
+                            onClick={() => setPeriod("last_30_days" as ReportPeriod)}
+                        >
+                            Last 30 Days
+                        </Button>
 
-                    <Button variant="outline">
-                        Export Summary
-                    </Button>
+                        <Button
+                            variant={period === "this_month" ? "default" : "outline"}
+                            onClick={() => setPeriod("this_month")}
+                        >
+                            This Month
+                        </Button>
+
+                        <Button
+                            variant={period === "this_year" ? "default" : "outline"}
+                            onClick={() => setPeriod("this_year")}
+                        >
+                            This Year
+                        </Button>
+
+                        <Button
+                            variant={period === "custom" ? "default" : "outline"}
+                            onClick={() => setPeriod("custom")}
+                        >
+                            Custom
+                        </Button>
+                    </div>
+
+                    {period === "custom" && (
+                        <div className="flex items-center gap-2 text-sm">
+                            <input
+                                type="date"
+                                value={customRange.startDate ?? ""}
+                                onChange={(e) =>
+                                    setCustomRange((prev) => ({
+                                        ...prev,
+                                        startDate: e.target.value || null,
+                                    }))
+                                }
+                                className="border rounded-md px-2 py-1 text-sm"
+                            />
+
+                            <span className="text-muted-foreground">→</span>
+
+                            <input
+                                type="date"
+                                value={customRange.endDate ?? ""}
+                                onChange={(e) =>
+                                    setCustomRange((prev) => ({
+                                        ...prev,
+                                        endDate: e.target.value || null,
+                                    }))
+                                }
+                                className="border rounded-md px-2 py-1 text-sm"
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
 
