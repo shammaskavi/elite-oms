@@ -20,6 +20,7 @@ import PublicInvoiceTracking from "./pages/PublicInvoiceTracking";
 import Payments from "./pages/Payments";
 import Reports from "./pages/Reports";
 import AnotherReports from "./pages/AnotherReports";
+import PublicMeasurementForm from "./pages/PublicMeasurementForm";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/track/:token" element={<PublicInvoiceTracking />} />
+            <Route path="/add-measurements" element={<PublicMeasurementForm />} />
             <Route path="/auth" element={<Auth />} />
             <Route
               path="/"

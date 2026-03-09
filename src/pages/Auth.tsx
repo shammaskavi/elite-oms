@@ -100,8 +100,12 @@ export default function Auth() {
                 </Button>
               </form>
             </TabsContent>
-            <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-4">
+            <TabsContent value="signup" className="space-y-4 text-center">
+              <Label className="text-center text-sm text-slate-500">
+                Don't peep at places you don't belong.
+                🫶 Shammas
+              </Label>
+              {/* <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="fullname">Full Name</Label>
                   <Input
@@ -135,10 +139,10 @@ export default function Auth() {
                     minLength={6}
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button type="submit" className="w-full" disabled={true}>
                   {isLoading ? "Creating account..." : "Create Account"}
                 </Button>
-              </form>
+              </form> */}
             </TabsContent>
           </Tabs>
         </CardContent>
