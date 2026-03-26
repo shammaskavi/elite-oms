@@ -21,6 +21,7 @@ import Payments from "./pages/Payments";
 import Reports from "./pages/Reports";
 import AnotherReports from "./pages/AnotherReports";
 import PublicMeasurementForm from "./pages/PublicMeasurementForm";
+import KarigarPortal from "./pages/KarigarPortal";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
           <Routes>
             <Route path="/track/:token" element={<PublicInvoiceTracking />} />
             <Route path="/add-measurements" element={<PublicMeasurementForm />} />
+            <Route path="/karigar/:token" element={<KarigarPortal />} />
             <Route path="/auth" element={<Auth />} />
             <Route
               path="/"
