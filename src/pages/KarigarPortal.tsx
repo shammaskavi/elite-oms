@@ -85,7 +85,7 @@ export default function KarigarPortal() {
 
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-start justify-between gap-2">
-                                        <h2 className={`text-[15px] font-semibold leading-tight truncate ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                                        <h2 className={`text-[15px] font-semibold leading-tight break-words truncate ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
                                             {item.item_name}
                                         </h2>
                                         <Badge className={`text-[9px] px-1.5 py-0 h-4 uppercase font-bold border rounded-sm shrink-0 ${getStageStyles(item.stage_name)}`}>
