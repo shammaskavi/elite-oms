@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ type WorkItem = {
 
 export default function KarigarPortal() {
     const { token } = useParams();
+    const navigate = useNavigate();
     const [work, setWork] = useState<WorkItem[]>([]);
     const [loading, setLoading] = useState(true);
     const vendorName = work[0]?.vendor_name || "Karigar";
@@ -56,15 +57,17 @@ export default function KarigarPortal() {
         <div className="min-h-screen bg-white">
             {/* Minimal Header */}
             <div className="px-4 py-3 border-b flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-md z-20">
-                <h1 className="text-sm font-bold uppercase tracking-tight text-slate-500">
-                    {vendorName} Task List ({work.length})
+                <h1 className="text-sm font-semibold text-slate-700">
+                    {vendorName} • {work.length} tasks
                 </h1>
                 <Package className="h-4 w-4 text-slate-400" />
             </div>
 
             <div className="divide-y">
                 {work.length === 0 ? (
-                    <div className="p-10 text-center text-slate-400 text-xs">No pending work.</div>
+                    <div className="p-10 text-center text-slate-400 text-xs">
+                        You're all caught up ✨
+                    </div>
                 ) : (
                     work.map((item) => {
                         const isDone = item.stage_name.toLowerCase().includes("packed");
@@ -72,7 +75,8 @@ export default function KarigarPortal() {
                         return (
                             <div
                                 key={item.order_id}
-                                className="flex items-start gap-3 p-3 active:bg-slate-50 transition-colors cursor-pointer"
+                                onClick={() => navigate(`/karigar/order/${item.order_id}?token=${token}`)}
+                                className="flex items-start gap-3 p-3 active:bg-slate-50 hover:bg-slate-50 transition-all cursor-pointer"
                             >
                                 {/* Checklist Circle */}
                                 <div className="mt-0.5 shrink-0">
@@ -85,7 +89,7 @@ export default function KarigarPortal() {
 
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-start justify-between gap-2">
-                                        <h2 className={`text-[15px] font-semibold leading-tight break-words truncate ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                                        <h2 className={`text-[15px] font-semibold leading-tight break-words ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
                                             {item.item_name}
                                         </h2>
                                         <Badge className={`text-[9px] px-1.5 py-0 h-4 uppercase font-bold border rounded-sm shrink-0 ${getStageStyles(item.stage_name)}`}>
