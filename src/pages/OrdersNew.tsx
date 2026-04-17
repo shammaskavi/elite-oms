@@ -313,7 +313,19 @@ export default function OrdersNew() {
 
 
   // Calculate stats
-  const stats = {
+  const { data: statsData } = useQuery({
+    queryKey: ["order-stats"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("get_order_stats");
+      if (error) throw error;
+
+      return Array.isArray(data)
+        ? data[0]?.get_order_stats || data[0]
+        : data?.get_order_stats || data;
+    },
+  });
+
+  const computedStats = {
     total: orders?.length || 0,
     active: orders?.filter((o: any) => !["delivered", "cancelled"].includes(o.order_status)).length || 0,
     completed: orders?.filter((o: any) => o.order_status === "delivered").length || 0,
@@ -333,6 +345,8 @@ export default function OrdersNew() {
         return diffDays >= 0 && diffDays <= 3 && !isOverdue(o);
       }).length || 0,
   };
+
+  const stats = statsData || computedStats;
 
   const upcoming = orders?.filter(o => {
     if (["delivered", "cancelled"].includes(o.order_status)) return false;
