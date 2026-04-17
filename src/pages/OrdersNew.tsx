@@ -171,17 +171,34 @@ export default function OrdersNew() {
   const { data: orders, isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("orders")
-        .select(`
-          *,
-          customers(name),
-          invoices(invoice_number),
-          order_stages(*)
-        `)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const pageSize = 1000;
+      let from = 0;
+      let allOrders: any[] = [];
+
+      while (true) {
+        const { data, error } = await (supabase as any)
+          .from("orders")
+          .select(`
+            *,
+            customers(name),
+            invoices(invoice_number),
+            order_stages(*)
+          `)
+          .order("created_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) break;
+
+        allOrders = [...allOrders, ...data];
+
+        if (data.length < pageSize) break;
+
+        from += pageSize;
+      }
+
+      return allOrders;
     },
   });
 
