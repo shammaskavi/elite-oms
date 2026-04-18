@@ -170,6 +170,7 @@ export default function OrdersNew() {
   // --- Fetch orders (with relations) ---
   const { data: orders, isLoading } = useQuery({
     queryKey: ["orders"],
+    placeholderData: (prev) => prev,
     queryFn: async () => {
       const pageSize = 1000;
       let from = 0;
@@ -672,6 +673,20 @@ export default function OrdersNew() {
     },
   });
 
+  const OrdersSkeleton = () => {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="p-4 border rounded-xl animate-pulse">
+            <div className="h-4 w-1/4 bg-muted rounded mb-2"></div>
+            <div className="h-3 w-1/2 bg-muted rounded mb-2"></div>
+            <div className="h-3 w-1/3 bg-muted rounded"></div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -988,7 +1003,7 @@ export default function OrdersNew() {
           </div>
 
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            <OrdersSkeleton />
           ) : filteredOrders?.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No orders yet. Create your first order!

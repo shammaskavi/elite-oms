@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Package } from "lucide-react";
+import Logo from "../assets/logo.svg";
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
@@ -60,10 +61,11 @@ export default function Auth() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-subtle p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary">
-            <Package className="h-6 w-6 text-white" />
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg">
+            {/* <Package className="h-6 w-6 text-white" /> */}
+            <img src={Logo} alt="Elite CRM logo" className="h-12 w-12" />
           </div>
-          <CardTitle className="text-2xl font-bold">Order Management</CardTitle>
+          <CardTitle className="text-2xl font-bold">Saree Palace Elite</CardTitle>
           <CardDescription>Sign in to manage orders and invoices</CardDescription>
         </CardHeader>
         <CardContent>

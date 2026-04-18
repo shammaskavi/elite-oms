@@ -10,6 +10,7 @@ import {
     TableHeader,
     TableHead,
 } from "@/components/ui/table";
+import { Pulsar } from "ldrs/react";
 
 // --- Helpers ---
 
@@ -79,7 +80,12 @@ export default function OrdersInvoiceTable({
     };
 
     if (!groupedInvoices.length) {
-        return <Card className="p-8 text-center text-muted-foreground">No orders found.</Card>;
+        return <Card className="p-8 text-center text-muted-foreground">
+
+            <h1 className="mb-10">Loading Orders</h1>
+            <Pulsar size="200" speed="5" color="pink" />
+
+        </Card>;
     }
 
     console.log("SORT DEBUG:", { invoiceSortKey, invoiceSortDirection });
