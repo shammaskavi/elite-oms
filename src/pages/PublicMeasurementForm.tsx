@@ -149,7 +149,7 @@ export default function PublicMeasurement() {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-white">
                 <Loader2 className="w-10 h-10 animate-spin text-pink-600 mb-4" />
-                <p className="text-gray-400 font-medium tracking-wide">ELITE SAREE PALACE</p>
+                <p className="text-gray-400 font-medium tracking-wide">SAREE PALACE ELITE</p>
             </div>
         );
     }
@@ -190,7 +190,7 @@ export default function PublicMeasurement() {
                 <div className="max-w-xl mx-auto flex justify-between items-end">
                     <div>
                         <p className="text-[10px] uppercase tracking-[0.2em] text-pink-600 font-bold mb-1">Boutique Measurement</p>
-                        <h1 className="text-xl font-serif text-gray-900 leading-none">Elite Saree Palace</h1>
+                        <h1 className="text-xl font-serif text-gray-900 leading-none">Saree Palace Elite</h1>
                     </div>
                     <div className="text-right">
                         <p className="text-xs text-gray-400">Step 1 of 1</p>
