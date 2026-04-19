@@ -13,7 +13,8 @@ import {
   Menu,
   X,
   BadgeIndianRupee,
-  FileChartPie
+  FileChartPie,
+  PencilRuler
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,7 @@ const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "Orders", href: "/orders", icon: Package },
+  { name: "Measurements", href: "/measurements", icon: PencilRuler },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Products", href: "/products", icon: ShoppingBag },
   { name: "Payments", href: "/payments", icon: BadgeIndianRupee },

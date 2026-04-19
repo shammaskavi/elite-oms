@@ -23,6 +23,9 @@ import AnotherReports from "./pages/AnotherReports";
 import PublicMeasurementForm from "./pages/PublicMeasurementForm";
 import KarigarPortal from "./pages/KarigarPortal";
 import KarigarOrderDetail from "./pages/KarigarOrderDetail";
+import CreateMeasurement from "./pages/CreateMeasurement";
+import Measurements from "./pages/Measurements";
+
 
 const queryClient = new QueryClient();
 
@@ -35,7 +38,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/track/:token" element={<PublicInvoiceTracking />} />
-            <Route path="/add-measurements" element={<PublicMeasurementForm />} />
+            <Route path="/m/:token" element={<PublicMeasurementForm />} />
             <Route path="/karigar/:token" element={<KarigarPortal />} />
             <Route
               path="/karigar/order/:id"
@@ -72,6 +75,27 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/measurements"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Measurements />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/measurements/new"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <CreateMeasurement />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/customers/:id"
               element={
