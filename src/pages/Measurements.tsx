@@ -11,6 +11,10 @@ export default function Measurements() {
     const navigate = useNavigate();
     const [openGenerateLink, setOpenGenerateLink] = useState(false);
 
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedValues, setEditedValues] = useState<Record<string, any>>({});
+    const [templateFields, setTemplateFields] = useState<any[]>([]);
+
     useEffect(() => {
         const fetchProfiles = async () => {
             const { data } = await supabase
@@ -18,6 +22,7 @@ export default function Measurements() {
                 .select(`
           id,
           name,
+          template_id,
           created_at,
           source,
           status,
@@ -32,6 +37,83 @@ export default function Measurements() {
 
         fetchProfiles();
     }, []);
+
+    useEffect(() => {
+        if (selectedMeasurement) {
+            setEditedValues(selectedMeasurement.values || {});
+            setIsEditing(false);
+
+            const fetchFields = async () => {
+                const { data } = await supabase
+                    .from("measurement_fields")
+                    .select("*")
+                    .eq("template_id", selectedMeasurement.template_id);
+
+                setTemplateFields(data || []);
+            };
+
+            fetchFields();
+        }
+    }, [selectedMeasurement]);
+
+    const handleVerify = async (id: string) => {
+        const { error } = await supabase
+            .from("customer_measurements")
+            .update({ status: "verified" })
+            .eq("id", id);
+
+        if (error) {
+            console.error(error);
+            alert("Error verifying measurement");
+            return;
+        }
+
+        setMeasurements((prev) =>
+            prev.map((m) =>
+                m.id === id ? { ...m, status: "verified" } : m
+            )
+        );
+
+        setSelectedMeasurement((prev: any) =>
+            prev ? { ...prev, status: "verified" } : prev
+        );
+    };
+
+    const handleSave = async () => {
+        if (!selectedMeasurement) return;
+
+        const { error } = await supabase
+            .from("customer_measurements")
+            .update({ values: editedValues })
+            .eq("id", selectedMeasurement.id);
+
+        if (error) {
+            console.error(error);
+            alert("Error saving changes");
+            return;
+        }
+
+        setMeasurements((prev) =>
+            prev.map((m) =>
+                m.id === selectedMeasurement.id ? { ...m, values: editedValues } : m
+            )
+        );
+
+        setSelectedMeasurement((prev: any) =>
+            prev ? { ...prev, values: editedValues } : prev
+        );
+
+        setIsEditing(false);
+    };
+
+    const handleCancelEdit = () => {
+        setEditedValues(selectedMeasurement?.values || {});
+        setIsEditing(false);
+    };
+
+    const handlePrint = () => {
+        console.log("print");
+    };
 
     const filteredMeasurements = measurements.filter((m) => {
         const matchesSearch =
@@ -171,21 +253,129 @@ export default function Measurements() {
                         </div>
 
                         <div className="space-y-2">
-                            {Object.entries(selectedMeasurement.values || {}).map(([k, v]) => {
-                                const formattedKey = k
-                                    .replace(/_/g, " ")
-                                    .replace(/\b\w/g, (c) => c.toUpperCase());
+                            {templateFields.map((field) => {
+                                const key = field.field_key;
+                                const value = editedValues[key];
 
-                                const formattedValue =
-                                    v === true ? "Yes" : v === false ? "No" : String(v);
+                                const formattedKey = field.label;
+
+                                const displayValue =
+                                    value === true ? "Yes" : value === false ? "No" : String(value ?? "");
 
                                 return (
-                                    <div key={k} className="flex justify-between items-center border-b pb-2">
+                                    <div key={key} className="flex justify-between items-center border-b pb-2">
                                         <span className="text-gray-600 text-sm">{formattedKey}</span>
-                                        <span className="font-medium text-sm">{formattedValue}</span>
+
+                                        {isEditing ? (
+                                            field.input_type === "number" ? (
+                                                <input
+                                                    type="number"
+                                                    className="border rounded px-2 py-1 text-sm w-32 text-right"
+                                                    value={value ?? ""}
+                                                    onChange={(e) =>
+                                                        setEditedValues((prev) => ({
+                                                            ...prev,
+                                                            [key]: Number(e.target.value),
+                                                        }))
+                                                    }
+                                                />
+                                            ) : field.input_type === "dropdown" ? (
+                                                <select
+                                                    className="border rounded px-2 py-1 text-sm w-32 text-right"
+                                                    value={value ?? ""}
+                                                    onChange={(e) =>
+                                                        setEditedValues((prev) => ({
+                                                            ...prev,
+                                                            [key]: e.target.value,
+                                                        }))
+                                                    }
+                                                >
+                                                    <option value="">Select</option>
+                                                    {(field.options || []).map((opt: string) => (
+                                                        <option key={opt} value={opt}>
+                                                            {opt}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : field.input_type === "boolean" ? (
+                                                <select
+                                                    className="border rounded px-2 py-1 text-sm w-32 text-right"
+                                                    value={String(value)}
+                                                    onChange={(e) =>
+                                                        setEditedValues((prev) => ({
+                                                            ...prev,
+                                                            [key]: e.target.value === "true",
+                                                        }))
+                                                    }
+                                                >
+                                                    <option value="true">Yes</option>
+                                                    <option value="false">No</option>
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    className="border rounded px-2 py-1 text-sm w-32 text-right"
+                                                    value={value ?? ""}
+                                                    onChange={(e) =>
+                                                        setEditedValues((prev) => ({
+                                                            ...prev,
+                                                            [key]: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            )
+                                        ) : (
+                                            <span className="font-medium text-sm">{displayValue}</span>
+                                        )}
                                     </div>
                                 );
                             })}
+                        </div>
+                        <div className="mt-6 pt-4 border-t flex justify-between items-center">
+                            {!isEditing ? (
+                                <>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setIsEditing(true)}
+                                            className="border px-4 py-2 rounded text-sm"
+                                        >
+                                            Edit
+                                        </button>
+
+                                        <button
+                                            onClick={handlePrint}
+                                            className="border px-4 py-2 rounded text-sm"
+                                        >
+                                            Print
+                                        </button>
+                                    </div>
+
+                                    {selectedMeasurement.status !== "verified" && (
+                                        <button
+                                            onClick={() => handleVerify(selectedMeasurement.id)}
+                                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+                                        >
+                                            Mark as Verified
+                                        </button>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="flex gap-2 ml-auto">
+                                    <button
+                                        onClick={handleCancelEdit}
+                                        className="border px-4 py-2 rounded text-sm"
+                                    >
+                                        Cancel
+                                    </button>
+
+                                    <button
+                                        onClick={handleSave}
+                                        className="bg-slate-900 text-white px-4 py-2 rounded text-sm"
+                                    >
+                                        Save Changes
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

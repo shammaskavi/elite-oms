@@ -50,7 +50,7 @@ export default function GenerateMeasurementLinkModal({
 
         const { error } = await supabase.from("measurement_links").insert({
             token,
-            customer_id: selectedCustomer,
+            customer_id: selectedCustomer || null,
             template_id: selectedTemplate,
             expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         });
@@ -88,7 +88,7 @@ export default function GenerateMeasurementLinkModal({
                             <button className="border p-2 rounded w-full text-left">
                                 {selectedCustomer
                                     ? customers.find((c) => c.id === selectedCustomer)?.name
-                                    : "Select or create customer"}
+                                    : "Select customer (optional) or leave empty"}
                             </button>
                         </PopoverTrigger>
 
@@ -155,6 +155,9 @@ export default function GenerateMeasurementLinkModal({
                         </PopoverContent>
                     </Popover>
                 )}
+                <p className="text-xs text-gray-500">
+                    Leave empty to create a shared link for multiple people
+                </p>
 
                 {/* Template */}
                 <select
@@ -174,8 +177,8 @@ export default function GenerateMeasurementLinkModal({
                 {!link ? (
                     <button
                         onClick={handleGenerate}
-                        disabled={!selectedCustomer || !selectedTemplate}
-                        className={`w-full py-2 rounded ${!selectedCustomer || !selectedTemplate ? "bg-gray-300 text-gray-500" : "bg-slate-900 text-white"}`}
+                        disabled={!selectedTemplate}
+                        className={`w-full py-2 rounded ${!selectedTemplate ? "bg-gray-300 text-gray-500" : "bg-slate-900 text-white"}`}
                     >
                         Generate Link
                     </button>
