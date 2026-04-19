@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check } from "lucide-react";
 
 export default function CreateMeasurement() {
     const [customers, setCustomers] = useState<any[]>([]);
@@ -7,6 +10,8 @@ export default function CreateMeasurement() {
     const [fields, setFields] = useState<any[]>([]);
 
     const [selectedCustomer, setSelectedCustomer] = useState("");
+    const [openCustomer, setOpenCustomer] = useState(false);
+    const [customerSearch, setCustomerSearch] = useState("");
     const [selectedTemplate, setSelectedTemplate] = useState("");
 
     const [formData, setFormData] = useState<Record<string, any>>({});
@@ -105,19 +110,78 @@ export default function CreateMeasurement() {
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Customer Select */}
-                    <select
-                        value={selectedCustomer}
-                        onChange={(e) => setSelectedCustomer(e.target.value)}
-                        className="border p-3 rounded w-full"
-                    >
-                        <option value="">Select Customer</option>
-                        {customers.map((c) => (
-                            <option key={c.id} value={c.id}>
-                                {c.name}
-                            </option>
-                        ))}
-                    </select>
+                    {/* Customer Select (Command Pattern) */}
+                    <Popover open={openCustomer} onOpenChange={setOpenCustomer}>
+                        <PopoverTrigger asChild>
+                            <button className="border p-3 rounded w-full text-left">
+                                {selectedCustomer
+                                    ? customers.find((c) => c.id === selectedCustomer)?.name
+                                    : "Select or create customer"}
+                            </button>
+                        </PopoverTrigger>
+
+                        <PopoverContent className="w-full p-0">
+                            <Command>
+                                <CommandInput
+                                    placeholder="Search customer..."
+                                    value={customerSearch}
+                                    onValueChange={setCustomerSearch}
+                                />
+
+                                <CommandList>
+                                    <CommandEmpty>
+                                        <div
+                                            className="p-2 text-blue-600 cursor-pointer"
+                                            onClick={async () => {
+                                                const { data, error } = await supabase
+                                                    .from("customers")
+                                                    .insert({ name: customerSearch })
+                                                    .select()
+                                                    .single();
+
+                                                if (error) {
+                                                    console.error(error);
+                                                    alert("Error creating customer");
+                                                    return;
+                                                }
+
+                                                setCustomers((prev) => [...prev, data]);
+                                                setSelectedCustomer(data.id);
+                                                setOpenCustomer(false);
+                                                setCustomerSearch("");
+                                            }}
+                                        >
+                                            + Create "{customerSearch}"
+                                        </div>
+                                    </CommandEmpty>
+
+                                    <CommandGroup>
+                                        {customers
+                                            .filter((c) =>
+                                                c.name.toLowerCase().includes(customerSearch.toLowerCase())
+                                            )
+                                            .map((c) => (
+                                                <CommandItem
+                                                    key={c.id}
+                                                    value={c.name}
+                                                    onSelect={() => {
+                                                        setSelectedCustomer(c.id);
+                                                        setOpenCustomer(false);
+                                                        setCustomerSearch("");
+                                                    }}
+                                                    className="flex items-center justify-between"
+                                                >
+                                                    {c.name}
+                                                    {selectedCustomer === c.id && (
+                                                        <Check className="w-4 h-4" />
+                                                    )}
+                                                </CommandItem>
+                                            ))}
+                                    </CommandGroup>
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
 
                     {/* Template Select */}
                     <select

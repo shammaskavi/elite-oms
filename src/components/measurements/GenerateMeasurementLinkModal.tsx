@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check } from "lucide-react";
+
 
 export default function GenerateMeasurementLinkModal({
     open,
@@ -16,6 +20,8 @@ export default function GenerateMeasurementLinkModal({
     const [customers, setCustomers] = useState<any[]>([]);
 
     const [selectedCustomer, setSelectedCustomer] = useState(customerId || "");
+    const [openCustomer, setOpenCustomer] = useState(false);
+    const [customerSearch, setCustomerSearch] = useState("");
     const [selectedTemplate, setSelectedTemplate] = useState("");
     const [link, setLink] = useState("");
 
@@ -34,6 +40,10 @@ export default function GenerateMeasurementLinkModal({
 
         fetchData();
     }, [open]);
+
+    useEffect(() => {
+        if (customerId) setSelectedCustomer(customerId);
+    }, [customerId]);
 
     const handleGenerate = async () => {
         const token = crypto.randomUUID();
@@ -73,18 +83,77 @@ export default function GenerateMeasurementLinkModal({
                         Customer: <span className="font-medium">{customerName}</span>
                     </div>
                 ) : (
-                    <select
-                        value={selectedCustomer}
-                        onChange={(e) => setSelectedCustomer(e.target.value)}
-                        className="border p-2 rounded w-full"
-                    >
-                        <option value="">Select Customer</option>
-                        {customers.map((c) => (
-                            <option key={c.id} value={c.id}>
-                                {c.name}
-                            </option>
-                        ))}
-                    </select>
+                    <Popover open={openCustomer} onOpenChange={setOpenCustomer}>
+                        <PopoverTrigger asChild>
+                            <button className="border p-2 rounded w-full text-left">
+                                {selectedCustomer
+                                    ? customers.find((c) => c.id === selectedCustomer)?.name
+                                    : "Select or create customer"}
+                            </button>
+                        </PopoverTrigger>
+
+                        <PopoverContent className="w-full p-0">
+                            <Command>
+                                <CommandInput
+                                    placeholder="Search customer..."
+                                    value={customerSearch}
+                                    onValueChange={setCustomerSearch}
+                                />
+
+                                <CommandList>
+                                    <CommandEmpty>
+                                        <div
+                                            className="p-2 text-blue-600 cursor-pointer"
+                                            onClick={async () => {
+                                                const { data, error } = await supabase
+                                                    .from("customers")
+                                                    .insert({ name: customerSearch })
+                                                    .select()
+                                                    .single();
+
+                                                if (error) {
+                                                    console.error(error);
+                                                    alert("Error creating customer");
+                                                    return;
+                                                }
+
+                                                setCustomers((prev) => [...prev, data]);
+                                                setSelectedCustomer(data.id);
+                                                setOpenCustomer(false);
+                                                setCustomerSearch("");
+                                            }}
+                                        >
+                                            + Create "{customerSearch}"
+                                        </div>
+                                    </CommandEmpty>
+
+                                    <CommandGroup>
+                                        {customers
+                                            .filter((c) =>
+                                                c.name.toLowerCase().includes(customerSearch.toLowerCase())
+                                            )
+                                            .map((c) => (
+                                                <CommandItem
+                                                    key={c.id}
+                                                    value={c.name}
+                                                    onSelect={() => {
+                                                        setSelectedCustomer(c.id);
+                                                        setOpenCustomer(false);
+                                                        setCustomerSearch("");
+                                                    }}
+                                                    className="flex items-center justify-between"
+                                                >
+                                                    {c.name}
+                                                    {selectedCustomer === c.id && (
+                                                        <Check className="w-4 h-4" />
+                                                    )}
+                                                </CommandItem>
+                                            ))}
+                                    </CommandGroup>
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
                 )}
 
                 {/* Template */}
@@ -105,7 +174,8 @@ export default function GenerateMeasurementLinkModal({
                 {!link ? (
                     <button
                         onClick={handleGenerate}
-                        className="w-full bg-slate-900 text-white py-2 rounded"
+                        disabled={!selectedCustomer || !selectedTemplate}
+                        className={`w-full py-2 rounded ${!selectedCustomer || !selectedTemplate ? "bg-gray-300 text-gray-500" : "bg-slate-900 text-white"}`}
                     >
                         Generate Link
                     </button>
