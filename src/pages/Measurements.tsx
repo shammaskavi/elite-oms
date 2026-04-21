@@ -112,7 +112,52 @@ export default function Measurements() {
     };
 
     const handlePrint = () => {
-        console.log("print");
+        if (!selectedMeasurement) return;
+
+        const values = selectedMeasurement.values || {};
+
+        const customerName = selectedMeasurement.customers?.name || "Customer";
+        const templateName = selectedMeasurement.measurement_templates?.name || "Measurements";
+
+        let content = "";
+
+        content += "ELITE SAREE PALACE\n\n";
+        content += `Customer: ${customerName}\n`;
+
+        if (selectedMeasurement.customers?.phone) {
+            content += `Phone: ${selectedMeasurement.customers.phone}\n`;
+        }
+
+        content += "\n";
+        content += `--- ${templateName.toUpperCase()} ---\n\n`;
+
+        Object.entries(values).forEach(([key, value]) => {
+            const label = key.replace(/_/g, " ");
+            const formattedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+
+            const val =
+                value === true ? "Yes" :
+                    value === false ? "No" :
+                        value;
+
+            content += `${formattedLabel}: ${val}\n`;
+        });
+
+        content += "\n--------------------------\n";
+        content += "Thank you\n";
+
+        const printWindow = window.open("", "", "width=300,height=600");
+        if (!printWindow) return;
+
+        printWindow.document.write(`<pre>${content}</pre>`);
+
+        printWindow.document.close();
+        printWindow.focus();
+
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 300);
     };
 
     const filteredMeasurements = measurements.filter((m) => {
@@ -151,6 +196,7 @@ export default function Measurements() {
                     >
                         + Add Measurement
                     </button>
+
                 </div>
             </div>
 
