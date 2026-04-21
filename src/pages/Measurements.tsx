@@ -146,18 +146,12 @@ export default function Measurements() {
         content += "\n--------------------------\n";
         content += "Thank you\n";
 
-        const printWindow = window.open("", "", "width=300,height=600");
-        if (!printWindow) return;
+        const printArea = document.getElementById("print-area");
+        if (!printArea) return;
 
-        printWindow.document.write(`<pre>${content}</pre>`);
+        printArea.innerHTML = `<pre>${content}</pre>`;
 
-        printWindow.document.close();
-        printWindow.focus();
-
-        setTimeout(() => {
-            printWindow.print();
-            printWindow.close();
-        }, 300);
+        window.print();
     };
 
     const filteredMeasurements = measurements.filter((m) => {
@@ -174,6 +168,26 @@ export default function Measurements() {
 
     return (
         <div className="p-8 space-y-6">
+            <style>
+                {`
+            @media print {
+              body * {
+                visibility: hidden;
+              }
+
+              #print-area, #print-area * {
+                visibility: visible;
+              }
+
+              #print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+              }
+            }
+            `}
+            </style>
             <div className="flex justify-between items-start">
                 <div>
                     <h1 className="text-2xl font-bold">Measurements</h1>
@@ -430,6 +444,7 @@ export default function Measurements() {
                 open={openGenerateLink}
                 onClose={() => setOpenGenerateLink(false)}
             />
+            <div id="print-area" style={{ display: "none" }} />
         </div>
     );
 }
