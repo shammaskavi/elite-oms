@@ -216,9 +216,9 @@ export default function PublicMeasurement() {
             <main className="max-w-xl mx-auto p-6 pt-8">
                 <section className="bg-slate-900 rounded-[2rem] p-8 mb-10 shadow-2xl shadow-pink-100 text-white relative overflow-hidden">
                     <div className="relative z-10">
-                        <h2 className="text-2xl font-serif mb-2">Digital Studio</h2>
+                        <h2 className="text-2xl font-serif mb-2">Measurement Portal</h2>
                         <p className="text-sm text-slate-400 leading-relaxed font-light">
-                            Welcome, {name || 'valued client'}. Please provide your details for our tailoring masters.
+                            Welcome to the Elite experience. Please provide your exact measurements for a flawless finish.
                         </p>
                     </div>
                     <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/10 rounded-full -mr-16 -mt-16 blur-3xl" />
@@ -306,8 +306,8 @@ export default function PublicMeasurement() {
                                                         key={opt.label}
                                                         onClick={() => setFormData({ ...formData, [field.field_key]: opt.value })}
                                                         className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-xl border-2 font-black transition-all ${formData[field.field_key] === opt.value
-                                                                ? "bg-pink-600 border-pink-600 text-white shadow-xl shadow-pink-100"
-                                                                : "bg-white border-gray-100 text-gray-400"
+                                                            ? "bg-pink-600 border-pink-600 text-white shadow-xl shadow-pink-100"
+                                                            : "bg-white border-gray-100 text-gray-400"
                                                             }`}
                                                     >
                                                         {opt.label}
@@ -352,8 +352,8 @@ export default function PublicMeasurement() {
                         onClick={handleSubmit}
                         disabled={submitting || isFormIncomplete()}
                         className={`w-full py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${submitting || isFormIncomplete()
-                                ? "bg-gray-100 text-gray-300 shadow-none"
-                                : "bg-pink-600 text-white shadow-2xl shadow-pink-200 active:scale-95 hover:bg-pink-700"
+                            ? "bg-gray-100 text-gray-300 shadow-none"
+                            : "bg-pink-600 text-white shadow-2xl shadow-pink-200 active:scale-95 hover:bg-pink-700"
                             }`}
                     >
                         {submitting ? (
