@@ -305,17 +305,18 @@ export default function PublicMeasurement() {
                                         )}
 
                                         {field.input_type === "boolean" && (
-                                            <div className="flex gap-3">
+                                            <div className="flex flex-wrap gap-2">
                                                 {[
-                                                    { label: 'Yes', value: true, icon: <Check className="w-4 h-4" /> },
-                                                    { label: 'No', value: false, icon: <X className="w-4 h-4" /> }
+                                                    { label: 'Yes', value: true },
+                                                    { label: 'No', value: false }
                                                 ].map((opt) => (
                                                     <button
                                                         key={opt.label}
+                                                        type="button"
                                                         onClick={() => setFormData({ ...formData, [field.field_key]: opt.value })}
-                                                        className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-xl border-2 font-black transition-all ${formData[field.field_key] === opt.value
-                                                            ? "bg-pink-600 border-pink-600 text-white shadow-xl shadow-pink-100"
-                                                            : "bg-white border-gray-100 text-gray-400"
+                                                        className={`px-4 py-2 rounded-full border-2 text-sm font-bold transition-all ${formData[field.field_key] === opt.value
+                                                            ? "bg-pink-600 border-pink-600 text-white shadow-lg"
+                                                            : "bg-white border-gray-100 text-gray-400 hover:border-pink-200"
                                                             }`}
                                                     >
                                                         {opt.label}
@@ -325,16 +326,21 @@ export default function PublicMeasurement() {
                                         )}
 
                                         {field.input_type === "dropdown" && (
-                                            <select
-                                                className="w-full bg-gray-50/50 border-2 border-transparent rounded-xl px-4 py-4 focus:bg-white focus:border-pink-500 outline-none transition-all text-lg appearance-none"
-                                                value={formData[field.field_key] || ""}
-                                                onChange={(e) => setFormData({ ...formData, [field.field_key]: e.target.value })}
-                                            >
-                                                <option value="">Select Option</option>
+                                            <div className="flex flex-wrap gap-2">
                                                 {(field.options || []).map((opt: string) => (
-                                                    <option key={opt} value={opt}>{opt}</option>
+                                                    <button
+                                                        key={opt}
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, [field.field_key]: opt })}
+                                                        className={`px-4 py-2 rounded-full border-2 text-sm font-bold transition-all ${formData[field.field_key] === opt
+                                                            ? "bg-pink-600 border-pink-600 text-white shadow-lg"
+                                                            : "bg-white border-gray-100 text-gray-400 hover:border-pink-200"
+                                                            }`}
+                                                    >
+                                                        {opt}
+                                                    </button>
                                                 ))}
-                                            </select>
+                                            </div>
                                         )}
                                     </div>
                                 ))}
