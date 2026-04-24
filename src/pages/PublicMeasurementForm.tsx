@@ -109,10 +109,18 @@ export default function PublicMeasurement() {
             doc.setTextColor(190, 24, 93);
             doc.text(`${template?.name} Measurements`, 20, currentY);
 
-            const tableRows = fields.map(f => [
-                f.label,
-                `${formData[f.field_key]} ${f.unit || ""}`
-            ]);
+            const tableRows = fields.map(f => {
+                const rawValue = formData[f.field_key];
+                // Convert technical 'true/false' to human-friendly 'Yes/No'
+                let displayValue = rawValue;
+                if (rawValue === true || rawValue === "true") displayValue = "Yes";
+                if (rawValue === false || rawValue === "false") displayValue = "No";
+
+                return [
+                    f.label,
+                    `${displayValue} ${f.unit || ""}`
+                ];
+            });
 
             autoTable(doc, {
                 startY: currentY + 5,
