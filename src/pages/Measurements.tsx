@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import GenerateMeasurementLinkModal from "@/components/measurements/GenerateMeasurementLinkModal";
+import { Button } from "@/components/ui/button";
 
 export default function Measurements() {
     const [measurements, setMeasurements] = useState<any[]>([]);
@@ -167,7 +168,7 @@ export default function Measurements() {
     });
 
     return (
-        <div className="p-8 space-y-6">
+        <div className="p-8">
             <style>
                 {`
             @media print {
@@ -188,9 +189,11 @@ export default function Measurements() {
             }
             `}
             </style>
-            <div className="flex justify-between items-start">
+
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold">Measurements</h1>
+                    <h1 className="text-2xl font-semibold">Measurements</h1>
                     <p className="text-sm text-gray-500">
                         Manage and reuse customer measurements
                     </p>
@@ -199,34 +202,33 @@ export default function Measurements() {
                 <div className="flex gap-2">
                     <button
                         onClick={() => setOpenGenerateLink(true)}
-                        className="border border-slate-900 text-slate-900 px-4 py-2 rounded hover:bg-slate-100 transition"
+                        className="border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50"
                     >
-                        Generate Measurement Link
+                        Generate Link
                     </button>
 
-                    <button
+                    <Button
                         onClick={() => navigate("/measurements/new")}
-                        className="bg-slate-900 text-white px-4 py-2 rounded hover:bg-slate-800 transition"
                     >
                         + Add Measurement
-                    </button>
-
+                    </Button>
                 </div>
             </div>
 
-            <div className="flex gap-4">
+            {/* Search & Filter */}
+            <div className="flex items-center gap-3 mb-6">
                 <input
                     type="text"
-                    placeholder="Search by customer or name"
+                    placeholder="Search measurements..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="border p-2 rounded w-full"
+                    className="border border-gray-200 rounded-md px-3 py-2 w-full"
                 />
 
                 <select
                     value={filterTemplate}
                     onChange={(e) => setFilterTemplate(e.target.value)}
-                    className="border p-2 rounded"
+                    className="border border-gray-200 rounded-md px-3 py-2"
                 >
                     <option value="">All Templates</option>
                     {[...new Set(measurements.map((m) => m.measurement_templates?.name))].map(
@@ -239,49 +241,51 @@ export default function Measurements() {
                 </select>
             </div>
 
-            <div className="space-y-4">
-                {filteredMeasurements.map((m) => {
-                    const previewEntries = Object.entries(m.values || {}).slice(0, 2);
+            {/* Table-style list */}
+            <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
+                <div className="grid grid-cols-4 px-4 py-3 text-xs font-semibold text-gray-500 border-b">
+                    <span>Customer</span>
+                    <span>Template</span>
+                    <span>Date</span>
+                    <span>Status</span>
+                </div>
 
-                    return (
-                        <div
-                            key={m.id}
-                            onClick={() => setSelectedMeasurement(m)}
-                            className="border p-4 rounded flex justify-between items-center cursor-pointer hover:bg-gray-50"
-                        >
-                            <div className="space-y-1">
-                                <p className="font-medium">
-                                    {m.customers?.name} {m.name ? `- ${m.name}` : ""}
-                                </p>
-
-                                <p className="text-sm text-gray-500">
-                                    {m.measurement_templates?.name}
-                                </p>
-
-                                <p className="text-sm text-gray-400">
-                                    {previewEntries
-                                        .map(([k, v]) => `${k}: ${v}`)
-                                        .join(", ")}
-                                </p>
-                            </div>
-
-                            <div className="text-right space-y-1">
-                                <p className="text-xs text-gray-400">
-                                    {new Date(m.created_at).toLocaleDateString()}
-                                </p>
-
-                                <p
-                                    className={`text-xs px-2 py-1 rounded inline-block ${m.status === "verified"
-                                        ? "bg-green-100 text-green-700"
-                                        : "bg-yellow-100 text-yellow-700"
-                                        }`}
-                                >
-                                    {m.status}
-                                </p>
-                            </div>
+                {filteredMeasurements.map((m) => (
+                    <div
+                        key={m.id}
+                        onClick={() => setSelectedMeasurement(m)}
+                        className="grid grid-cols-4 px-4 py-4 text-sm border-b cursor-pointer hover:bg-gray-50"
+                    >
+                        <div>
+                            <p className="font-medium text-gray-900">
+                                {m.customers?.name}
+                            </p>
+                            {m.name && (
+                                <p className="text-xs text-gray-500">{m.name}</p>
+                            )}
                         </div>
-                    );
-                })}
+
+                        <div className="text-gray-600">
+                            {m.measurement_templates?.name}
+                        </div>
+
+                        <div className="text-gray-500">
+                            {new Date(m.created_at).toLocaleDateString()}
+                        </div>
+
+                        <div>
+                            <span
+                                className={`text-xs px-2 py-1 rounded ${m.status === "verified"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-yellow-100 text-yellow-700"
+                                    }`}
+                            >
+                                {m.status}
+                            </span>
+                        </div>
+                    </div>
+                ))}
+
                 {filteredMeasurements.length === 0 && (
                     <div className="text-center text-gray-500 py-10">
                         No measurements found
@@ -428,12 +432,11 @@ export default function Measurements() {
                                         Cancel
                                     </button>
 
-                                    <button
+                                    <Button
                                         onClick={handleSave}
-                                        className="bg-slate-900 text-white px-4 py-2 rounded text-sm"
                                     >
                                         Save Changes
-                                    </button>
+                                    </Button>
                                 </div>
                             )}
                         </div>
