@@ -4,8 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import {
     CheckCircle2, Ruler, Info, ChevronRight,
     Loader2, User, Phone, ShoppingBag, MessageCircle,
-    Check, X
+    Check, X, Download
 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function PublicMeasurement() {
     const { token } = useParams();
@@ -65,59 +67,119 @@ export default function PublicMeasurement() {
         init();
     }, [token]);
 
-    // Validation Logic: Checks if all visible fields have a value
     const isFormIncomplete = () => {
         if (!name || !phone || selectedTemplates.length === 0) return true;
-
         for (const tplId of selectedTemplates) {
             const fields = fieldsMap[tplId] || [];
             for (const f of fields) {
                 const value = formData[f.field_key];
-                // Check for null, undefined, or empty string. 
-                // Boolean 'false' is a valid value, so we specifically check for that.
                 if (value === undefined || value === null || value === "") return true;
             }
         }
         return false;
     };
 
+    const generatePDF = () => {
+        const doc = new jsPDF();
+        const timestamp = new Date().toLocaleDateString();
+
+        // Branding Header
+        doc.setFontSize(22);
+        doc.setTextColor(190, 24, 93); // Pink-600
+        doc.text("SAREE PALACE ELITE", 105, 20, { align: "center" });
+
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        doc.text("Boutique Measurement Summary", 105, 28, { align: "center" });
+
+        // Customer Info
+        doc.setTextColor(0);
+        doc.setFontSize(11);
+        doc.text(`Customer: ${name}`, 20, 45);
+        doc.text(`Phone: ${phone}`, 20, 52);
+        doc.text(`Date: ${timestamp}`, 20, 59);
+
+        let currentY = 70;
+
+        selectedTemplates.forEach((tplId) => {
+            const template = templates.find(t => t.id === tplId);
+            const fields = fieldsMap[tplId] || [];
+
+            doc.setFontSize(14);
+            doc.setTextColor(190, 24, 93);
+            doc.text(`${template?.name} Measurements`, 20, currentY);
+
+            const tableRows = fields.map(f => [
+                f.label,
+                `${formData[f.field_key]} ${f.unit || ""}`
+            ]);
+
+            autoTable(doc, {
+                startY: currentY + 5,
+                head: [['Measurement', 'Value']],
+                body: tableRows,
+                theme: 'striped',
+                headStyles: { fillColor: [30, 41, 59] }, // Slate-800
+                margin: { left: 20, right: 20 }
+            });
+
+            currentY = (doc as any).lastAutoTable.finalY + 15;
+        });
+
+        doc.save(`${name.replace(/\s+/g, '_')}_Measurements.pdf`);
+    };
+
     const handleSubmit = async () => {
         if (isFormIncomplete()) return;
 
         setSubmitting(true);
-        const cleanedValues = Object.fromEntries(
-            Object.entries(formData).map(([k, v]) => [
-                k, v === "true" || v === true ? true : v === "false" || v === false ? false : isNaN(Number(v)) ? v : Number(v),
-            ])
-        );
+        try {
+            const cleanedValues = Object.fromEntries(
+                Object.entries(formData).map(([k, v]) => [
+                    k, v === "true" || v === true ? true : v === "false" || v === false ? false : isNaN(Number(v)) ? v : Number(v),
+                ])
+            );
 
-        const { data: existingCustomer } = await supabase.from("customers").select("id").eq("phone", phone).maybeSingle();
-        let customerId = existingCustomer?.id;
+            // 1. Get or Create Customer
+            const { data: existingCustomer } = await supabase.from("customers").select("id").eq("phone", phone).maybeSingle();
+            let customerId = existingCustomer?.id;
 
-        if (!customerId) {
-            const { data: newCustomer } = await supabase.from("customers").insert({ name, phone }).select().single();
-            customerId = newCustomer.id;
+            if (!customerId) {
+                const { data: newCustomer } = await supabase.from("customers").insert({ name, phone }).select().single();
+                customerId = newCustomer.id;
+            }
+
+            // 2. Insert measurements for each product
+            for (const templateId of selectedTemplates) {
+                const templateFields = fieldsMap[templateId] || [];
+                const values = Object.fromEntries(templateFields.map((f) => [f.field_key, cleanedValues[f.field_key]]));
+
+                const { error: insertError } = await supabase.from("customer_measurements").insert({
+                    customer_id: customerId,
+                    template_id: templateId,
+                    values,
+                    source: "customer",
+                    status: "pending",
+                });
+
+                if (insertError) throw insertError;
+            }
+
+            // 3. Download PDF
+            generatePDF();
+
+            // 4. Finalize
+            setSubmitting(false);
+            setSuccess(true);
+        } catch (err) {
+            console.error(err);
+            alert("Database connection failed. Please check your internet and try again.");
+            setSubmitting(false);
         }
-
-        for (const templateId of selectedTemplates) {
-            const templateFields = fieldsMap[templateId] || [];
-            const values = Object.fromEntries(templateFields.map((f) => [f.field_key, cleanedValues[f.field_key]]));
-
-            await supabase.from("customer_measurements").insert({
-                customer_id: customerId,
-                template_id: templateId,
-                values,
-                source: "customer",
-                status: "pending",
-            });
-        }
-
-        setSubmitting(false);
-        setSuccess(true);
     };
 
     if (loading) return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-white">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-white text-center px-6">
             <Loader2 className="w-10 h-10 animate-spin text-pink-600 mb-4" />
             <p className="text-gray-400 font-medium tracking-widest uppercase text-xs">Saree Palace Elite</p>
         </div>
@@ -125,77 +187,80 @@ export default function PublicMeasurement() {
 
     if (success) return (
         <div className="min-h-screen flex items-center justify-center bg-white p-6 text-center">
-            <div className="animate-in zoom-in duration-500">
+            <div className="animate-in zoom-in duration-500 max-w-sm">
                 <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
                     <CheckCircle2 className="w-12 h-12 text-green-500" />
                 </div>
-                <h2 className="text-3xl font-serif text-gray-900 mb-2">Perfect Fit Awaits!</h2>
-                <p className="text-gray-500 max-w-xs mx-auto">We've received your measurements, {name}. Our team will contact you if we need any clarifications.</p>
+                <h2 className="text-3xl font-serif text-gray-900 mb-4">Confirmed!</h2>
+                <p className="text-gray-500 mb-8">Measurements saved and PDF downloaded. We'll start crafting your perfect fit shortly.</p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="text-pink-600 font-bold border-2 border-pink-100 px-6 py-2 rounded-full"
+                >
+                    Fill Another
+                </button>
             </div>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-[#FDFCFD] pb-32">
-            {/* Elegant Header */}
-            <header className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-20 px-6 py-4 flex justify-between items-center">
+        <div className="min-h-screen bg-[#FDFCFD] pb-32 font-sans">
+            <header className="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 z-20 px-6 py-4 flex justify-between items-center shadow-sm">
                 <div>
-                    <p className="text-[10px] uppercase tracking-widest text-pink-600 font-bold">Boutique Concierge</p>
-                    <h1 className="text-xl font-serif text-gray-900 italic">Saree Palace Elite</h1>
+                    <p className="text-[9px] uppercase tracking-[0.2em] text-pink-600 font-black">Elite Collection</p>
+                    <h1 className="text-xl font-serif text-gray-900 italic tracking-tight">Saree Palace Elite</h1>
                 </div>
-                <Ruler className="text-gray-300 w-6 h-6" />
+                <Ruler className="text-gray-300 w-5 h-5" />
             </header>
 
             <main className="max-w-xl mx-auto p-6 pt-8">
-                {/* Branding Card */}
-                <section className="bg-slate-900 rounded-3xl p-8 mb-10 shadow-2xl shadow-pink-100 relative overflow-hidden text-white">
+                <section className="bg-slate-900 rounded-[2rem] p-8 mb-10 shadow-2xl shadow-pink-100 text-white relative overflow-hidden">
                     <div className="relative z-10">
-                        <h2 className="text-2xl font-serif mb-2 text-pink-100">Measurement Portal</h2>
-                        <p className="text-sm text-slate-400 leading-relaxed">
-                            Welcome to the Elite experience. Please provide your exact measurements for a flawless finish.
+                        <h2 className="text-2xl font-serif mb-2">Digital Studio</h2>
+                        <p className="text-sm text-slate-400 leading-relaxed font-light">
+                            Welcome, {name || 'valued client'}. Please provide your details for our tailoring masters.
                         </p>
                     </div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/10 rounded-full -mr-16 -mt-16 blur-3xl" />
                 </section>
 
-                {/* Step 1: Identity */}
                 <div className="space-y-4 mb-10">
-                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest block">1. Your Details</label>
-                    <div className="relative">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">1. Contact Identity</label>
+                    <div className="relative group">
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 group-focus-within:text-pink-500 transition-colors" />
                         <input
                             type="text"
                             placeholder="Full Name *"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            className="w-full bg-white border-2 border-gray-50 rounded-2xl pl-12 pr-4 py-4 focus:border-pink-500 focus:ring-4 focus:ring-pink-50 outline-none transition-all text-lg shadow-sm"
+                            className="w-full bg-white border-2 border-gray-50 rounded-2xl pl-12 pr-4 py-4 focus:border-pink-500 focus:ring-8 focus:ring-pink-50/50 outline-none transition-all text-lg"
                         />
                     </div>
-                    <div className="relative">
-                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
+                    <div className="relative group">
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 group-focus-within:text-pink-500 transition-colors" />
                         <input
                             type="tel"
                             placeholder="WhatsApp Number *"
                             value={phone}
                             onChange={(e) => setPhone(e.target.value)}
-                            className="w-full bg-white border-2 border-gray-50 rounded-2xl pl-12 pr-4 py-4 focus:border-pink-500 focus:ring-4 focus:ring-pink-50 outline-none transition-all text-lg shadow-sm"
+                            className="w-full bg-white border-2 border-gray-50 rounded-2xl pl-12 pr-4 py-4 focus:border-pink-500 focus:ring-8 focus:ring-pink-50/50 outline-none transition-all text-lg"
                         />
                     </div>
                 </div>
 
-                {/* Step 2: Selection */}
                 <div className="mb-10">
-                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 block">2. Select Garments</label>
-                    <div className="flex gap-3 flex-wrap">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 block px-1">2. Required Garments</label>
+                    <div className="flex gap-2 flex-wrap">
                         {templates.map((tpl) => {
                             const isSelected = selectedTemplates.includes(tpl.id);
                             return (
                                 <button
                                     key={tpl.id}
                                     onClick={() => setSelectedTemplates(prev => isSelected ? prev.filter(id => id !== tpl.id) : [...prev, tpl.id])}
-                                    className={`px-6 py-3 rounded-full text-sm font-semibold transition-all flex items-center gap-2 border-2 ${isSelected ? "bg-pink-600 border-pink-600 text-white shadow-lg shadow-pink-200" : "bg-white border-gray-100 text-gray-500 hover:border-pink-200 shadow-sm"
+                                    className={`px-6 py-3 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 border-2 ${isSelected ? "bg-slate-900 border-slate-900 text-white shadow-lg" : "bg-white border-gray-100 text-gray-400 hover:border-pink-200"
                                         }`}
                                 >
-                                    <ShoppingBag className={`w-4 h-4 ${isSelected ? "text-pink-200" : "text-gray-300"}`} />
+                                    <ShoppingBag className="w-4 h-4" />
                                     {tpl.name}
                                 </button>
                             );
@@ -203,37 +268,36 @@ export default function PublicMeasurement() {
                     </div>
                 </div>
 
-                {/* Step 3: Measurement Forms */}
                 {selectedTemplates.map((templateId) => {
                     const tplFields = fieldsMap[templateId] || [];
                     const templateName = templates.find(t => t.id === templateId)?.name;
 
                     return (
-                        <div key={templateId} className="mb-12 bg-white rounded-3xl p-6 border border-gray-50 shadow-sm animate-in fade-in slide-in-from-bottom-4">
-                            <h3 className="text-xl font-serif text-pink-700 mb-8 border-b border-pink-50 pb-4">
-                                {templateName} Measurements
-                            </h3>
+                        <div key={templateId} className="mb-12 bg-white rounded-[2rem] p-8 border border-gray-50 shadow-sm animate-in fade-in slide-in-from-bottom-6">
+                            <div className="flex items-center gap-3 mb-8">
+                                <div className="w-10 h-10 rounded-2xl bg-pink-50 flex items-center justify-center text-pink-600"><Ruler className="w-5 h-5" /></div>
+                                <h3 className="text-xl font-serif text-gray-900">{templateName} Specs</h3>
+                            </div>
 
                             <div className="space-y-8">
                                 {tplFields.map((field) => (
                                     <div key={field.id} className="space-y-3">
-                                        <label className="block text-sm font-bold text-gray-700">
-                                            {field.label} {field.unit && <span className="text-gray-400 font-normal ml-1">({field.unit})</span>}
+                                        <label className="block text-xs font-black text-gray-500 uppercase tracking-tighter">
+                                            {field.label} {field.unit && <span className="text-pink-400 font-normal ml-1 lowercase">({field.unit})</span>}
                                         </label>
 
                                         {(field.input_type === "text" || field.input_type === "number") && (
                                             <input
                                                 type={field.input_type}
-                                                placeholder={`Enter ${field.label.toLowerCase()}`}
-                                                className="w-full bg-gray-50/50 border-2 border-transparent rounded-xl px-4 py-4 focus:bg-white focus:border-pink-500 outline-none transition-all text-lg"
+                                                placeholder={`0.0`}
+                                                className="w-full bg-gray-50/50 border-2 border-transparent rounded-xl px-4 py-4 focus:bg-white focus:border-pink-500 outline-none transition-all text-xl font-medium"
                                                 value={formData[field.field_key] || ""}
                                                 onChange={(e) => setFormData({ ...formData, [field.field_key]: e.target.value })}
                                             />
                                         )}
 
-                                        {/* IMPROVEMENT: Yes/No Toggle for Can-Can / Pads */}
                                         {field.input_type === "boolean" && (
-                                            <div className="flex gap-4">
+                                            <div className="flex gap-3">
                                                 {[
                                                     { label: 'Yes', value: true, icon: <Check className="w-4 h-4" /> },
                                                     { label: 'No', value: false, icon: <X className="w-4 h-4" /> }
@@ -241,12 +305,11 @@ export default function PublicMeasurement() {
                                                     <button
                                                         key={opt.label}
                                                         onClick={() => setFormData({ ...formData, [field.field_key]: opt.value })}
-                                                        className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-xl border-2 font-bold transition-all ${formData[field.field_key] === opt.value
-                                                            ? "bg-pink-600 border-pink-600 text-white shadow-md"
-                                                            : "bg-white border-gray-100 text-gray-400 hover:border-pink-100"
+                                                        className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-xl border-2 font-black transition-all ${formData[field.field_key] === opt.value
+                                                                ? "bg-pink-600 border-pink-600 text-white shadow-xl shadow-pink-100"
+                                                                : "bg-white border-gray-100 text-gray-400"
                                                             }`}
                                                     >
-                                                        {opt.icon}
                                                         {opt.label}
                                                     </button>
                                                 ))}
@@ -259,7 +322,7 @@ export default function PublicMeasurement() {
                                                 value={formData[field.field_key] || ""}
                                                 onChange={(e) => setFormData({ ...formData, [field.field_key]: e.target.value })}
                                             >
-                                                <option value="">Choose Option</option>
+                                                <option value="">Select Option</option>
                                                 {(field.options || []).map((opt: string) => (
                                                     <option key={opt} value={opt}>{opt}</option>
                                                 ))}
@@ -273,34 +336,37 @@ export default function PublicMeasurement() {
                 })}
             </main>
 
-            {/* Support Widget */}
             <a
-                href="https://wa.me/918980937903?text=Hi Saree Palace Elite, I'm filling out the measurement form and need some help."
+                href="https://wa.me/918980937903?text=Hi Saree Palace Elite, I'm filling my measurements and have a question."
                 target="_blank"
                 rel="noreferrer"
-                className="fixed bottom-28 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform z-50 flex items-center justify-center group"
+                className="fixed bottom-28 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-2xl hover:scale-110 active:scale-90 transition-all z-50 group"
             >
                 <MessageCircle className="w-6 h-6" />
-                <span className="absolute right-full mr-4 bg-slate-900 text-white text-[10px] px-3 py-1.5 rounded-lg whitespace-nowrap font-bold tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">NEED HELP?</span>
+                <span className="absolute right-full mr-4 bg-slate-900 text-white text-[10px] px-3 py-1.5 rounded-lg font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap tracking-widest">WHATSAPP SUPPORT</span>
             </a>
 
-            {/* Action Bar */}
-            <footer className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-gray-100 p-6 z-30">
+            <footer className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-2xl border-t border-gray-100 p-6 z-30">
                 <div className="max-w-xl mx-auto">
                     <button
                         onClick={handleSubmit}
                         disabled={submitting || isFormIncomplete()}
-                        className={`w-full py-4 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${submitting || isFormIncomplete()
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none"
-                            : "bg-slate-900 text-white shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-95"
+                        className={`w-full py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${submitting || isFormIncomplete()
+                                ? "bg-gray-100 text-gray-300 shadow-none"
+                                : "bg-pink-600 text-white shadow-2xl shadow-pink-200 active:scale-95 hover:bg-pink-700"
                             }`}
                     >
-                        {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Complete My Fit"}
-                        {!submitting && <ChevronRight className="w-5 h-5" />}
+                        {submitting ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                            <>
+                                <Download className="w-5 h-5" /> Submit & Download PDF
+                            </>
+                        )}
                     </button>
                     {isFormIncomplete() && (
-                        <p className="text-[10px] text-center mt-3 text-gray-400 font-bold tracking-wider uppercase">
-                            Please ensure all details are filled to unlock submission
+                        <p className="text-[9px] text-center mt-4 text-gray-400 font-bold tracking-widest uppercase">
+                            Please complete all mandatory fields to finalize
                         </p>
                     )}
                 </div>
