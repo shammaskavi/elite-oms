@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import Logo from "../assets/logo.svg";
 
 export default function PublicMeasurement() {
     const { token } = useParams();
@@ -214,8 +215,12 @@ export default function PublicMeasurement() {
     return (
         <div className="min-h-screen bg-[#FDFCFD] pb-32 font-sans">
             <header className="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 z-20 px-6 py-4 flex justify-between items-center shadow-sm">
-                <div>
-                    <p className="text-[9px] uppercase tracking-[0.2em] text-pink-600 font-black">Elite Collection</p>
+                <div className="flex items-center gap-4">
+                    <img
+                        src={Logo}
+                        alt="Saree Palace Elite"
+                        className="max-h-10 w-auto mx-auto p-61"
+                    />
                     <h1 className="text-xl font-serif text-gray-900 italic tracking-tight">Saree Palace Elite</h1>
                 </div>
                 <Ruler className="text-gray-300 w-5 h-5" />
