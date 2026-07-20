@@ -3,8 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import GenerateMeasurementLinkModal from "@/components/measurements/GenerateMeasurementLinkModal";
 import { Button } from "@/components/ui/button";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 export default function Measurements() {
+    useDocumentTitle("Measurements");
     const [measurements, setMeasurements] = useState<any[]>([]);
     const [selectedMeasurement, setSelectedMeasurement] = useState<any | null>(null);
     const [search, setSearch] = useState("");

@@ -21,8 +21,10 @@ import React from "react";
 import { useMemo } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 export default function Reports() {
+    useDocumentTitle("Reports");
     /* =========================
        REPORT PERIOD STATE (LOCAL TO REPORTS PAGE)
     ========================== */
@@ -157,8 +159,6 @@ export default function Reports() {
                 result = data;
             }
 
-            console.log("📊 OWNER INSIGHTS RAW:", data);
-            console.log("📊 OWNER INSIGHTS PARSED:", result);
 
             return result ?? null;
         },

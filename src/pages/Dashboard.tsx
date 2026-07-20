@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { FileText, Package, DollarSign, Plus, HandCoins, TrendingDown } from "lucide-react";
+import { FileText, Package, DollarSign, HandCoins, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InvoiceView } from "@/components/InvoiceView";
 import { derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
+import { EmptyState } from "@/components/states";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 
 export default function Dashboard() {
+  useDocumentTitle("Dashboard");
+
   const [timePeriod, setTimePeriod] = useState<string>("today");
   const [stats, setStats] = useState({
     totalOrders: 0,
@@ -19,26 +22,15 @@ export default function Dashboard() {
     cashInflow: 0,
     revenue: 0,
   });
-  const [dailyStats, setDailyStats] = useState({
-    totalOrders: 0,
-    pendingOrders: 0,
-    cashInflow: 0,
-    revenue: 0,
-  });
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([]);
-  // const [payments, setPayments] = useState<any[]>([]);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
+  const [deliveriesToday, setDeliveriesToday] = useState<any[]>([]);
+
   const navigate = useNavigate();
   const location = useLocation();
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const openInvoiceId = (location.state as any)?.openInvoiceId;
-  const [deliveriesToday, setDeliveriesToday] = useState<any[]>([]);
-
-
-  useEffect(() => {
-    loadDashboardData();
-  }, [timePeriod]);
 
 
   useEffect(() => {
@@ -102,111 +94,95 @@ export default function Dashboard() {
     };
   };
 
-  const loadDashboardData = async () => {
-    const selectedStartDate = getDateRange();
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const selectedStartDate = getDateRange();
 
-    // Hardcoded date for "Today" to keep the summary card consistent
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayISO = todayStart.toISOString();
+      const periodStats = await fetchStatsForRange(selectedStartDate);
+      setStats(periodStats);
 
-    const [
-      periodStats,
-      todayStatsData
-    ] = await Promise.all([
-      // FETCH 1: Data for the selected dropdown (Today, Week, Month, etc.)
-      fetchStatsForRange(selectedStartDate),
+      const { data: invoicesData } = await (supabase as any)
+        .from("invoices")
+        .select(`
+      *,
+      customers (
+        name,
+        phone,
+        address
+      )
+    `)
+        .order("created_at", { ascending: false })
+        .limit(30);
 
-      // FETCH 2: Data specifically for the Summary Card (Always Today)
-      fetchStatsForRange(todayISO)
-    ]);
+      const invoiceIds = invoicesData?.map((i: any) => i.id) || [];
 
-    setStats(periodStats);
-    setDailyStats(todayStatsData);
+      const { data: invoicePayments } = invoiceIds.length
+        ? await (supabase as any)
+          .from("invoice_payments")
+          .select("*")
+          .in("invoice_id", invoiceIds)
+        : { data: [] };
 
-    // Load recent invoices (we'll derive pending status from payments)
-    const { data: invoicesData } = await (supabase as any)
-      .from("invoices")
-      .select(`
-    *,
-    customers (
-      name,
-      phone,
-      address
-    )
-  `)
-      .order("created_at", { ascending: false })
-      .limit(30);
+      // groupBy is supported in modern browsers; fall back if missing.
+      const paymentsByInvoice: Record<string, any[]> =
+        typeof (Object as any).groupBy === "function"
+          ? (Object as any).groupBy(invoicePayments || [], (p: any) => p.invoice_id)
+          : (invoicePayments || []).reduce((acc: any, p: any) => {
+              (acc[p.invoice_id] ||= []).push(p);
+              return acc;
+            }, {});
 
-
-    const invoiceIds = invoicesData?.map(i => i.id) || [];
-
-    const { data: invoicePayments } = invoiceIds.length
-      ? await (supabase as any)
-        .from("invoice_payments")
-        .select("*")
-        .in("invoice_id", invoiceIds)
-      : { data: [] };
-
-
-    const paymentsByInvoice = Object.groupBy(
-      invoicePayments || [],
-      p => p.invoice_id
-    );
-
-    const enrichedInvoices =
-      (invoicesData && invoicesData.length > 0)
-        ? await Promise.all(
-          invoicesData.map(async (inv: any) => ({
+      const enrichedInvoices = (invoicesData && invoicesData.length > 0)
+        ? invoicesData.map((inv: any) => ({
             ...inv,
-            __payment: derivePaymentStatusFromData(
-              inv,
-              paymentsByInvoice[inv.id] || []
-            )
+            __payment: derivePaymentStatusFromData(inv, paymentsByInvoice[inv.id] || []),
           }))
-        )
         : [];
 
+      const pending = enrichedInvoices.filter(
+        (inv: any) => inv.__payment?.status !== "paid"
+      );
+      setPendingInvoices(pending.slice(0, 10));
 
-    // Only keep invoices that are NOT fully paid
-    const pending = enrichedInvoices.filter(
-      (inv: any) => inv.__payment?.status !== "paid"
-    );
+      const { data: ordersDataPending } = await (supabase as any)
+        .from("orders")
+        .select("*, customers(name)")
+        .neq("order_status", "delivered")
+        .neq("order_status", "cancelled")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      setPendingOrders(ordersDataPending || []);
 
-    // Optional: keep newest 10
-    setPendingInvoices(pending.slice(0, 10));
+      const { data: deliveries } = await (supabase as any)
+        .from("order_items_calendar_view")
+        .select(`
+      order_id,
+      invoice_number,
+      item_name,
+      delivery_date,
+      customer_name,
+      stage,
+      vendor_name
+    `)
+        .eq("delivery_date", new Date().toISOString().slice(0, 10))
+        .neq("stage", "Delivered")
+        .order("invoice_number");
+      setDeliveriesToday(deliveries || []);
+    } catch (err) {
+      // Errors will be surfaced by the global onError handler / toasts.
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.error("[Dashboard] failed to load:", err);
+      }
+    }
+  }, [timePeriod]);
 
-    // Load pending orders (not delivered or cancelled)
-    const { data: ordersDataPending } = await (supabase as any)
-      .from("orders")
-      .select("*, customers(name)")
-      .neq("order_status", "delivered")
-      .neq("order_status", "cancelled")
-      .order("created_at", { ascending: false })
-      .limit(10);
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
-    setPendingOrders(ordersDataPending || []);
-
-    const { data: deliveries } = await (supabase as any)
-      .from("order_items_calendar_view")
-      .select(`
-    order_id,
-    invoice_number,
-    item_name,
-    delivery_date,
-    customer_name,
-    stage,
-    vendor_name
-  `)
-      .eq("delivery_date", new Date().toISOString().slice(0, 10))
-      .neq("stage", "Delivered")
-      .order("invoice_number");
-
-    setDeliveriesToday(deliveries || []);
-  };
-
-  const getStatusBadge = (status: string) => {
-    const variants: any = {
+  const getStatusBadge = useCallback((status: string) => {
+    const variants: Record<string, any> = {
       pending: "warning",
       processing: "info",
       ready: "success",
@@ -215,37 +191,46 @@ export default function Dashboard() {
       cancelled: "destructive",
     };
     return <Badge variant={variants[status] || "default"}>{status}</Badge>;
-  };
+  }, []);
 
-  const getTimeContext = () => {
+  const context = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12) return "morning";
     if (hour < 17) return "afternoon";
     return "evening";
-  };
+  }, []);
 
-  const context = getTimeContext();
+  const periodLabel = useMemo(() => {
+    switch (timePeriod) {
+      case "today": return "Today";
+      case "week": return "This week";
+      case "month": return "This month";
+      case "quarter": return "This quarter";
+      case "year": return "This year";
+      default: return "All time";
+    }
+  }, [timePeriod]);
 
   const activeGreeting = useMemo(() => {
-    const greetings = {
+    const greetings: Record<string, { title: string; subtitle: string; icon: string }> = {
       morning: {
-        title: "Good morning, Bablu!",
-        subtitle: `Today, you have ${stats.pendingOrders} deliveries to handle. Total revenue for this period is ₹${stats.revenue?.toLocaleString()}.`,
+        title: "Good morning!",
+        subtitle: `You have ${stats.pendingOrders} pending orders today.`,
         icon: "☕️",
       },
       afternoon: {
         title: "Good afternoon!",
-        subtitle: `You've already processed ${stats.totalOrders} orders. You're at 60% of your daily goal!`,
+        subtitle: `You've processed ${stats.totalOrders} orders so far.`,
         icon: "🌤️",
       },
       evening: {
         title: "Great work today!",
-        subtitle: `You served ${stats.totalOrders} customers. ₹${stats.cashInflow.toLocaleString()} hit your bank account.`,
-        icon: "🌙"
-      }
+        subtitle: `₹${stats.cashInflow.toLocaleString()} in cash inflow today.`,
+        icon: "🌙",
+      },
     };
     return greetings[context];
-  }, [stats, context]); // This ensures it updates when stats are fetched
+  }, [stats, context]);
 
 
   return (
@@ -294,72 +279,30 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Total Orders Card */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Total Orders</p>
-              <h3 className="text-3xl font-bold mt-2">{stats.totalOrders}</h3>
-            </div>
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Package className="h-6 w-6 text-primary" />
-            </div>
-          </div>
-        </Card>
-        {/* Pending Orders Card */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Pending{timePeriod === "today" ? "Today" :
-                timePeriod === "week" ? "This week" :
-                  timePeriod === "month" ? "This month" :
-                    timePeriod === "quarter" ? "This quarter" :
-                      timePeriod === "year" ? "This year" : "All time"}</p>
-              <h3 className="text-3xl font-bold mt-2">{stats.pendingOrders}</h3>
-              <p className="text-xs text-muted-foreground mt-1">Active orders {timePeriod === "today" ? "Today" :
-                timePeriod === "week" ? "This week" :
-                  timePeriod === "month" ? "This month" :
-                    timePeriod === "quarter" ? "This quarter" :
-                      timePeriod === "year" ? "This year" : "All time"}</p>
-            </div>
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <TrendingDown className="h-6 w-6 text-primary" />
-            </div>
-          </div>
-        </Card>
-        {/* Dispatched Orders Card */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Cash Inflow</p>
-              <h3 className="text-3xl font-bold mt-2">₹{stats.cashInflow.toLocaleString()}</h3>
-            </div>
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <HandCoins className="h-6 w-6 text-primary" />
-            </div>
-          </div>
-        </Card>
-        {/* Revenue Card */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Revenue {timePeriod === "today" ? "Today" :
-                timePeriod === "week" ? "This week" :
-                  timePeriod === "month" ? "This month" :
-                    timePeriod === "quarter" ? "This quarter" :
-                      timePeriod === "year" ? "This year" : "All time"}</p>
-              <h3 className="text-3xl font-bold mt-2">₹{stats.revenue.toLocaleString()}</h3>
-              <p className="text-xs text-muted-foreground mt-1">{timePeriod === "today" ? "Today" :
-                timePeriod === "week" ? "This week" :
-                  timePeriod === "month" ? "This month" :
-                    timePeriod === "quarter" ? "This quarter" :
-                      timePeriod === "year" ? "This year" : "All time"}</p>
-            </div>
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <DollarSign className="h-6 w-6 text-primary" />
-            </div>
-          </div>
-        </Card>
+        <StatCard
+          label="Total orders"
+          value={stats.totalOrders}
+          icon={<Package className="h-6 w-6 text-primary" />}
+          hint={periodLabel}
+        />
+        <StatCard
+          label={`Pending · ${periodLabel}`}
+          value={stats.pendingOrders}
+          icon={<TrendingDown className="h-6 w-6 text-primary" />}
+          hint="Active orders"
+        />
+        <StatCard
+          label="Cash inflow"
+          value={`₹${stats.cashInflow.toLocaleString()}`}
+          icon={<HandCoins className="h-6 w-6 text-primary" />}
+          hint={periodLabel}
+        />
+        <StatCard
+          label={`Revenue · ${periodLabel}`}
+          value={`₹${stats.revenue.toLocaleString()}`}
+          icon={<DollarSign className="h-6 w-6 text-primary" />}
+          hint={periodLabel}
+        />
       </div>
 
       {/* Pending Activity */}
@@ -408,9 +351,11 @@ export default function Dashboard() {
                 ))}
 
                 {deliveriesToday.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No deliveries scheduled for today
-                  </p>
+                  <EmptyState
+                    compact
+                    title="No deliveries today"
+                    description="You're all clear for the day."
+                  />
                 )}
               </div>
             </ScrollArea>
@@ -452,7 +397,11 @@ export default function Dashboard() {
                   </div>
                 ))}
                 {pendingInvoices.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No pending invoices</p>
+                  <EmptyState
+                    compact
+                    title="No pending invoices"
+                    description="Everything is paid up."
+                  />
                 )}
               </div>
             </ScrollArea>
@@ -481,7 +430,11 @@ export default function Dashboard() {
                   </div>
                 ))}
                 {pendingOrders.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No pending orders</p>
+                  <EmptyState
+                    compact
+                    title="No pending orders"
+                    description="Nothing in the queue right now."
+                  />
                 )}
               </div>
             </ScrollArea>
@@ -489,18 +442,43 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {
-        selectedInvoice && (
-          <InvoiceView
-            invoice={selectedInvoice}
-            open={invoiceModalOpen}
-            onOpenChange={(open) => {
-              setInvoiceModalOpen(open);
-              if (!open) setSelectedInvoice(null);
-            }}
-          />
-        )
-      }
-    </div >
+      {selectedInvoice && (
+        <InvoiceView
+          invoice={selectedInvoice}
+          open={invoiceModalOpen}
+          onOpenChange={(open) => {
+            setInvoiceModalOpen(open);
+            if (!open) setSelectedInvoice(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  hint,
+}: {
+  label: string;
+  value: number | string;
+  icon: React.ReactNode;
+  hint?: string;
+}) {
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <h3 className="mt-2 text-3xl font-bold">{value}</h3>
+          {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+        </div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+          {icon}
+        </div>
+      </div>
+    </Card>
   );
 }

@@ -87,6 +87,98 @@ export type Database = {
           },
         ]
       }
+      customer_measurements: {
+        Row: {
+          created_at: string | null
+          customer_id: string | null
+          id: string
+          name: string | null
+          source: string | null
+          status: string | null
+          template_id: string | null
+          updated_at: string | null
+          values: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          name?: string | null
+          source?: string | null
+          status?: string | null
+          template_id?: string | null
+          updated_at?: string | null
+          values?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          name?: string | null
+          source?: string | null
+          status?: string | null
+          template_id?: string | null
+          updated_at?: string | null
+          values?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_measurements_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_measurements_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "measurement_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_payments: {
+        Row: {
+          amount: number
+          created_by: string | null
+          customer_id: string
+          id: string
+          notes: string | null
+          payment_method: string
+          received_at: string
+          reference: string | null
+        }
+        Insert: {
+          amount: number
+          created_by?: string | null
+          customer_id: string
+          id?: string
+          notes?: string | null
+          payment_method: string
+          received_at?: string
+          reference?: string | null
+        }
+        Update: {
+          amount?: number
+          created_by?: string | null
+          customer_id?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          received_at?: string
+          reference?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string | null
@@ -123,6 +215,48 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_items: {
+        Row: {
+          barcode: string
+          brand: string | null
+          category: string | null
+          created_at: string
+          erp_batch: string | null
+          erp_code: string | null
+          id: string
+          metadata: Json | null
+          price: number
+          product_name: string
+          status: string
+        }
+        Insert: {
+          barcode: string
+          brand?: string | null
+          category?: string | null
+          created_at?: string
+          erp_batch?: string | null
+          erp_code?: string | null
+          id?: string
+          metadata?: Json | null
+          price?: number
+          product_name: string
+          status?: string
+        }
+        Update: {
+          barcode?: string
+          brand?: string | null
+          category?: string | null
+          created_at?: string
+          erp_batch?: string | null
+          erp_code?: string | null
+          id?: string
+          metadata?: Json | null
+          price?: number
+          product_name?: string
+          status?: string
+        }
+        Relationships: []
+      }
       invoice_items: {
         Row: {
           id: string
@@ -130,6 +264,7 @@ export type Database = {
           name: string
           product_id: string | null
           qty: number
+          reference_name: string | null
           sku: string | null
           total: number
           unit_price: number
@@ -140,6 +275,7 @@ export type Database = {
           name: string
           product_id?: string | null
           qty?: number
+          reference_name?: string | null
           sku?: string | null
           total?: number
           unit_price?: number
@@ -150,6 +286,7 @@ export type Database = {
           name?: string
           product_id?: string | null
           qty?: number
+          reference_name?: string | null
           sku?: string | null
           total?: number
           unit_price?: number
@@ -171,6 +308,57 @@ export type Database = {
           },
         ]
       }
+      invoice_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_payment_id: string | null
+          date: string
+          id: string
+          invoice_id: string
+          method: string
+          reference_id: string | null
+          remarks: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          customer_payment_id?: string | null
+          date?: string
+          id?: string
+          invoice_id: string
+          method: string
+          reference_id?: string | null
+          remarks?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_payment_id?: string | null
+          date?: string
+          id?: string
+          invoice_id?: string
+          method?: string
+          reference_id?: string | null
+          remarks?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_payments_customer_payment_id_fkey"
+            columns: ["customer_payment_id"]
+            isOneToOne: false
+            referencedRelation: "customer_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           created_at: string
@@ -180,10 +368,15 @@ export type Database = {
           id: string
           invoice_number: string
           payment_method: string | null
+          payment_status: string
           raw_payload: Json | null
+          settled: boolean
+          settlement_reason: string | null
+          status: string
           subtotal: number | null
           tax: number | null
           total: number
+          tracking_token: string | null
           uploaded_by: string | null
         }
         Insert: {
@@ -194,10 +387,15 @@ export type Database = {
           id?: string
           invoice_number: string
           payment_method?: string | null
+          payment_status?: string
           raw_payload?: Json | null
+          settled?: boolean
+          settlement_reason?: string | null
+          status?: string
           subtotal?: number | null
           tax?: number | null
           total?: number
+          tracking_token?: string | null
           uploaded_by?: string | null
         }
         Update: {
@@ -208,10 +406,15 @@ export type Database = {
           id?: string
           invoice_number?: string
           payment_method?: string | null
+          payment_status?: string
           raw_payload?: Json | null
+          settled?: boolean
+          settlement_reason?: string | null
+          status?: string
           subtotal?: number | null
           tax?: number | null
           total?: number
+          tracking_token?: string | null
           uploaded_by?: string | null
         }
         Relationships: [
@@ -272,6 +475,246 @@ export type Database = {
           },
         ]
       }
+      measurement_fields: {
+        Row: {
+          created_at: string | null
+          field_key: string
+          id: string
+          input_type: string
+          label: string
+          options: Json | null
+          order_index: number | null
+          required: boolean | null
+          template_id: string | null
+          unit: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          field_key: string
+          id?: string
+          input_type: string
+          label: string
+          options?: Json | null
+          order_index?: number | null
+          required?: boolean | null
+          template_id?: string | null
+          unit?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          field_key?: string
+          id?: string
+          input_type?: string
+          label?: string
+          options?: Json | null
+          order_index?: number | null
+          required?: boolean | null
+          template_id?: string | null
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "measurement_fields_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "measurement_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      measurement_links: {
+        Row: {
+          created_at: string | null
+          customer_id: string | null
+          expires_at: string | null
+          id: string
+          status: string | null
+          template_id: string | null
+          token: string
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: string | null
+          expires_at?: string | null
+          id?: string
+          status?: string | null
+          template_id?: string | null
+          token: string
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string | null
+          expires_at?: string | null
+          id?: string
+          status?: string | null
+          template_id?: string | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "measurement_links_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "measurement_links_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "measurement_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      measurement_profile_values: {
+        Row: {
+          created_at: string | null
+          field_key: string
+          id: string
+          profile_id: string | null
+          value: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          field_key: string
+          id?: string
+          profile_id?: string | null
+          value?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          field_key?: string
+          id?: string
+          profile_id?: string | null
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "measurement_profile_values_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "measurement_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      measurement_profiles: {
+        Row: {
+          created_at: string | null
+          customer_id: string | null
+          id: string
+          name: string | null
+          notes: string | null
+          template_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          template_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "measurement_profiles_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "measurement_profiles_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "measurement_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      measurement_templates: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      order_measurements: {
+        Row: {
+          created_at: string | null
+          field_key: string
+          id: string
+          order_id: string | null
+          template_id: string | null
+          value: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          field_key: string
+          id?: string
+          order_id?: string | null
+          template_id?: string | null
+          value?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          field_key?: string
+          id?: string
+          order_id?: string | null
+          template_id?: string | null
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_measurements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "order_items_calendar_view"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "order_measurements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_measurements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_with_details"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "order_measurements_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "measurement_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_stages: {
         Row: {
           assigned_employee: string | null
@@ -279,6 +722,8 @@ export type Database = {
           end_ts: string | null
           id: string
           metadata: Json | null
+          new_stage_id: string | null
+          new_vendor_id: string | null
           notes: string | null
           order_id: string
           stage_name: string
@@ -293,6 +738,8 @@ export type Database = {
           end_ts?: string | null
           id?: string
           metadata?: Json | null
+          new_stage_id?: string | null
+          new_vendor_id?: string | null
           notes?: string | null
           order_id: string
           stage_name: string
@@ -307,6 +754,8 @@ export type Database = {
           end_ts?: string | null
           id?: string
           metadata?: Json | null
+          new_stage_id?: string | null
+          new_vendor_id?: string | null
           notes?: string | null
           order_id?: string
           stage_name?: string
@@ -317,6 +766,27 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "order_stages_new_stage_id_fkey"
+            columns: ["new_stage_id"]
+            isOneToOne: false
+            referencedRelation: "stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_stages_new_vendor_id_fkey"
+            columns: ["new_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_stages_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "order_items_calendar_view"
+            referencedColumns: ["order_id"]
+          },
+          {
             foreignKeyName: "order_stages_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
@@ -324,10 +794,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "order_stages_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders_with_details"
+            referencedColumns: ["order_id"]
+          },
+          {
             foreignKeyName: "order_stages_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
         ]
@@ -396,33 +873,105 @@ export type Database = {
           },
         ]
       }
+      payment_allocations: {
+        Row: {
+          allocated_amount: number
+          created_at: string
+          customer_payment_id: string
+          id: string
+          invoice_id: string
+        }
+        Insert: {
+          allocated_amount: number
+          created_at?: string
+          customer_payment_id: string
+          id?: string
+          invoice_id: string
+        }
+        Update: {
+          allocated_amount?: number
+          created_at?: string
+          customer_payment_id?: string
+          id?: string
+          invoice_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_allocations_customer_payment_id_fkey"
+            columns: ["customer_payment_id"]
+            isOneToOne: false
+            referencedRelation: "customer_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: string | null
+          color: string | null
+          company_barcode: string | null
           created_at: string
+          hsn_code: string | null
           id: string
+          inward_date: string | null
+          item_code: string | null
+          mrp: number | null
           name: string
           price: number | null
+          purchase_date: string | null
+          purchase_price: number | null
+          size: string | null
           sku: string | null
+          status: string | null
           stock: number | null
+          supplier_name: string | null
         }
         Insert: {
           category?: string | null
+          color?: string | null
+          company_barcode?: string | null
           created_at?: string
+          hsn_code?: string | null
           id?: string
+          inward_date?: string | null
+          item_code?: string | null
+          mrp?: number | null
           name: string
           price?: number | null
+          purchase_date?: string | null
+          purchase_price?: number | null
+          size?: string | null
           sku?: string | null
+          status?: string | null
           stock?: number | null
+          supplier_name?: string | null
         }
         Update: {
           category?: string | null
+          color?: string | null
+          company_barcode?: string | null
           created_at?: string
+          hsn_code?: string | null
           id?: string
+          inward_date?: string | null
+          item_code?: string | null
+          mrp?: number | null
           name?: string
           price?: number | null
+          purchase_date?: string | null
+          purchase_price?: number | null
+          size?: string | null
           sku?: string | null
+          status?: string | null
           stock?: number | null
+          supplier_name?: string | null
         }
         Relationships: []
       }
@@ -450,11 +999,213 @@ export type Database = {
         }
         Relationships: []
       }
+      stages: {
+        Row: {
+          active: boolean | null
+          id: string
+          name: string
+          order_index: number
+        }
+        Insert: {
+          active?: boolean | null
+          id?: string
+          name: string
+          order_index: number
+        }
+        Update: {
+          active?: boolean | null
+          id?: string
+          name?: string
+          order_index?: number
+        }
+        Relationships: []
+      }
+      user_push_devices: {
+        Row: {
+          created_at: string | null
+          id: string
+          player_id: string
+          provider: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          player_id: string
+          provider?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          player_id?: string
+          provider?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      vendors: {
+        Row: {
+          access_token: string | null
+          active: boolean | null
+          id: string
+          name: string
+          portal_enabled: boolean | null
+          stage_id: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          active?: boolean | null
+          id?: string
+          name: string
+          portal_enabled?: boolean | null
+          stage_id?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          active?: boolean | null
+          id?: string
+          name?: string
+          portal_enabled?: boolean | null
+          stage_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendors_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
-      [_ in never]: never
+      order_items_calendar_view: {
+        Row: {
+          created_at: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_date: string | null
+          invoice_id: string | null
+          invoice_number: string | null
+          item_index: number | null
+          item_name: string | null
+          order_id: string | null
+          stage: string | null
+          vendor_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders_with_details: {
+        Row: {
+          customer_name: string | null
+          delivery_date: string | null
+          invoice_id: string | null
+          invoice_number: string | null
+          item_name: string | null
+          order_id: string | null
+          stage_name: string | null
+          vendor_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      execute_sql: { Args: { sql: string }; Returns: Json }
+      get_cash_inflow_daily:
+        | {
+            Args: never
+            Returns: {
+              date: string
+              total: number
+            }[]
+          }
+        | {
+            Args: { from_date: string; to_date: string }
+            Returns: {
+              date: string
+              total: number
+            }[]
+          }
+      get_delivery_risk: {
+        Args: never
+        Returns: {
+          risk: string
+          total_orders: number
+        }[]
+      }
+      get_monthly_owner_summary:
+        | { Args: { month_start?: string }; Returns: Json }
+        | { Args: { p_month: number; p_year: number }; Returns: Json }
+      get_order_stats: { Args: never; Returns: Json }
+      get_owner_insights:
+        | { Args: never; Returns: Json }
+        | { Args: { from_date: string; to_date: string }; Returns: Json }
+      get_owner_summary: {
+        Args: { from_date: string; to_date: string }
+        Returns: Json
+      }
+      get_process_breakdown: {
+        Args: never
+        Returns: {
+          stage_name: string
+          total_orders: number
+        }[]
+      }
+      get_revenue_trend:
+        | {
+            Args: never
+            Returns: {
+              booked_revenue: number
+              confirmed_revenue: number
+              date: string
+            }[]
+          }
+        | {
+            Args: { from_date: string; to_date: string }
+            Returns: {
+              booked_revenue: number
+              confirmed_revenue: number
+              date: string
+            }[]
+          }
+      get_vendor_load: {
+        Args: never
+        Returns: {
+          active_orders: number
+          vendor_id: string
+          vendor_name: string
+        }[]
+      }
+      get_vendor_work: {
+        Args: { p_token: string }
+        Returns: {
+          customer_name: string
+          delivery_date: string
+          invoice_number: string
+          item_name: string
+          order_id: string
+          stage_name: string
+          vendor_name: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -462,9 +1213,85 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_authenticated_user: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
+      is_authenticated_user: { Args: never; Returns: boolean }
+      orders_due_today: {
+        Args: never
+        Returns: {
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          id: string
+          invoice_id: string | null
+          metadata: Json | null
+          order_code: string
+          order_status: string
+          payment_status: string
+          total_amount: number
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      orders_due_tomorrow: {
+        Args: never
+        Returns: {
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          id: string
+          invoice_id: string | null
+          metadata: Json | null
+          order_code: string
+          order_status: string
+          payment_status: string
+          total_amount: number
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      orders_overdue: {
+        Args: never
+        Returns: {
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          id: string
+          invoice_id: string | null
+          metadata: Json | null
+          order_code: string
+          order_status: string
+          payment_status: string
+          total_amount: number
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      recalculate_invoice_payment_status: {
+        Args: { p_invoice_id: string }
+        Returns: undefined
+      }
+      update_order_delivery_date: {
+        Args: {
+          p_actor_profile_id?: string
+          p_new_date: string
+          p_order_id: string
+          p_reason?: string
+        }
+        Returns: undefined
       }
     }
     Enums: {

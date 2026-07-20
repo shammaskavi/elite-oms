@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function CreateMeasurement() {
     const [customers, setCustomers] = useState<any[]>([]);
@@ -270,12 +271,11 @@ export default function CreateMeasurement() {
 
             {/* Save */}
             {fields.length > 0 && (
-                <button
+                <Button
                     onClick={handleSave}
-                    className="bg-slate-900 text-white px-6 py-3 rounded hover:bg-slate-800 transition"
                 >
                     Save Measurements
-                </button>
+                </Button>
             )}
         </div>
     );

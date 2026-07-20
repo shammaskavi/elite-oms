@@ -766,7 +766,6 @@ export default function CustomerDetail() {
                                                             variant="ghost"
                                                             size="sm"
                                                             onClick={() => {
-                                                                console.log("Opening receipt", r.id);
                                                                 setSelectedReceiptId(r.id);
                                                                 setReceiptDialogOpen(true);
                                                             }}

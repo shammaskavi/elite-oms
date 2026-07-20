@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,11 +31,25 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Users as UsersIcon } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { LoadingState, EmptyState, ErrorState } from "@/components/states";
+import { useDocumentTitle } from "@/hooks/use-document-title";
+import { customerSchema } from "@/lib/validators";
+
+const INITIAL_FORM = {
+  name: "",
+  phone: "",
+  email: "",
+  address: "",
+  dob: "",
+  anniversary: "",
+};
 
 export default function Customers() {
+  useDocumentTitle("Customers");
+
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -44,42 +58,27 @@ export default function Customers() {
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("all");
+  const [formData, setFormData] = useState(INITIAL_FORM);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    address: "",
-    dob: "",
-    anniversary: "",
-  });
-
+  // Restore the last-known scroll/search/filter state if the user came back
+  // from a customer detail page.
   useEffect(() => {
     const state = location.state as any;
     if (!state) return;
 
-    if (state.searchQuery !== undefined) {
-      setSearchQuery(state.searchQuery);
-    }
-
-    if (state.filterType) {
-      setFilterType(state.filterType);
-    }
-
+    if (state.searchQuery !== undefined) setSearchQuery(state.searchQuery);
+    if (state.filterType) setFilterType(state.filterType);
     if (state.scrollY !== undefined) {
-      requestAnimationFrame(() => {
-        window.scrollTo(0, state.scrollY);
-      });
+      requestAnimationFrame(() => window.scrollTo(0, state.scrollY));
     }
-
-    // ✅ clear navigation state
     navigate(location.pathname, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const queryClient = useQueryClient();
 
-  // 🧭 Fetch customers with related invoices
-  const { data: customers, isLoading } = useQuery({
+  const { data: customers, isLoading, isError, refetch } = useQuery({
     queryKey: ["customers-with-invoices"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -98,7 +97,6 @@ export default function Customers() {
     },
   });
 
-  // ➕ Create customer
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const { error } = await supabase.from("customers").insert([data]);
@@ -112,7 +110,6 @@ export default function Customers() {
     },
   });
 
-  // ✏️ Update customer
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: any) => {
       const { error } = await supabase.from("customers").update(data).eq("id", id);
@@ -126,7 +123,6 @@ export default function Customers() {
     },
   });
 
-  // ❌ Delete customer with dependency check
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { data: relatedInvoices, error } = await supabase
@@ -137,7 +133,7 @@ export default function Customers() {
       if (error) throw error;
 
       if (relatedInvoices?.length > 0) {
-        throw new Error(`Cannot delete: Customer has ${relatedInvoices.length} invoice(s).`);
+        throw new Error(`Cannot delete: customer has ${relatedInvoices.length} invoice(s).`);
       }
 
       const { error: deleteError } = await supabase.from("customers").delete().eq("id", id);
@@ -156,31 +152,48 @@ export default function Customers() {
     },
   });
 
-  // 🧹 Reset form
-  const resetForm = () => {
-    setFormData({ name: "", phone: "", email: "", address: "", dob: "", anniversary: "" });
+  const resetForm = useCallback(() => {
+    setFormData(INITIAL_FORM);
+    setFormErrors({});
     setEditingCustomer(null);
-  };
+  }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const data = {
-      name: formData.name,
-      phone: formData.phone || null,
-      email: formData.email || null,
-      address: formData.address || null,
-      dob: formData.dob || null,
-      anniversary: formData.anniversary || null,
-    };
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
 
-    if (editingCustomer) {
-      updateMutation.mutate({ id: editingCustomer.id, data });
-    } else {
-      createMutation.mutate(data);
-    }
-  };
+      const parsed = customerSchema.safeParse(formData);
+      if (!parsed.success) {
+        const errs: Record<string, string> = {};
+        for (const issue of parsed.error.issues) {
+          const key = String(issue.path[0] ?? "form");
+          if (!errs[key]) errs[key] = issue.message;
+        }
+        setFormErrors(errs);
+        toast.error("Please fix the highlighted fields.");
+        return;
+      }
 
-  const handleEdit = (customer: any) => {
+      const v = parsed.data;
+      const payload = {
+        name: v.name,
+        phone: v.phone || null,
+        email: v.email || null,
+        address: v.address || null,
+        dob: v.dob || null,
+        anniversary: v.anniversary || null,
+      };
+
+      if (editingCustomer) {
+        updateMutation.mutate({ id: editingCustomer.id, data: payload });
+      } else {
+        createMutation.mutate(payload);
+      }
+    },
+    [formData, editingCustomer, createMutation, updateMutation]
+  );
+
+  const handleEdit = useCallback((customer: any) => {
     setEditingCustomer(customer);
     setFormData({
       name: customer.name,
@@ -190,17 +203,20 @@ export default function Customers() {
       dob: customer.dob || "",
       anniversary: customer.anniversary || "",
     });
+    setFormErrors({});
     setOpen(true);
-  };
+  }, []);
 
-  // 🧮 Filter & search customers
   const filteredCustomers = useMemo(() => {
-    const q = searchQuery.toLowerCase();
+    if (!customers) return [];
+    const q = searchQuery.trim().toLowerCase();
 
     return customers
-      ?.filter((c: any) => {
+      .filter((c: any) => {
         const matchesSearch =
-          c.name?.toLowerCase().includes(q) || c.phone?.toLowerCase().includes(q);
+          !q ||
+          c.name?.toLowerCase().includes(q) ||
+          c.phone?.toLowerCase().includes(q);
 
         const hasInvoices = c.invoices && c.invoices.length > 0;
         const hasPending = c.invoices?.some((inv: any) => inv.payment_status !== "paid");
@@ -210,56 +226,90 @@ export default function Customers() {
         if (filterType === "pending") return hasPending && matchesSearch;
         if (filterType === "paid") return allPaid && matchesSearch;
         if (filterType === "no-invoices") return !hasInvoices && matchesSearch;
-
-        return matchesSearch; // "all"
+        return matchesSearch;
       })
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
   }, [customers, searchQuery, filterType]);
 
+  const isMutating = createMutation.isPending || updateMutation.isPending;
+
   return (
     <div className="space-y-6">
-      {/* 🧾 Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between gap-4">
         <h1 className="text-3xl font-bold">Customers</h1>
-        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetForm(); }}>
+        <Dialog
+          open={open}
+          onOpenChange={(o) => {
+            setOpen(o);
+            if (!o) resetForm();
+          }}
+        >
           <DialogTrigger asChild>
             <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Customer
+              <Plus className="mr-2 h-4 w-4" />
+              Add customer
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingCustomer ? "Edit Customer" : "Add Customer"}</DialogTitle>
+              <DialogTitle>{editingCustomer ? "Edit customer" : "Add customer"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="name">Name *</Label>
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              <div className="space-y-2">
+                <Label htmlFor="name">
+                  Name <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  aria-invalid={!!formErrors.name}
+                  aria-describedby={formErrors.name ? "err-name" : undefined}
                   required
                 />
+                {formErrors.name && (
+                  <p id="err-name" className="text-xs text-destructive">
+                    {formErrors.name}
+                  </p>
+                )}
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
                 <Input
                   id="phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  aria-invalid={!!formErrors.phone}
+                  aria-describedby={formErrors.phone ? "err-phone" : undefined}
                 />
+                {formErrors.phone && (
+                  <p id="err-phone" className="text-xs text-destructive">
+                    {formErrors.phone}
+                  </p>
+                )}
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  aria-invalid={!!formErrors.email}
+                  aria-describedby={formErrors.email ? "err-email" : undefined}
                 />
+                {formErrors.email && (
+                  <p id="err-email" className="text-xs text-destructive">
+                    {formErrors.email}
+                  </p>
+                )}
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
                 <Input
                   id="address"
@@ -267,86 +317,106 @@ export default function Customers() {
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 />
               </div>
-              <div>
-                <Label htmlFor="dob">Date of Birth</Label>
-                <Input
-                  id="dob"
-                  type="date"
-                  value={formData.dob}
-                  onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="dob">Date of birth</Label>
+                  <Input
+                    id="dob"
+                    type="date"
+                    value={formData.dob}
+                    onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="anniversary">Anniversary</Label>
+                  <Input
+                    id="anniversary"
+                    type="date"
+                    value={formData.anniversary}
+                    onChange={(e) => setFormData({ ...formData, anniversary: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="anniversary">Anniversary</Label>
-                <Input
-                  id="anniversary"
-                  type="date"
-                  value={formData.anniversary}
-                  onChange={(e) => setFormData({ ...formData, anniversary: e.target.value })}
-                />
-              </div>
-              <Button type="submit" className="w-full">
-                {editingCustomer ? "Update" : "Create"}
+              <Button type="submit" className="w-full" disabled={isMutating}>
+                {isMutating ? "Saving…" : editingCustomer ? "Update" : "Create"}
               </Button>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* 🔍 Search & Filter (Tabs Style) */}
       <Card className="p-6">
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <Search className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">Search Customers</h2>
+            <Search className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+            <h2 className="text-xl font-semibold">Search customers</h2>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col gap-4 md:flex-row">
             <Input
-              placeholder="Search by name or phone..."
+              placeholder="Search by name or phone…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search customers"
               className="flex-1"
             />
 
-            <Tabs value={filterType} onValueChange={setFilterType} className="w-full md:w-auto">
-              <TabsList className="grid grid-cols-4 w-full md:w-auto">
+            <Tabs
+              value={filterType}
+              onValueChange={setFilterType}
+              className="w-full md:w-auto"
+            >
+              <TabsList className="grid w-full grid-cols-4 md:w-auto">
                 <TabsTrigger value="all">All</TabsTrigger>
                 <TabsTrigger value="pending">Pending</TabsTrigger>
                 <TabsTrigger value="paid">Paid</TabsTrigger>
-                <TabsTrigger value="no-invoices">No Invoices</TabsTrigger>
+                <TabsTrigger value="no-invoices">No invoices</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
         </div>
       </Card>
 
-      {/* 🧍 Customers Table */}
       <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Address</TableHead>
-              {/* <TableHead>Invoices</TableHead> */}
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
+        {isLoading ? (
+          <LoadingState message="Loading customers…" />
+        ) : isError ? (
+          <ErrorState onRetry={() => refetch()} />
+        ) : filteredCustomers.length === 0 ? (
+          <EmptyState
+            icon={<UsersIcon className="h-7 w-7" />}
+            title={searchQuery || filterType !== "all" ? "No matching customers" : "No customers yet"}
+            description={
+              searchQuery || filterType !== "all"
+                ? "Try clearing the search or switching the filter."
+                : "Add your first customer to start tracking orders and invoices."
+            }
+            action={
+              !searchQuery && filterType === "all"
+                ? {
+                    label: "Add customer",
+                    icon: <Plus className="mr-2 h-4 w-4" />,
+                    onClick: () => setOpen(true),
+                  }
+                : undefined
+            }
+          />
+        ) : (
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-center">Loading...</TableCell>
+                <TableHead>Name</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Address</TableHead>
+                <TableHead className="w-[100px]">Actions</TableHead>
               </TableRow>
-            ) : filteredCustomers?.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center">No customers found</TableCell>
-              </TableRow>
-            ) : (
-              filteredCustomers?.map((customer: any) => (
-                <TableRow key={customer.id} className="cursor-pointer"
-                  // onClick={() => navigate(`/customers/${customer.id}`)}
+            </TableHeader>
+            <TableBody>
+              {filteredCustomers.map((customer: any) => (
+                <TableRow
+                  key={customer.id}
+                  className="cursor-pointer"
                   onClick={() =>
                     navigate(`/customers/${customer.id}`, {
                       state: {
@@ -359,63 +429,63 @@ export default function Customers() {
                   }
                 >
                   <TableCell className="font-medium">{customer.name}</TableCell>
-                  <TableCell>{customer.phone || "-"}</TableCell>
-                  <TableCell>{customer.email || "-"}</TableCell>
-                  <TableCell>{customer.address || "-"}</TableCell>
-                  {/* <TableCell>
-                    {customer.invoices?.length > 0
-                      ? `${customer.invoices.length} invoice(s)`
-                      : "—"}
-                  </TableCell> */}
+                  <TableCell>{customer.phone || "—"}</TableCell>
+                  <TableCell>{customer.email || "—"}</TableCell>
+                  <TableCell className="max-w-[300px] truncate">{customer.address || "—"}</TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Edit ${customer.name}`}
                         onClick={(e) => {
-                          e.stopPropagation();           // ⛔ don't trigger row click
+                          e.stopPropagation();
                           handleEdit(customer);
-                        }}>
-                        <Pencil className="w-4 h-4" />
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Delete ${customer.name}`}
                         onClick={(e) => {
-                          e.stopPropagation();           // ⛔ don't trigger row click
+                          e.stopPropagation();
                           setCustomerToDelete(customer);
                           setDeleteDialogOpen(true);
                         }}
                       >
-                        <Trash2 className="w-4 h-4 text-destructive" />
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </Card>
 
-      {/* ⚠️ Delete Confirmation */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+            <AlertDialogTitle>Delete customer</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete{" "}
-              <span className="font-semibold">{customerToDelete?.name}</span>?<br />
-              This action cannot be undone. If this customer has invoices, deletion will be blocked.
+              <span className="font-semibold">{customerToDelete?.name}</span>?
+              <br />
+              This action cannot be undone. If this customer has invoices,
+              deletion will be blocked.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-white"
-              onClick={() => deleteMutation.mutate(customerToDelete.id)}
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={() => customerToDelete && deleteMutation.mutate(customerToDelete.id)}
             >
-              Delete
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

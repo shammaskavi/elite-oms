@@ -1,4 +1,4 @@
-project_id = "trcjjhwxzsuilamxnzbm"
+project_id = "sqjigpdsxdqfkunyuqes"
 [functions.delivery-reminder]
 enabled = true
 verify_jwt = true

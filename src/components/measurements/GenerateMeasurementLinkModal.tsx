@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check } from "lucide-react";
+import { Button } from "../ui/button";
 
 
 export default function GenerateMeasurementLinkModal({
@@ -175,13 +176,13 @@ export default function GenerateMeasurementLinkModal({
 
                 {/* Generate */}
                 {!link ? (
-                    <button
+                    <Button
                         onClick={handleGenerate}
                         disabled={!selectedTemplate}
                         className={`w-full py-2 rounded ${!selectedTemplate ? "bg-gray-300 text-gray-500" : "bg-slate-900 text-white"}`}
                     >
                         Generate Link
-                    </button>
+                    </Button>
                 ) : (
                     <div className="space-y-2">
                         <input
@@ -189,12 +190,12 @@ export default function GenerateMeasurementLinkModal({
                             readOnly
                             className="w-full border p-2 rounded text-sm"
                         />
-                        <button
+                        <Button
                             onClick={copyLink}
                             className="w-full bg-green-600 text-white py-2 rounded"
                         >
                             Copy Link
-                        </button>
+                        </Button>
                     </div>
                 )}
 

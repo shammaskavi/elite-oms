@@ -1,178 +1,119 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { toast } from "sonner";
 import { AuthProvider } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
-import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import Products from "./pages/Products";
-import Customers from "./pages/Customers";
-import Invoices from "./pages/Invoices";
-import Orders from "./pages/Orders";
-import OrdersNew from "./pages/OrdersNew";
-import OrderDetailNew from "./pages/OrderDetailNew";
-import NotFound from "./pages/NotFound";
-import CustomerDetail from "./pages/CustomerDetail";
-import PublicInvoiceTracking from "./pages/PublicInvoiceTracking";
-import Payments from "./pages/Payments";
-import Reports from "./pages/Reports";
-import AnotherReports from "./pages/AnotherReports";
-import PublicMeasurementForm from "./pages/PublicMeasurementForm";
-import KarigarPortal from "./pages/KarigarPortal";
-import KarigarOrderDetail from "./pages/KarigarOrderDetail";
-import CreateMeasurement from "./pages/CreateMeasurement";
-import Measurements from "./pages/Measurements";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LoadingState } from "@/components/states";
 
+// Code-split routes — keeps the initial bundle small and speeds up first paint.
+const Auth = lazy(() => import("./pages/Auth"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Products = lazy(() => import("./pages/Products"));
+const Customers = lazy(() => import("./pages/Customers"));
+const Invoices = lazy(() => import("./pages/Invoices"));
+const OrdersNew = lazy(() => import("./pages/OrdersNew"));
+const OrderDetailNew = lazy(() => import("./pages/OrderDetailNew"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const CustomerDetail = lazy(() => import("./pages/CustomerDetail"));
+const PublicInvoiceTracking = lazy(() => import("./pages/PublicInvoiceTracking"));
+const Payments = lazy(() => import("./pages/Payments"));
+const Reports = lazy(() => import("./pages/Reports"));
+const AnotherReports = lazy(() => import("./pages/AnotherReports"));
+const PublicMeasurementForm = lazy(() => import("./pages/PublicMeasurementForm"));
+const KarigarPortal = lazy(() => import("./pages/KarigarPortal"));
+const KarigarOrderDetail = lazy(() => import("./pages/KarigarOrderDetail"));
+const CreateMeasurement = lazy(() => import("./pages/CreateMeasurement"));
+const Measurements = lazy(() => import("./pages/Measurements"));
 
-const queryClient = new QueryClient();
+/**
+ * Global QueryClient with sensible defaults:
+ * - 60s staleTime: avoid refetching everything on every focus
+ * - Single retry: don't hammer the network on persistent failures
+ * - Mutation errors surface as toasts so silent failures stop happening
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,
+      gcTime: 5 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 0,
+    },
+  },
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.error("[Query error]", query.queryKey, error);
+      }
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error: any) => {
+      const message =
+        error?.message || "Something went wrong. Please try again.";
+      toast.error(message);
+    },
+  }),
+});
+
+const RouteFallback = () => <LoadingState fullScreen message="Loading…" />;
+
+const protectedPage = (Page: React.ComponentType) => (
+  <ProtectedRoute>
+    <Layout>
+      <Page />
+    </Layout>
+  </ProtectedRoute>
+);
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/track/:token" element={<PublicInvoiceTracking />} />
-            <Route path="/m/:token" element={<PublicMeasurementForm />} />
-            <Route path="/karigar/:token" element={<KarigarPortal />} />
-            <Route
-              path="/karigar/order/:id"
-              element={<KarigarOrderDetail />}
-            />
-            <Route path="/auth" element={<Auth />} />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Dashboard />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/products"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Products />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/customers"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Customers />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/measurements"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Measurements />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/measurements/new"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <CreateMeasurement />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/track/:token" element={<PublicInvoiceTracking />} />
+                <Route path="/m/:token" element={<PublicMeasurementForm />} />
+                <Route path="/karigar/:token" element={<KarigarPortal />} />
+                <Route path="/karigar/order/:id" element={<KarigarOrderDetail />} />
+                <Route path="/auth" element={<Auth />} />
 
-            <Route
-              path="/customers/:id"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <CustomerDetail />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/invoices"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Invoices />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/orders"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <OrdersNew />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/orders/:id"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <OrderDetailNew />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/payments"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Payments />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reports-dusra"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <AnotherReports />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reports"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Reports />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+                <Route path="/" element={protectedPage(Dashboard)} />
+                <Route path="/products" element={protectedPage(Products)} />
+                <Route path="/customers" element={protectedPage(Customers)} />
+                <Route path="/measurements" element={protectedPage(Measurements)} />
+                <Route path="/measurements/new" element={protectedPage(CreateMeasurement)} />
+                <Route path="/customers/:id" element={protectedPage(CustomerDetail)} />
+                <Route path="/invoices" element={protectedPage(Invoices)} />
+                <Route path="/orders" element={protectedPage(OrdersNew)} />
+                <Route path="/orders/:id" element={protectedPage(OrderDetailNew)} />
+                <Route path="/payments" element={protectedPage(Payments)} />
+                <Route path="/reports-dusra" element={protectedPage(AnotherReports)} />
+                <Route path="/reports" element={protectedPage(Reports)} />
+
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

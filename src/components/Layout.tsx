@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Logo from "../assets/logo.svg";
 import {
   LayoutDashboard,
@@ -14,7 +15,9 @@ import {
   X,
   BadgeIndianRupee,
   FileChartPie,
-  PencilRuler
+  PencilRuler,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,174 +32,225 @@ const navigation = [
   { name: "Reports", href: "/reports", icon: FileChartPie },
 ];
 
+const COLLAPSED_KEY = "spe.sidebar.collapsed";
+
+const isActiveRoute = (current: string, href: string) => {
+  if (href === "/") return current === "/";
+  return current === href || current.startsWith(href + "/");
+};
+
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);   // mobile sidebar
-  const [collapsed, setCollapsed] = useState(false);       // desktop collapse
+  const [sidebarOpen, setSidebarOpen] = useState(false); // mobile sidebar
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const { signOut } = useAuth();
   const location = useLocation();
 
-  return (
-    <div className="min-h-screen bg-background">
+  // Persist collapsed preference.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [collapsed]);
 
-      {/* ====================== MOBILE SIDEBAR (UNCHANGED) ====================== */}
-      <div
-        className={cn(
-          "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm lg:hidden transition-opacity duration-300",
-          sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        )}
-        onClick={() => setSidebarOpen(false)}
-      >
+  // Close mobile sidebar whenever route changes.
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  // Allow Esc to close mobile drawer.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [sidebarOpen]);
+
+  const SidebarNavItems = ({ onNavigate }: { onNavigate?: () => void }) => (
+    <ul className="flex flex-1 flex-col gap-y-1">
+      {navigation.map((item) => {
+        const isActive = isActiveRoute(location.pathname, item.href);
+        const link = (
+          <Link
+            to={item.href}
+            onClick={onNavigate}
+            aria-current={isActive ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              !collapsed && isActive && "bg-primary text-primary-foreground hover:bg-primary/90",
+              collapsed && isActive && "bg-primary/10 text-primary",
+              !isActive && "text-muted-foreground hover:bg-muted hover:text-foreground",
+              collapsed && "justify-center px-0"
+            )}
+          >
+            <item.icon className={cn("h-5 w-5 shrink-0")} aria-hidden="true" />
+            {!collapsed && <span>{item.name}</span>}
+            {collapsed && <span className="sr-only">{item.name}</span>}
+          </Link>
+        );
+
+        return (
+          <li key={item.name}>
+            {collapsed ? (
+              <Tooltip delayDuration={150}>
+                <TooltipTrigger asChild>{link}</TooltipTrigger>
+                <TooltipContent side="right">{item.name}</TooltipContent>
+              </Tooltip>
+            ) : (
+              link
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  return (
+    <TooltipProvider>
+      <div className="min-h-screen bg-background">
+        {/* ====================== MOBILE SIDEBAR ====================== */}
         <div
           className={cn(
-            "fixed inset-y-0 left-0 w-64 bg-card shadow-lg transform transition-transform duration-300",
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+            "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm lg:hidden transition-opacity duration-300",
+            sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
           )}
-          onClick={(e) => e.stopPropagation()}
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden={!sidebarOpen}
         >
-          <div className="flex h-16 items-center justify-between border-b px-6">
-            <div className="flex items-center gap-2">
-              <img src={Logo} alt="Elite CRM logo" className="h-6 w-6" />
-              <span className="text-lg font-semibold">Elite CRM</span>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)}>
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
-
-          <nav className="flex-1 space-y-1 p-4">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="h-5 w-5" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="border-t p-4">
-            <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* ====================== DESKTOP SIDEBAR (COLLAPSIBLE) ====================== */}
-      <div
-        className={cn(
-          "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col border-r bg-card px-6 transition-all duration-300",
-          collapsed ? "lg:w-20" : "lg:w-64"
-        )}
-      >
-        {/* Collapse Button */}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-3 top-20 z-50 h-7 w-7 rounded-full bg-card shadow-md border flex items-center justify-center hover:bg-muted transition"
-        >
-          {collapsed ? "›" : "‹"}
-        </button>
-
-        {/* ====================== FIXED LOGO SECTION ====================== */}
-        <div className="flex h-16 shrink-0 items-center gap-2">
-          <img src={Logo} alt="Elite CRM logo" className="h-6 w-6" />
-
-          {/* ONLY CHANGE: hide text when collapsed */}
-          {!collapsed && (
-            <span className="text-lg font-semibold whitespace-nowrap">
-              Elite CRM
-            </span>
-          )}
-        </div>
-        {/* =============================================================== */}
-
-        <nav className="flex flex-1 flex-col">
-          <ul className="flex flex-1 flex-col gap-y-4 items-center">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href;
-
-              return (
-                <li key={item.name} className="w-full">
-                  <Link
-                    to={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-
-                      // EXPANDED ACTIVE STATE (full width pill)
-                      !collapsed && isActive && "bg-primary text-primary-foreground",
-
-                      // COLLAPSED ACTIVE STATE (centered rounded icon pill)
-                      collapsed &&
-                      isActive &&
-                      "px-0 py-0 w-10 h-10 justify-center bg-primary/10 text-primary rounded-xl",
-
-                      // DEFAULT INACTIVE STATE
-                      !isActive &&
-                      "text-muted-foreground hover:bg-muted hover:text-foreground",
-
-                      // COLLAPSED INACTIVE STATE — tighten spacing
-                      collapsed && !isActive && "px-0 justify-center"
-                    )}
-                  >
-                    <item.icon
-                      className={cn(
-                        "h-6 w-6 shrink-0 transition",
-                        collapsed && isActive && "text-primary"
-                      )}
-                    />
-
-                    {!collapsed && <span>{item.name}</span>}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="mt-auto pb-4">
-            <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              {!collapsed && "Sign Out"}
-            </Button>
-          </div>
-        </nav>
-      </div>
-
-      {/* ====================== MAIN CONTENT ====================== */}
-      <div
-        className={cn(
-          "transition-all duration-300",
-          collapsed ? "lg:pl-20" : "lg:pl-64"
-        )}
-      >
-        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b bg-card px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
-          {/* Mobile hamburger button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden"
-            onClick={() => setSidebarOpen(true)}
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Main menu"
+            className={cn(
+              "fixed inset-y-0 left-0 flex w-64 flex-col bg-card shadow-lg transform transition-transform duration-300",
+              sidebarOpen ? "translate-x-0" : "-translate-x-full"
+            )}
+            onClick={(e) => e.stopPropagation()}
           >
-            <Menu className="h-6 w-6" />
-          </Button>
+            <div className="flex h-16 items-center justify-between border-b px-6">
+              <div className="flex items-center gap-2">
+                <img src={Logo} alt="" aria-hidden="true" className="h-6 w-6" />
+                <span className="text-lg font-semibold">Saree Palace Elite</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Close menu"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <nav aria-label="Primary" className="flex-1 overflow-y-auto p-4">
+              <SidebarNavItems onNavigate={() => setSidebarOpen(false)} />
+            </nav>
+
+            <div className="border-t p-4">
+              <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </Button>
+            </div>
+          </aside>
         </div>
 
-        <main className="py-8">
-          <div className="px-4 sm:px-6 lg:px-8">{children}</div>
-        </main>
+        {/* ====================== DESKTOP SIDEBAR ====================== */}
+        <aside
+          aria-label="Primary navigation"
+          className={cn(
+            "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col border-r bg-card transition-[width] duration-300",
+            collapsed ? "lg:w-20" : "lg:w-64"
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            className={cn(
+              "absolute -right-3 top-20 z-50 flex h-7 w-7 items-center justify-center rounded-full border bg-card shadow-md transition hover:bg-muted",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            )}
+          >
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+
+          <div className={cn("flex h-16 shrink-0 items-center gap-2", collapsed ? "justify-center px-2" : "px-6")}>
+            <img src={Logo} alt="" aria-hidden="true" className="h-6 w-6" />
+            {!collapsed && (
+              <span className="whitespace-nowrap text-lg font-semibold">Saree Palace Elite</span>
+            )}
+          </div>
+
+          <nav aria-label="Primary" className={cn("flex flex-1 flex-col", collapsed ? "px-2" : "px-4")}>
+            <SidebarNavItems />
+
+            <div className="mt-auto pb-4 pt-2">
+              {collapsed ? (
+                <Tooltip delayDuration={150}>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="w-full" onClick={signOut} aria-label="Sign out">
+                      <LogOut className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Sign out</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </Button>
+              )}
+            </div>
+          </nav>
+        </aside>
+
+        {/* ====================== MAIN CONTENT ====================== */}
+        <div
+          className={cn(
+            "transition-[padding] duration-300",
+            collapsed ? "lg:pl-20" : "lg:pl-64"
+          )}
+        >
+          <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b bg-card px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden"
+              aria-label="Open menu"
+              aria-expanded={sidebarOpen}
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu className="h-6 w-6" />
+            </Button>
+            <div className="flex items-center gap-2 lg:hidden">
+              <img src={Logo} alt="" aria-hidden="true" className="h-5 w-5" />
+              <span className="text-sm font-semibold">Saree Palace Elite</span>
+            </div>
+          </header>
+
+          <main id="main" tabIndex={-1} className="py-8 focus:outline-none">
+            <div className="px-4 sm:px-6 lg:px-8">{children}</div>
+          </main>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

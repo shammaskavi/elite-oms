@@ -88,7 +88,6 @@ export default function OrdersInvoiceTable({
         </Card>;
     }
 
-    console.log("SORT DEBUG:", { invoiceSortKey, invoiceSortDirection });
 
     return (
         <Card className="overflow-hidden shadow-sm">

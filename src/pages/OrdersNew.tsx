@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ import WeekCalendar from "@/components/calendar/WeekCalendar";
 import OrdersInvoiceTable from "@/components/orders/OrdersInvoiceTable";
 
 export default function OrdersNew() {
+  useDocumentTitle("Orders");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const [viewMode, setViewMode] =
@@ -363,7 +365,6 @@ export default function OrdersNew() {
     return diff > 3;
   });
 
-  console.log("Upcoming orders:", upcoming?.length);
 
   // Separate active and completed orders
   const activeOrders = orders?.filter((o: any) => !["delivered", "cancelled"].includes(o.order_status)) || [];

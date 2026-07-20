@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -61,6 +62,7 @@ import { InvoiceRow } from "@/components/InvoiceRow";
 
 
 export default function Invoices() {
+  useDocumentTitle("Invoices");
   const [open, setOpen] = useState(false);
   const location = useLocation();
   // const [openInvoice, setOpenInvoice] = useState<any>(null);
@@ -102,8 +104,11 @@ export default function Invoices() {
     address: "",
   });
   const [items, setItems] = useState<any[]>([
-    { name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" },
+    { name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null },
   ]);
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [activeSuggestionRow, setActiveSuggestionRow] = useState<number | null>(null);
+  const [productSearchQuery, setProductSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
@@ -277,7 +282,6 @@ export default function Invoices() {
       console.error("PDF URL save failed:", updateError);
       throw updateError;
     }
-    console.log("Generating invoice PDF for:", invoice.invoice_number);
     return publicUrl;
   };
 
@@ -287,12 +291,13 @@ export default function Invoices() {
       const normalizeItems = (items: any[]) =>
         items.map((item) => ({
           invoice_id: data.__invoiceId, // injected later
-          sku: item.name || "",
+          sku: item.sku || item.name || "",
           name: item.name || "",
           qty: Number(item.qty) || 1,
           unit_price: Number(item.unit_price) || 0,
           total: (Number(item.qty) || 1) * (Number(item.unit_price) || 0),
           reference_name: item.reference_name ?? null,
+          product_id: item.product_id || null,
         }));
       const { data: profile } = await (supabase as any)
         .from("profiles")
@@ -497,12 +502,13 @@ export default function Invoices() {
       // ------- INSERT invoice_items -------
       const itemsData = data.items.map((item: any) => ({
         invoice_id: invoice.id,
-        sku: item.name,
+        sku: item.sku || item.name,
         name: item.name,
         qty: parseFloat(item.qty),
         unit_price: parseFloat(item.unit_price),
         total: parseFloat(item.qty) * parseFloat(item.unit_price),
         reference_name: item.reference_name ?? null,
+        product_id: item.product_id || null,
       }));
 
       const { error: itemsError } = await (supabase as any)
@@ -556,6 +562,7 @@ export default function Invoices() {
             unit_price: item.unit_price,
             delivery_date: item.delivery_date,
             reference_name: item.reference_name,
+            product_id: item.product_id || null,
           },
         });
       });
@@ -677,7 +684,7 @@ export default function Invoices() {
       paid_amount: "",
       remarks: "",
     });
-    setItems([{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
+    setItems([{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null }]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -761,7 +768,7 @@ export default function Invoices() {
     updateTotals(newItems);
   };
 
-  const updateItem = (index: number, field: string, value: string) => {
+  const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...items];
     newItems[index][field] = value;
 
@@ -817,8 +824,6 @@ export default function Invoices() {
           toast.error(`Fetch error on orders: ${ordersFetchError.message}`);
           throw ordersFetchError;
         }
-
-        console.log("Related orders:", relatedOrders);
 
         // Delete order stages if any
         if (relatedOrders?.length) {
@@ -1030,6 +1035,75 @@ export default function Invoices() {
               </div>
 
               {/* Items Section */}
+              {/* Barcode Scanner Input */}
+              <div className="mb-3">
+                <Label className="text-xs">Scan Barcode</Label>
+                <Input
+                  placeholder="Scan or enter barcode and press Enter"
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter" && barcodeInput.trim()) {
+                      e.preventDefault();
+
+                      const scannedCode = barcodeInput.trim();
+
+                      // Check duplicate in current invoice
+                      if (items.some((item) => item.sku === scannedCode)) {
+                        toast.error("This item is already added.");
+                        setBarcodeInput("");
+                        return;
+                      }
+
+                      try {
+                        let { data: product } = await supabase
+                          .from("products")
+                          .select("*")
+                          .eq("sku", scannedCode)
+                          .maybeSingle();
+
+                        if (!product) {
+                          const { data: altProduct } = await supabase
+                            .from("products")
+                            .select("*")
+                            .eq("company_barcode", scannedCode)
+                            .maybeSingle();
+                          product = altProduct;
+                        }
+
+                        if (!product) {
+                          toast.error("Product not found");
+                          setBarcodeInput("");
+                          return;
+                        }
+
+                        const newItem = {
+                          name: product.name,
+                          qty: "1",
+                          unit_price: product.price?.toString() || "0",
+                          num_products: "1",
+                          delivery_date: formData.delivery_date,
+                          reference_name: "",
+                          sku: product.sku,
+                          product_id: product.id,
+                        };
+
+                        const updatedItems = [...items, newItem];
+                        setItems(updatedItems);
+                        updateTotals(updatedItems);
+
+                        setBarcodeInput("");
+                      } catch (err) {
+                        console.error("Scan error:", err);
+                        toast.error("Failed to add product");
+                        setBarcodeInput("");
+                      }
+                    }
+                  }}
+                  className="h-9"
+                  autoFocus
+                />
+              </div>
               <div className="space-y-2">
                 <Label className="text-xs">Items</Label>
 
@@ -1052,7 +1126,67 @@ export default function Invoices() {
                       {items.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell className="p-2">
-                            <Input value={item.name} onChange={(e) => updateItem(index, "name", e.target.value)} required placeholder="Item name" className="h-8" />
+                            <Popover open={activeSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveSuggestionRow(null); }}>
+                              <PopoverTrigger asChild>
+                                <Input
+                                  value={item.name}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setActiveSuggestionRow(index);
+                                    setProductSearchQuery(val);
+                                    updateItem(index, "name", val);
+                                    updateItem(index, "product_id", null);
+                                    updateItem(index, "sku", "");
+                                  }}
+                                  onFocus={() => {
+                                    setActiveSuggestionRow(index);
+                                    setProductSearchQuery(item.name || "");
+                                  }}
+                                  required
+                                  placeholder="Item name"
+                                  className="h-8"
+                                />
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[300px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                                <div className="max-h-[200px] overflow-y-auto p-1 space-y-1">
+                                  {(products || [])
+                                    .filter((p: any) => {
+                                      const query = productSearchQuery.toLowerCase();
+                                      return (
+                                        p.name?.toLowerCase().includes(query) ||
+                                        p.sku?.toLowerCase().includes(query) ||
+                                        p.category?.toLowerCase().includes(query)
+                                      );
+                                    })
+                                    .slice(0, 8)
+                                    .map((prod: any) => (
+                                      <button
+                                        key={prod.id}
+                                        type="button"
+                                        onClick={() => {
+                                          updateItem(index, "name", prod.name);
+                                          updateItem(index, "unit_price", prod.price?.toString() || "0");
+                                          updateItem(index, "product_id", prod.id);
+                                          updateItem(index, "sku", prod.sku || "");
+                                          setActiveSuggestionRow(null);
+                                        }}
+                                        className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent hover:text-accent-foreground transition-colors flex justify-between items-center"
+                                      >
+                                        <div className="max-w-[70%] truncate">
+                                          <div className="font-semibold truncate">{prod.name}</div>
+                                          <div className="text-[10px] text-muted-foreground truncate">
+                                            {prod.sku || "No SKU"} • {prod.category || "No Category"}
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className="font-bold text-primary">₹{prod.price || 0}</div>
+                                          <div className="text-[10px] text-muted-foreground">Stock: {prod.stock}</div>
+                                        </div>
+                                      </button>
+                                    ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
                           </TableCell>
                           <TableCell className="p-2">
                             <Input type="number" value={item.qty} onChange={(e) => updateItem(index, "qty", e.target.value)} required min="1" placeholder="0" className="h-8" />
@@ -1101,7 +1235,67 @@ export default function Invoices() {
                       <div className="grid grid-cols-2 gap-x-3 gap-y-3">
                         <div className="col-span-2">
                           <Label className="text-[11px] font-semibold mb-1 block">Item Name *</Label>
-                          <Input value={item.name} onChange={(e) => updateItem(index, "name", e.target.value)} required placeholder="Enter item name" className="h-10" />
+                          <Popover open={activeSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveSuggestionRow(null); }}>
+                            <PopoverTrigger asChild>
+                              <Input
+                                value={item.name}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setActiveSuggestionRow(index);
+                                  setProductSearchQuery(val);
+                                  updateItem(index, "name", val);
+                                  updateItem(index, "product_id", null);
+                                  updateItem(index, "sku", "");
+                                }}
+                                onFocus={() => {
+                                  setActiveSuggestionRow(index);
+                                  setProductSearchQuery(item.name || "");
+                                }}
+                                required
+                                placeholder="Enter item name"
+                                className="h-10"
+                              />
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[300px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                              <div className="max-h-[200px] overflow-y-auto p-1 space-y-1">
+                                {(products || [])
+                                  .filter((p: any) => {
+                                    const query = productSearchQuery.toLowerCase();
+                                    return (
+                                      p.name?.toLowerCase().includes(query) ||
+                                      p.sku?.toLowerCase().includes(query) ||
+                                      p.category?.toLowerCase().includes(query)
+                                    );
+                                  })
+                                  .slice(0, 8)
+                                  .map((prod: any) => (
+                                    <button
+                                      key={prod.id}
+                                      type="button"
+                                      onClick={() => {
+                                        updateItem(index, "name", prod.name);
+                                        updateItem(index, "unit_price", prod.price?.toString() || "0");
+                                        updateItem(index, "product_id", prod.id);
+                                        updateItem(index, "sku", prod.sku || "");
+                                        setActiveSuggestionRow(null);
+                                      }}
+                                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent hover:text-accent-foreground transition-colors flex justify-between items-center"
+                                    >
+                                      <div className="max-w-[70%] truncate">
+                                        <div className="font-semibold truncate">{prod.name}</div>
+                                        <div className="text-[10px] text-muted-foreground truncate">
+                                          {prod.sku || "No SKU"} • {prod.category || "No Category"}
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className="font-bold text-primary">₹{prod.price || 0}</div>
+                                        <div className="text-[10px] text-muted-foreground">Stock: {prod.stock}</div>
+                                      </div>
+                                    </button>
+                                  ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         <div>
                           <Label className="text-[11px] font-semibold mb-1 block">Quantity *</Label>
@@ -1468,7 +1662,7 @@ export default function Invoices() {
               paid_amount: invoice.raw_payload?.paid_amount || "0",
               remarks: invoice.raw_payload?.remarks || "",
             });
-            setItems(invoice.raw_payload?.items || [{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "" }]);
+            setItems(invoice.raw_payload?.items || [{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null }]);
             setSelectedInvoice(null);
             setOpen(true);
           }}
