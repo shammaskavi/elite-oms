@@ -28,6 +28,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
+import {
   Plus,
   Pencil,
   Trash2,
@@ -46,7 +59,17 @@ import {
   ChevronRight,
   Loader2,
   PlusCircle,
-  MinusCircle
+  MinusCircle,
+  Check,
+  ChevronsUpDown,
+  Calendar,
+  User,
+  Info,
+  History,
+  Tag,
+  Truck,
+  Palette,
+  Maximize2
 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -63,6 +86,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 
 // Code 39 Barcode character mapping for native SVG drawing
 const CODE39_MAP: Record<string, string> = {
@@ -93,7 +117,7 @@ function generateCode39Svg(code: string): React.ReactNode {
   const height = 40;
 
   return (
-    <svg width="100%" height="45" viewBox={`0 0 ${width} ${height}`} className="w-full h-10 mt-1">
+    <svg width="100%" height="45" viewBox={`0 0 ${width} ${height}`} className="w-full h-10 mt-1 select-none">
       {bitString.split("").map((bit, idx) => {
         if (bit === "1") {
           return <rect key={idx} x={idx * 1.5} y="0" width="1.5" height={height} fill="black" />;
@@ -175,6 +199,13 @@ export default function Products() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [printingTags, setPrintingTags] = useState(false);
 
+  // Category Combobox Select States
+  const [categoryComboboxOpen, setCategoryComboboxOpen] = useState(false);
+  const [categorySearchQuery, setCategorySearchQuery] = useState("");
+
+  // Product detail view state
+  const [selectedProductDetails, setSelectedProductDetails] = useState<any | null>(null);
+
   // Stock Manual Adjustment States
   const [adjustStockProduct, setAdjustStockProduct] = useState<any | null>(null);
   const [adjustQty, setAdjustQty] = useState("");
@@ -221,6 +252,94 @@ export default function Products() {
       if (error) throw error;
       return data;
     },
+  });
+
+  // Calculate unique categories for dropdown suggestion
+  const existingCategories = useMemo(() => {
+    if (!products) return [];
+    const cats = products.map((p) => p.category).filter(Boolean);
+    return Array.from(new Set(cats));
+  }, [products]);
+
+  // Fetch audit log & sales order history dynamically for selected detail popup
+  const { data: movementHistory, isLoading: loadingHistory } = useQuery({
+    queryKey: ["product-history", selectedProductDetails?.id],
+    queryFn: async () => {
+      if (!selectedProductDetails?.id) return [];
+
+      // 1. Fetch audit logs (manual adjustments)
+      const { data: auditLogs, error: auditError } = await supabase
+        .from("audit_logs")
+        .select("id, created_at, payload, actor_profile_id, profiles:actor_profile_id(full_name)")
+        .eq("resource_type", "products")
+        .eq("resource_id", selectedProductDetails.id)
+        .order("created_at", { ascending: false });
+
+      if (auditError) console.error("Audit log fetch error:", auditError);
+
+      // 2. Fetch orders (production sales & cancellations)
+      const { data: ordersData, error: ordersError } = await supabase
+        .from("orders")
+        .select("id, order_code, order_status, created_at, metadata, customers(name), invoices(invoice_number)")
+        .eq("metadata->>product_id", selectedProductDetails.id)
+        .order("created_at", { ascending: false });
+
+      if (ordersError) console.error("Orders fetch error:", ordersError);
+
+      const historyList: any[] = [];
+
+      // Add manual adjustments to timeline
+      if (auditLogs) {
+        auditLogs.forEach((log: any) => {
+          const diff = log.payload?.adjustment || 0;
+          historyList.push({
+            id: log.id,
+            date: log.created_at,
+            type: "adjustment",
+            action: diff > 0 ? "added" : "deducted",
+            qty: Math.abs(diff),
+            user: log.profiles?.full_name || "System",
+            notes: log.payload?.notes || "Manual stock override",
+          });
+        });
+      }
+
+      // Add sales & returns to timeline
+      if (ordersData) {
+        ordersData.forEach((ord: any) => {
+          const qty = parseInt(ord.metadata?.qty || 1);
+          const customer = ord.customers?.name || "Customer";
+          const invNum = ord.invoices?.invoice_number || "Invoice";
+
+          historyList.push({
+            id: ord.id + "-sale",
+            date: ord.created_at,
+            type: "sale",
+            action: "sold",
+            qty: qty,
+            user: customer,
+            notes: `Sold via ${invNum} to ${customer}. Status: ${ord.order_status}`,
+          });
+
+          // Cancelled order counts as stock return
+          if (ord.order_status === "cancelled") {
+            historyList.push({
+              id: ord.id + "-cancel",
+              date: ord.created_at,
+              type: "return",
+              action: "returned",
+              qty: qty,
+              user: customer,
+              notes: `Returned to inventory - Order ${ord.order_code} was cancelled`,
+            });
+          }
+        });
+      }
+
+      // Sort chronological descending
+      return historyList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    },
+    enabled: !!selectedProductDetails?.id,
   });
 
   // Calculate Valuation and Dashboard Metrics
@@ -342,6 +461,16 @@ export default function Products() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       toast.success("Stock count adjusted");
+
+      // Update selected details popup stock display in real time
+      if (selectedProductDetails && selectedProductDetails.id === adjustStockProduct.id) {
+        const diff = adjustType === "add" ? parseInt(adjustQty) : -parseInt(adjustQty);
+        setSelectedProductDetails((prev: any) => ({
+          ...prev,
+          stock: Math.max(0, (prev.stock || 0) + diff)
+        }));
+      }
+
       setAdjustStockProduct(null);
       setAdjustQty("");
       setAdjustNotes("");
@@ -470,7 +599,7 @@ export default function Products() {
 
       for (let i = 0; i < itemsToUpload.length; i += chunkSize) {
         const chunk = itemsToUpload.slice(i, i + chunkSize);
-        
+
         // Grab unique barcodes in chunk to avoid SQL constraints error, prioritizing earlier row
         const uniqueChunk: any[] = [];
         const seenSkus = new Set();
@@ -720,37 +849,45 @@ export default function Products() {
 
       {/* Overview Inventory Valuation Banner */}
       {!isLoading && !isError && products && products.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-4 shadow-sm flex items-center justify-between border bg-gradient-to-br from-card to-muted/20">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+          <Card className="p-4 shadow-sm flex items-center justify-between border bg-gradient-to-br from-card to-secondary/10 hover:shadow-md transition-shadow">
             <div className="space-y-1">
-              <span className="text-xs text-muted-foreground font-medium">Total Products</span>
-              <h3 className="text-2xl font-bold font-mono">{products.length}</h3>
+              <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider">Total Products</span>
+              <h3 className="text-3xl font-extrabold font-mono text-primary">{products.length}</h3>
             </div>
-            <ShoppingBag className="h-8 w-8 text-primary/70" />
-          </Card>
-          
-          <Card className="p-4 shadow-sm flex items-center justify-between border bg-gradient-to-br from-card to-muted/20">
-            <div className="space-y-1">
-              <span className="text-xs text-muted-foreground font-medium">In Stock Qty</span>
-              <h3 className="text-2xl font-bold font-mono">{stats.totalQty}</h3>
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <ShoppingBag className="h-6 w-6 text-primary" />
             </div>
-            <Boxes className="h-8 w-8 text-emerald-600/70" />
           </Card>
 
-          <Card className="p-4 shadow-sm flex items-center justify-between border bg-gradient-to-br from-card to-muted/20">
+          <Card className="p-4 shadow-sm flex items-center justify-between border bg-gradient-to-br from-card to-emerald-50/20 hover:shadow-md transition-shadow">
             <div className="space-y-1">
-              <span className="text-xs text-muted-foreground font-medium">Cost Valuation</span>
-              <h3 className="text-2xl font-bold font-mono">₹{stats.totalCostValuation.toLocaleString()}</h3>
+              <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider">In Stock Qty</span>
+              <h3 className="text-3xl font-extrabold font-mono text-emerald-600">{stats.totalQty}</h3>
             </div>
-            <TrendingUp className="h-8 w-8 text-indigo-600/70" />
+            <div className="p-2 bg-emerald-50 rounded-lg">
+              <Boxes className="h-6 w-6 text-emerald-600" />
+            </div>
           </Card>
 
-          <Card className="p-4 shadow-sm flex items-center justify-between border bg-gradient-to-br from-card to-muted/20">
+          <Card className="p-4 shadow-sm flex items-center justify-between border bg-gradient-to-br from-card to-indigo-50/20 hover:shadow-md transition-shadow">
             <div className="space-y-1">
-              <span className="text-xs text-muted-foreground font-medium">Out of Stock</span>
-              <h3 className={`text-2xl font-bold font-mono ${stats.lowStockCount > 0 ? "text-destructive" : "text-muted-foreground"}`}>{stats.lowStockCount}</h3>
+              <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider">Cost Valuation</span>
+              <h3 className="text-2xl font-extrabold font-mono text-indigo-600">₹{stats.totalCostValuation.toLocaleString()}</h3>
             </div>
-            <AlertTriangle className={`h-8 w-8 ${stats.lowStockCount > 0 ? "text-destructive/70" : "text-muted-foreground/50"}`} />
+            <div className="p-2 bg-indigo-50 rounded-lg">
+              <TrendingUp className="h-6 w-6 text-indigo-600" />
+            </div>
+          </Card>
+
+          <Card className="p-4 shadow-sm flex items-center justify-between border bg-gradient-to-br from-card to-destructive/5 hover:shadow-md transition-shadow">
+            <div className="space-y-1">
+              <span className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider">Out of Stock</span>
+              <h3 className={`text-3xl font-extrabold font-mono ${stats.lowStockCount > 0 ? "text-destructive" : "text-muted-foreground"}`}>{stats.lowStockCount}</h3>
+            </div>
+            <div className={`p-2 rounded-lg ${stats.lowStockCount > 0 ? "bg-destructive/10 animate-pulse" : "bg-muted"}`}>
+              <AlertTriangle className={`h-6 w-6 ${stats.lowStockCount > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+            </div>
           </Card>
         </div>
       )}
@@ -762,14 +899,14 @@ export default function Products() {
           Products & Inventory
         </h1>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
+          <Button variant="outline" onClick={() => setCsvImportOpen(true)} className="shadow-sm">
             <Upload className="w-4 h-4 mr-2" />
             CSV Stock Import
           </Button>
 
           <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetForm(); }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="shadow-sm">
                 <Plus className="w-4 h-4 mr-2" />
                 Add Product
               </Button>
@@ -784,7 +921,7 @@ export default function Products() {
                   <TabsTrigger value="costing">Cost & Supplier</TabsTrigger>
                   <TabsTrigger value="attributes">Attributes & Barcode</TabsTrigger>
                 </TabsList>
-                
+
                 <form onSubmit={handleSubmit} className="space-y-4 pt-4">
                   <TabsContent value="details" className="space-y-4">
                     <div>
@@ -798,19 +935,71 @@ export default function Products() {
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
+                      {/* Dynamic Combobox Category Dropdown */}
                       <div>
                         <Label htmlFor="category">Category (Product Type)</Label>
-                        <Input
-                          id="category"
-                          value={formData.category}
-                          onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                          placeholder="e.g. SAREE, SUIT PIECE"
-                        />
+                        <Popover open={categoryComboboxOpen} onOpenChange={setCategoryComboboxOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={categoryComboboxOpen}
+                              className="w-full justify-between h-10 font-normal shadow-sm"
+                            >
+                              <span>{formData.category || "Select or type category..."}</span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[280px] p-0" align="start">
+                            <Command>
+                              <CommandInput
+                                placeholder="Search or type new category..."
+                                value={categorySearchQuery}
+                                onValueChange={(val) => {
+                                  setCategorySearchQuery(val);
+                                  setFormData(prev => ({ ...prev, category: val }));
+                                }}
+                              />
+                              <CommandList>
+                                <CommandEmpty>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFormData(prev => ({ ...prev, category: categorySearchQuery }));
+                                      setCategoryComboboxOpen(false);
+                                    }}
+                                    className="w-full text-left px-2 py-1.5 text-xs text-blue-600 font-bold hover:bg-accent rounded"
+                                  >
+                                    + Create Category "{categorySearchQuery}"
+                                  </button>
+                                </CommandEmpty>
+                                <CommandGroup>
+                                  {existingCategories
+                                    .filter(cat => cat.toLowerCase().includes(categorySearchQuery.toLowerCase()))
+                                    .map((cat) => (
+                                      <CommandItem
+                                        key={cat}
+                                        value={cat}
+                                        onSelect={() => {
+                                          setFormData(prev => ({ ...prev, category: cat }));
+                                          setCategorySearchQuery("");
+                                          setCategoryComboboxOpen(false);
+                                        }}
+                                      >
+                                        <Check className={cn("mr-2 h-4 w-4", formData.category === cat ? "opacity-100" : "opacity-0")} />
+                                        {cat}
+                                      </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                       <div>
                         <Label htmlFor="status">Current Status</Label>
                         <Select value={formData.status} onValueChange={(val) => setFormData({ ...formData, status: val })}>
-                          <SelectTrigger><SelectValue placeholder="Select Status" /></SelectTrigger>
+                          <SelectTrigger className="shadow-sm"><SelectValue placeholder="Select Status" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="available">Available</SelectItem>
                             <SelectItem value="reserved">Reserved (Booked)</SelectItem>
@@ -829,7 +1018,7 @@ export default function Products() {
                           onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                           required
                           min="0"
-                          disabled={!!editingProduct} // Require using the manual adjustment log for edits
+                          disabled={!!editingProduct} // Require using the manual adjustment trigger for edits
                         />
                       </div>
                       <div>
@@ -842,11 +1031,11 @@ export default function Products() {
                         />
                       </div>
                     </div>
-                    <Button type="button" onClick={() => setActiveTab("costing")} className="w-full flex items-center justify-center gap-2">
+                    <Button type="button" onClick={() => setActiveTab("costing")} className="w-full flex items-center justify-center gap-2 mt-2">
                       Next: Costs & Pricing <ChevronRight className="w-4 h-4" />
                     </Button>
                   </TabsContent>
-                  
+
                   <TabsContent value="costing" className="space-y-4">
                     <div className="grid grid-cols-3 gap-4">
                       <div>
@@ -869,7 +1058,7 @@ export default function Products() {
                           value={formData.mrp}
                           onChange={(e) => setFormData({ ...formData, mrp: e.target.value })}
                           required
-                          placeholder="Maximum Retail Price"
+                          placeholder="MRP Label Price"
                         />
                       </div>
                       <div>
@@ -924,7 +1113,7 @@ export default function Products() {
                         />
                       </div>
                     </div>
-                    <Button type="button" onClick={() => setActiveTab("attributes")} className="w-full flex items-center justify-center gap-2">
+                    <Button type="button" onClick={() => setActiveTab("attributes")} className="w-full flex items-center justify-center gap-2 mt-2">
                       Next: Visual Attributes & Barcodes <ChevronRight className="w-4 h-4" />
                     </Button>
                   </TabsContent>
@@ -960,7 +1149,7 @@ export default function Products() {
                             onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                             placeholder="Scan or enter unique ID"
                           />
-                          <Button type="button" onClick={generateSKU} variant="outline" size="sm">
+                          <Button type="button" onClick={generateSKU} variant="outline" size="sm" className="shadow-sm">
                             <Wand2 className="w-4 h-4 mr-2" />
                             Generate
                           </Button>
@@ -972,12 +1161,12 @@ export default function Products() {
                           id="company_barcode"
                           value={formData.company_barcode}
                           onChange={(e) => setFormData({ ...formData, company_barcode: e.target.value })}
-                          placeholder="Barcode on garment manufacturer tag"
+                          placeholder="Barcode on manufacturer tag"
                         />
                       </div>
                     </div>
 
-                    <Button type="submit" className="w-full mt-4">
+                    <Button type="submit" className="w-full mt-4 shadow-sm">
                       {editingProduct ? "Update Product Record" : "Save Stock Product"}
                     </Button>
                   </TabsContent>
@@ -988,22 +1177,22 @@ export default function Products() {
         </div>
       </div>
 
-      {/* Products table with search, checkboxes, and adjustment options */}
-      <Card className="shadow-sm">
+      {/* Products table list card */}
+      <Card className="shadow-sm border">
         {/* Search header container */}
-        <div className="p-4 border-b flex flex-col md:flex-row justify-between items-center gap-3">
+        <div className="p-4 border-b flex flex-col md:flex-row justify-between items-center gap-3 bg-muted/10">
           <div className="relative w-full md:w-80">
             <Input
               placeholder="Search by Name, SKU, Tag, Supplier..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9"
+              className="pl-9 h-9 shadow-sm"
             />
             <QrCode className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           </div>
 
           <div className="flex items-center gap-4 self-stretch md:self-auto justify-between">
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+            <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={lowStockFilter}
@@ -1014,7 +1203,7 @@ export default function Products() {
             </label>
 
             {selectedIds.length > 0 && (
-              <span className="text-xs font-bold text-muted-foreground bg-secondary px-2.5 py-1 rounded-full animate-in fade-in zoom-in-95 duration-200">
+              <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full animate-in fade-in zoom-in-95 duration-200">
                 {selectedIds.length} Selected
               </span>
             )}
@@ -1023,16 +1212,16 @@ export default function Products() {
 
         {/* Selected rows Bulk action bar */}
         {selectedIds.length > 0 && (
-          <div className="bg-secondary/40 p-3 px-6 border-b flex justify-between items-center animate-in slide-in-from-top duration-200">
+          <div className="bg-secondary/40 p-3 px-6 border-b flex flex-col sm:flex-row justify-between items-center gap-3 animate-in slide-in-from-top duration-200">
             <div className="text-xs font-semibold text-muted-foreground">
               Execute actions on {selectedIds.length} selected inventory items
             </div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={handleBulkPrintTags}>
+              <Button size="sm" variant="outline" onClick={handleBulkPrintTags} className="shadow-sm">
                 <Printer className="w-3.5 h-3.5 mr-1.5" />
                 Print Tags
               </Button>
-              <Button size="sm" variant="outline" onClick={handleBulkExport}>
+              <Button size="sm" variant="outline" onClick={handleBulkExport} className="shadow-sm">
                 <Download className="w-3.5 h-3.5 mr-1.5" />
                 Export CSV
               </Button>
@@ -1044,6 +1233,7 @@ export default function Products() {
                     bulkDeleteMutation.mutate(selectedIds);
                   }
                 }}
+                className="shadow-sm"
               >
                 <Trash2 className="w-3.5 h-3.5 mr-1.5" />
                 Delete Selected
@@ -1071,7 +1261,7 @@ export default function Products() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <TableHead className="w-[40px] p-2 text-center">
                     <input
                       type="checkbox"
@@ -1095,7 +1285,7 @@ export default function Products() {
                   const isLow = (product.stock || 0) <= 0;
                   const isSelected = selectedIds.includes(product.id);
                   return (
-                    <TableRow key={product.id} className={isSelected ? "bg-primary/5" : ""}>
+                    <TableRow key={product.id} className={`hover:bg-muted/30 transition-colors ${isSelected ? "bg-primary/5" : ""}`}>
                       <TableCell className="p-2 text-center">
                         <input
                           type="checkbox"
@@ -1104,13 +1294,20 @@ export default function Products() {
                           className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
                         />
                       </TableCell>
-                      <TableCell className="font-semibold text-foreground">
-                        {product.name}
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedProductDetails(product)}
+                          className="font-bold text-foreground text-left hover:underline focus:outline-none flex items-center gap-1.5 cursor-pointer group"
+                        >
+                          {product.name}
+                          <Maximize2 className="w-3.5 h-3.5 opacity-0 group-hover:opacity-60 text-muted-foreground transition-opacity" />
+                        </button>
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{product.sku || "—"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="font-mono text-xs text-muted-foreground">{product.sku || "—"}</TableCell>
+                      <TableCell className="text-xs">
                         {product.color || product.size ? (
-                          <span>
+                          <span className="text-muted-foreground font-medium">
                             {product.color || "No color"}{" "}
                             {product.size && `• Size ${product.size}`}
                           </span>
@@ -1128,11 +1325,10 @@ export default function Products() {
                         <button
                           type="button"
                           onClick={() => setAdjustStockProduct(product)}
-                          className={`font-mono font-bold text-xs px-2.5 py-0.5 rounded-full border cursor-pointer hover:bg-muted flex items-center gap-1.5 transition-colors ${
-                            isLow 
-                              ? "bg-destructive/10 text-destructive border-destructive/20 hover:border-destructive/40" 
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-300"
-                          }`}
+                          className={`font-mono font-bold text-xs px-2.5 py-0.5 rounded-full border cursor-pointer hover:bg-muted flex items-center gap-1.5 transition-colors ${isLow
+                            ? "bg-destructive/10 text-destructive border-destructive/20 hover:border-destructive/40"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-300"
+                            }`}
                           title="Click to adjust stock"
                         >
                           <Activity className="w-3 h-3" />
@@ -1141,7 +1337,7 @@ export default function Products() {
                       </TableCell>
                       <TableCell>
                         {product.category ? (
-                          <span className="text-[10px] font-bold uppercase tracking-wider bg-secondary px-2 py-0.5 rounded">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider bg-secondary text-secondary-foreground px-2 py-0.5 rounded">
                             {product.category}
                           </span>
                         ) : (
@@ -1157,7 +1353,7 @@ export default function Products() {
                             onClick={() => handleEdit(product)}
                             className="h-8 w-8"
                           >
-                            <Pencil className="h-3.5 h-3.5" />
+                            <Pencil className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -1178,6 +1374,211 @@ export default function Products() {
           </div>
         )}
       </Card>
+
+      {/* Product Detail & Stock Movement pop-up Dialog */}
+      <Dialog open={!!selectedProductDetails} onOpenChange={(o) => !o && setSelectedProductDetails(null)}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto p-6">
+          <DialogHeader className="border-b pb-4">
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-primary" />
+              {selectedProductDetails?.name}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedProductDetails && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+              {/* Product Info Column */}
+              <div className="space-y-4 pr-0 md:pr-4 md:border-r border-border">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Product Details</span>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setAdjustStockProduct(selectedProductDetails);
+                      }}
+                      className="h-8 text-xs shadow-sm"
+                    >
+                      <Activity className="w-3.5 h-3.5 mr-1" /> Adjust Stock
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const prod = selectedProductDetails;
+                        setSelectedProductDetails(null);
+                        handleEdit(prod);
+                      }}
+                      className="h-8 text-xs shadow-sm"
+                    >
+                      <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 text-sm bg-muted/20 p-4 rounded-xl border">
+                  <div>
+                    <span className="text-xs text-muted-foreground block font-medium">Boutique SKU</span>
+                    <span className="font-mono font-semibold">{selectedProductDetails.sku || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block font-medium">Company Barcode</span>
+                    <span className="font-mono font-semibold truncate block max-w-full" title={selectedProductDetails.company_barcode}>
+                      {selectedProductDetails.company_barcode || "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block font-medium">Category</span>
+                    <span className="font-bold flex items-center gap-1 mt-0.5 text-primary text-xs">
+                      <Tag className="w-3 h-3" />
+                      {selectedProductDetails.category || "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block font-medium">Availability Status</span>
+                    <span className={`inline-flex mt-1 items-center px-2 py-0.5 text-[10px] font-bold rounded-full border uppercase ${selectedProductDetails.status === "available"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : selectedProductDetails.status === "reserved"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-neutral-50 text-neutral-600 border-neutral-200"
+                      }`}>
+                      {selectedProductDetails.status}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block font-medium">Color</span>
+                    <span className="font-semibold flex items-center gap-1 text-xs">
+                      <Palette className="w-3 h-3 text-muted-foreground" />
+                      {selectedProductDetails.color || "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block font-medium">Size</span>
+                    <span className="font-semibold text-xs">{selectedProductDetails.size || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block font-medium">Stock Quantity</span>
+                    <span className={`font-mono font-bold text-base ${selectedProductDetails.stock <= 0 ? "text-destructive" : "text-emerald-700"}`}>
+                      {selectedProductDetails.stock} units
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block font-medium">HSN Code</span>
+                    <span className="font-semibold text-xs">{selectedProductDetails.hsn_code || "—"}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 text-sm bg-muted/20 p-4 rounded-xl border">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block font-bold uppercase tracking-wider">Cost Price</span>
+                    <span className="font-mono font-semibold text-xs text-muted-foreground">
+                      {selectedProductDetails.purchase_price ? `₹${Number(selectedProductDetails.purchase_price).toLocaleString()}` : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block font-bold uppercase tracking-wider">MRP</span>
+                    <span className="font-mono font-bold text-xs text-foreground">
+                      ₹{(selectedProductDetails.mrp || selectedProductDetails.price || 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block font-bold uppercase tracking-wider">Offer Price</span>
+                    <span className="font-mono font-extrabold text-xs text-primary">
+                      ₹{Number(selectedProductDetails.price || 0).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground bg-muted/20 p-3.5 rounded-xl border">
+                  <div className="flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 shrink-0" />
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold tracking-wide">Supplier</span>
+                      <strong className="text-foreground">{selectedProductDetails.supplier_name || "—"}</strong>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 shrink-0" />
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold tracking-wide">Inward Date</span>
+                      <strong className="text-foreground">
+                        {selectedProductDetails.inward_date ? new Date(selectedProductDetails.inward_date).toLocaleDateString() : "—"}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Printable barcode preview */}
+                <div className="border rounded-xl p-3 bg-white flex flex-col items-center justify-center">
+                  <span className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground mb-1 select-none">Printable Barcode Graphic</span>
+                  <div className="w-full max-w-[200px]">
+                    {generateCode39Svg(selectedProductDetails.sku || selectedProductDetails.company_barcode || 'SPE-000')}
+                  </div>
+                  <span className="text-[10px] font-mono mt-1 font-bold">{selectedProductDetails.sku || selectedProductDetails.company_barcode}</span>
+                </div>
+              </div>
+
+              {/* Stock Movement History Column */}
+              <div className="space-y-4 flex flex-col max-h-[60vh]">
+                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 border-b pb-2">
+                  <History className="w-4 h-4 text-primary" />
+                  Stock Movement Timeline
+                </div>
+
+                {loadingHistory ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-2">
+                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                    <span className="text-xs text-muted-foreground">Loading movement logs...</span>
+                  </div>
+                ) : !movementHistory || movementHistory.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border-2 border-dashed rounded-xl bg-muted/10">
+                    <History className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                    <div className="text-xs font-bold text-muted-foreground">No adjustments recorded</div>
+                    <p className="text-[10px] text-muted-foreground/70 max-w-xs mt-1">
+                      Manual stock corrections and production order sales will be displayed here in chronological order.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto pr-1 space-y-3.5 scrollbar-thin">
+                    {movementHistory.map((item, idx) => {
+                      const isAddition = item.action === "added" || item.action === "returned";
+                      return (
+                        <div key={item.id || idx} className="flex gap-3 relative group">
+                          {/* Chronological bullet marker */}
+                          <div className="flex flex-col items-center">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] border shadow-sm ${isAddition
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-destructive/10 text-destructive border-destructive/20"
+                              }`}>
+                              {isAddition ? "+" : "-"}
+                            </div>
+                            {idx < movementHistory.length - 1 && (
+                              <div className="w-0.5 flex-1 bg-border my-1.5 group-hover:bg-primary/20 transition-colors" />
+                            )}
+                          </div>
+
+                          <div className="flex-1 bg-muted/30 border rounded-xl p-3 hover:bg-muted/50 transition-colors">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className={`text-xs font-bold uppercase ${isAddition ? "text-emerald-700" : "text-destructive"}`}>
+                                {item.qty} Items {item.action === "added" ? "Added" : item.action === "returned" ? "Returned" : item.action === "sold" ? "Sold" : "Deducted"}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-xs font-medium text-foreground">{item.notes}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Stock Manual Adjustment Dialog */}
       <Dialog open={!!adjustStockProduct} onOpenChange={(o) => !o && setAdjustStockProduct(null)}>
@@ -1267,7 +1668,7 @@ export default function Products() {
                   <p className="text-xs text-muted-foreground max-w-xs mb-4">
                     Ensure columns map to: Barcode, Item, Color, MRP, Pur. Rate, Product Name (Category), Party Name.
                   </p>
-                  <Button onClick={() => fileInputRef.current?.click()} size="sm">
+                  <Button onClick={() => fileInputRef.current?.click()} size="sm" className="shadow-sm">
                     Choose File
                   </Button>
                   <input
