@@ -395,11 +395,14 @@ export default function Products() {
       const { error } = await supabase.from("products").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       toast.success("Product deleted");
-      setSelectedIds(prev => prev.filter(selectedId => selectedId !== productToDelete?.id));
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== deletedId));
     },
+    onError: (err: any) => {
+      toast.error(err?.message || "Failed to delete product. Only Admins can delete inventory.");
+    }
   });
 
   // Bulk deletion mutation
@@ -413,6 +416,9 @@ export default function Products() {
       toast.success(`${variables.length} products deleted successfully`);
       setSelectedIds([]);
     },
+    onError: (err: any) => {
+      toast.error(err?.message || "Failed to delete products. Only Admins can delete inventory.");
+    }
   });
 
   // Manual stock adjustment mutation (updates stock and inserts into audit_logs)
@@ -493,6 +499,34 @@ export default function Products() {
     }, 300);
   };
 
+  const downloadCSVTemplate = () => {
+    const headers = [
+      "Barcode",
+      "Item",
+      "Color",
+      "MRP",
+      "Pur. Rate",
+      "Company Barcode",
+      "Product Name",
+      "Item ID",
+      "HSN Code",
+      "Party Name",
+      "Qty"
+    ];
+    const rows = [
+      ["SPE-100201", "Kanjivaram Silk Saree", "Royal Blue", "6500", "2800", "8901234567890", "SAREE", "ITM-001", "5007", "Ramesh Textiles", "1"],
+      ["SPE-100202", "Designer Suit Set", "Mint Green", "4200", "1800", "", "SUIT PIECE", "ITM-002", "5007", "Vikas Fabrics", "2"]
+    ];
+    const csvContent = [headers.join(","), ...rows.map(r => r.map(c => `"${c}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "saree_palace_elite_stock_template.csv");
+    link.click();
+    toast.success("CSV template downloaded!");
+  };
+
   // CSV Stock Importer Handler (supports chunking/batch uploads)
   const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -516,7 +550,12 @@ export default function Products() {
       let headerRowIndex = -1;
       for (let i = 0; i < parsedRows.length; i++) {
         const row = parsedRows[i];
-        if (row.some(c => c.toLowerCase() === 'barcode' || c.toLowerCase() === 'item')) {
+        if (
+          row.some((c) => {
+            const val = c.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+            return val === "barcode" || val === "item" || val === "itemname" || val === "name" || val === "sku";
+          })
+        ) {
           headerRowIndex = i;
           break;
         }
@@ -528,26 +567,26 @@ export default function Products() {
         return;
       }
 
-      const headers = parsedRows[headerRowIndex].map(h => h.toLowerCase());
+      const headers = parsedRows[headerRowIndex].map(h => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
       const dataRows = parsedRows.slice(headerRowIndex + 1);
 
       // Maps CSV columns to db fields dynamically
       const colMap = {
-        barcode: headers.indexOf("barcode"),
-        name: headers.indexOf("item"),
+        barcode: headers.indexOf("barcode") !== -1 ? headers.indexOf("barcode") : (headers.indexOf("sku") !== -1 ? headers.indexOf("sku") : headers.indexOf("barcodenumber")),
+        name: headers.indexOf("item") !== -1 ? headers.indexOf("item") : (headers.indexOf("itemname") !== -1 ? headers.indexOf("itemname") : headers.indexOf("name")),
         color: headers.indexOf("color"),
-        purchase_price: headers.indexOf("pur. rate"),
+        purchase_price: headers.indexOf("purrate") !== -1 ? headers.indexOf("purrate") : (headers.indexOf("purchaserate") !== -1 ? headers.indexOf("purchaserate") : headers.indexOf("cost")),
         mrp: headers.indexOf("mrp"),
-        company_barcode: headers.indexOf("company barcode"),
-        category: headers.indexOf("product name"),
-        item_code: headers.indexOf("item id"),
-        hsn_code: headers.indexOf("hsn code"),
-        supplier_name: headers.indexOf("party name"),
-        stock: headers.indexOf("qty") !== -1 ? headers.indexOf("qty") : headers.indexOf("stock")
+        company_barcode: headers.indexOf("companybarcode") !== -1 ? headers.indexOf("companybarcode") : headers.indexOf("manufacturerbarcode"),
+        category: headers.indexOf("productname") !== -1 ? headers.indexOf("productname") : (headers.indexOf("category") !== -1 ? headers.indexOf("category") : headers.indexOf("product")),
+        item_code: headers.indexOf("itemid") !== -1 ? headers.indexOf("itemid") : headers.indexOf("itemcode"),
+        hsn_code: headers.indexOf("hsncode") !== -1 ? headers.indexOf("hsncode") : headers.indexOf("hsn"),
+        supplier_name: headers.indexOf("partyname") !== -1 ? headers.indexOf("partyname") : (headers.indexOf("suppliername") !== -1 ? headers.indexOf("suppliername") : (headers.indexOf("supplier") !== -1 ? headers.indexOf("supplier") : headers.indexOf("vendor"))),
+        stock: headers.indexOf("qty") !== -1 ? headers.indexOf("qty") : (headers.indexOf("stock") !== -1 ? headers.indexOf("stock") : headers.indexOf("quantity"))
       };
 
       if (colMap.name === -1) {
-        toast.error("CSV must contain an 'Item' column representing the product name.");
+        toast.error("CSV must contain an 'Item' or 'Name' column representing the product name.");
         setImporting(false);
         return;
       }
@@ -1668,9 +1707,15 @@ export default function Products() {
                   <p className="text-xs text-muted-foreground max-w-xs mb-4">
                     Ensure columns map to: Barcode, Item, Color, MRP, Pur. Rate, Product Name (Category), Party Name.
                   </p>
-                  <Button onClick={() => fileInputRef.current?.click()} size="sm" className="shadow-sm">
-                    Choose File
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={() => fileInputRef.current?.click()} size="sm" className="shadow-sm">
+                      Choose File
+                    </Button>
+                    <Button onClick={downloadCSVTemplate} variant="outline" size="sm" className="shadow-sm">
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Template
+                    </Button>
+                  </div>
                   <input
                     type="file"
                     ref={fileInputRef}

@@ -54,7 +54,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
-import { PopoverContent, Popover, PopoverTrigger } from "@/components/ui/popover";
+import { PopoverContent, Popover, PopoverTrigger, PopoverAnchor } from "@/components/ui/popover";
 import { CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 import { cn } from "@/lib/utils";
@@ -107,7 +107,8 @@ export default function Invoices() {
     { name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null },
   ]);
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [activeSuggestionRow, setActiveSuggestionRow] = useState<number | null>(null);
+  const [activeDesktopSuggestionRow, setActiveDesktopSuggestionRow] = useState<number | null>(null);
+  const [activeMobileSuggestionRow, setActiveMobileSuggestionRow] = useState<number | null>(null);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
@@ -1126,28 +1127,33 @@ export default function Invoices() {
                       {items.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell className="p-2">
-                            <Popover open={activeSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveSuggestionRow(null); }}>
-                              <PopoverTrigger asChild>
+                            <Popover open={activeDesktopSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveDesktopSuggestionRow(null); }}>
+                              <PopoverAnchor asChild>
                                 <Input
                                   value={item.name}
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setActiveSuggestionRow(index);
+                                    setActiveDesktopSuggestionRow(index);
                                     setProductSearchQuery(val);
                                     updateItem(index, "name", val);
                                     updateItem(index, "product_id", null);
                                     updateItem(index, "sku", "");
                                   }}
                                   onFocus={() => {
-                                    setActiveSuggestionRow(index);
+                                    setActiveDesktopSuggestionRow(index);
                                     setProductSearchQuery(item.name || "");
                                   }}
                                   required
                                   placeholder="Item name"
                                   className="h-8"
                                 />
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[300px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                              </PopoverAnchor>
+                              <PopoverContent 
+                                className="w-[300px] p-0" 
+                                align="start" 
+                                onOpenAutoFocus={(e) => e.preventDefault()}
+                                onPointerDownOutside={(e) => e.preventDefault()}
+                              >
                                 <div className="max-h-[200px] overflow-y-auto p-1 space-y-1">
                                   {(products || [])
                                     .filter((p: any) => {
@@ -1168,7 +1174,7 @@ export default function Invoices() {
                                           updateItem(index, "unit_price", prod.price?.toString() || "0");
                                           updateItem(index, "product_id", prod.id);
                                           updateItem(index, "sku", prod.sku || "");
-                                          setActiveSuggestionRow(null);
+                                          setActiveDesktopSuggestionRow(null);
                                         }}
                                         className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent hover:text-accent-foreground transition-colors flex justify-between items-center"
                                       >
@@ -1235,28 +1241,33 @@ export default function Invoices() {
                       <div className="grid grid-cols-2 gap-x-3 gap-y-3">
                         <div className="col-span-2">
                           <Label className="text-[11px] font-semibold mb-1 block">Item Name *</Label>
-                          <Popover open={activeSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveSuggestionRow(null); }}>
-                            <PopoverTrigger asChild>
+                          <Popover open={activeMobileSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveMobileSuggestionRow(null); }}>
+                            <PopoverAnchor asChild>
                               <Input
                                 value={item.name}
                                 onChange={(e) => {
                                   const val = e.target.value;
-                                  setActiveSuggestionRow(index);
+                                  setActiveMobileSuggestionRow(index);
                                   setProductSearchQuery(val);
                                   updateItem(index, "name", val);
                                   updateItem(index, "product_id", null);
                                   updateItem(index, "sku", "");
                                 }}
                                 onFocus={() => {
-                                  setActiveSuggestionRow(index);
+                                  setActiveMobileSuggestionRow(index);
                                   setProductSearchQuery(item.name || "");
                                 }}
                                 required
                                 placeholder="Enter item name"
                                 className="h-10"
                               />
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[300px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                            </PopoverAnchor>
+                            <PopoverContent 
+                              className="w-[300px] p-0" 
+                              align="start" 
+                              onOpenAutoFocus={(e) => e.preventDefault()}
+                              onPointerDownOutside={(e) => e.preventDefault()}
+                            >
                               <div className="max-h-[200px] overflow-y-auto p-1 space-y-1">
                                 {(products || [])
                                   .filter((p: any) => {
@@ -1277,7 +1288,7 @@ export default function Invoices() {
                                         updateItem(index, "unit_price", prod.price?.toString() || "0");
                                         updateItem(index, "product_id", prod.id);
                                         updateItem(index, "sku", prod.sku || "");
-                                        setActiveSuggestionRow(null);
+                                        setActiveMobileSuggestionRow(null);
                                       }}
                                       className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent hover:text-accent-foreground transition-colors flex justify-between items-center"
                                     >
