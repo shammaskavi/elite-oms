@@ -47,14 +47,30 @@ function generateCode39Svg(code: string): React.ReactNode {
     bitString += bits + "0";
   }
 
-  const width = bitString.length * 1.5;
+  const width = bitString.length * 1;
   const height = 22;
 
   return (
-    <svg width="100%" height="22" viewBox={`0 0 ${width} ${height}`} className="w-full h-[22px] mt-0.5 select-none">
+    <svg 
+      width="100%" 
+      height="22" 
+      viewBox={`0 0 ${width} ${height}`} 
+      className="w-full h-[22px] mt-0.5 select-none"
+      shapeRendering="crispEdges"
+    >
       {bitString.split("").map((bit, idx) => {
         if (bit === "1") {
-          return <rect key={idx} x={idx * 1.5} y="0" width="1.5" height={height} fill="black" />;
+          return (
+            <rect 
+              key={idx} 
+              x={idx * 1} 
+              y="0" 
+              width="1" 
+              height={height} 
+              fill="black" 
+              shapeRendering="crispEdges"
+            />
+          );
         }
         return null;
       })}

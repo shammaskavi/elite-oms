@@ -111,17 +111,34 @@ function generateCode39Svg(code: string): React.ReactNode {
   for (let i = 0; i < normalized.length; i++) {
     const char = normalized[i];
     const bits = CODE39_MAP[char] || CODE39_MAP["*"];
-    bitString += bits + "0"; // inter-character gap
+    bitString += bits + "0";
   }
 
-  const width = bitString.length * 1.5;
-  const height = 40;
+  // Use 1px integer pixel width per module to guarantee razor-sharp 203dpi hardware alignment
+  const width = bitString.length * 1;
+  const height = 24;
 
   return (
-    <svg width="100%" height="45" viewBox={`0 0 ${width} ${height}`} className="w-full h-10 mt-1 select-none">
+    <svg 
+      width="100%" 
+      height="24" 
+      viewBox={`0 0 ${width} ${height}`} 
+      className="w-full h-6 mt-0.5 select-none"
+      shapeRendering="crispEdges"
+    >
       {bitString.split("").map((bit, idx) => {
         if (bit === "1") {
-          return <rect key={idx} x={idx * 1.5} y="0" width="1.5" height={height} fill="black" />;
+          return (
+            <rect 
+              key={idx} 
+              x={idx * 1} 
+              y="0" 
+              width="1" 
+              height={height} 
+              fill="black" 
+              shapeRendering="crispEdges"
+            />
+          );
         }
         return null;
       })}
@@ -199,6 +216,20 @@ export default function Products() {
   // Selection & Bulk actions
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [printingTags, setPrintingTags] = useState(false);
+  const [printMode, setPrintMode] = useState<"a4" | "thermal">("thermal");
+
+  // Helper to chunk products into pairs for 2-up print layout
+  const pairedProductsForPrint = useMemo(() => {
+    const selectedProducts = (products || []).filter(p => selectedIds.includes(p.id));
+    const pairs: { left: any; right: any | null }[] = [];
+    for (let i = 0; i < selectedProducts.length; i += 2) {
+      pairs.push({
+        left: selectedProducts[i],
+        right: selectedProducts[i + 1] || null
+      });
+    }
+    return pairs;
+  }, [products, selectedIds]);
 
   // Category Combobox Select States
   const [categoryComboboxOpen, setCategoryComboboxOpen] = useState(false);
@@ -511,16 +542,24 @@ export default function Products() {
   });
 
   // Bulk Tag Printing Handler
-  const handleBulkPrintTags = () => {
+  const handleBulkPrintTags = (mode: "a4" | "thermal") => {
     if (selectedIds.length === 0) {
       toast.info("Please select products to print tags for");
       return;
     }
+
+    // Toggle printer configuration classes on body
+    document.body.classList.remove("print-mode-a4", "print-mode-thermal");
+    document.body.classList.add(`print-mode-${mode}`);
+
+    setPrintMode(mode);
     setPrintingTags(true);
+
     setTimeout(() => {
       window.print();
       setPrintingTags(false);
-    }, 300);
+      document.body.classList.remove(`print-mode-${mode}`);
+    }, 450);
   };
 
   const downloadCSVTemplate = () => {
@@ -857,16 +896,67 @@ export default function Products() {
             body * {
               visibility: hidden;
             }
-            #print-tag-layout, #print-tag-layout * {
+
+            /* A4 Sheet Styles */
+            body.print-mode-a4 #print-tag-layout, 
+            body.print-mode-a4 #print-tag-layout * {
               visibility: visible;
             }
-            #print-tag-layout {
+            body.print-mode-a4 #print-tag-layout {
+              display: grid !important;
               position: absolute;
               left: 0;
               top: 0;
-              width: 210mm; /* A4 width */
+              width: 210mm;
               padding: 5mm;
               background-color: white !important;
+            }
+
+            /* Thermal 2-up Styles (38x25mm labels, total roll width 80mm) */
+            @page {
+              size: ${printMode === "thermal" ? "80mm 25mm" : "auto"};
+              margin: 0;
+            }
+            body.print-mode-thermal #print-tag-thermal-layout,
+            body.print-mode-thermal #print-tag-thermal-layout * {
+              visibility: visible;
+            }
+            body.print-mode-thermal #print-tag-thermal-layout {
+              display: block !important;
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 80mm;
+              padding: 0;
+              margin: 0;
+              background-color: white !important;
+            }
+            .thermal-page-row {
+              width: 80mm;
+              height: 25mm;
+              display: flex;
+              justify-content: space-between;
+              page-break-after: always;
+              break-after: page;
+              box-sizing: border-box;
+              background-color: white !important;
+            }
+            .thermal-label-card {
+              width: 38mm;
+              height: 25mm;
+              box-sizing: border-box;
+              padding: 1.0mm;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              font-family: monospace;
+              color: black !important;
+              background-color: white !important;
+              font-size: 6px;
+              line-height: 1.05;
+              overflow: hidden;
+              -webkit-font-smoothing: none;
+              text-rendering: optimizeSpeed;
             }
             .print-tag-card {
               break-inside: avoid;
@@ -908,6 +998,90 @@ export default function Products() {
               </div>
             </div>
           ))}
+      </div>
+
+      {/* Hidden 2-up Thermal label layout (38x25mm side-by-side, 80mm total width) */}
+      <div id="print-tag-thermal-layout" className="hidden">
+        {pairedProductsForPrint.map((pair, idx) => (
+          <div key={idx} className="thermal-page-row">
+            {/* Left Label */}
+            {pair.left && (
+              <div className="thermal-label-card">
+                <div className="flex justify-between font-bold text-[7px] border-b border-black pb-0.5">
+                  <span className="truncate max-w-[65%] uppercase">SAREE PALACE ELITE</span>
+                  <span className="truncate max-w-[33%] text-[5.5px]">{pair.left.category || "SPE"}</span>
+                </div>
+                <div className="text-[5.5px] truncate mt-0.5 font-sans font-black uppercase">
+                  {pair.left.name}
+                </div>
+                <div className="flex justify-between text-[5.5px] mt-0.5">
+                  <span>COL: {pair.left.color || "N/A"}</span>
+                  <span>SZ: {pair.left.size || "FREE"}</span>
+                </div>
+                {pair.left.item_code && (
+                  <div className="text-[5px]">
+                    CODE: {pair.left.item_code}
+                  </div>
+                )}
+                <div className="text-[7.5px] font-black text-center border-t border-b border-dashed border-black/30 py-0.5">
+                  MRP: ₹{(pair.left.mrp || pair.left.price || 0).toLocaleString("en-IN")}
+                </div>
+                <div className="w-full flex justify-center py-0.5">
+                  {generateCode39Svg(pair.left.sku || pair.left.company_barcode || 'SPE-000')}
+                </div>
+                <div className="flex justify-between text-[5px] font-mono mt-0.5">
+                  <span>{pair.left.sku || pair.left.company_barcode}</span>
+                  {pair.left.purchase_price && (
+                    <span className="text-[4.5px] opacity-75">
+                      {/* Obfuscated Cost Code e.g. SPE-A1 */}
+                      SPE-{(pair.left.purchase_price * 1.5).toFixed(0)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Right Label (or placeholder space) */}
+            {pair.right ? (
+              <div className="thermal-label-card">
+                <div className="flex justify-between font-bold text-[7px] border-b border-black pb-0.5">
+                  <span className="truncate max-w-[65%] uppercase">SAREE PALACE ELITE</span>
+                  <span className="truncate max-w-[33%] text-[5.5px]">{pair.right.category || "SPE"}</span>
+                </div>
+                <div className="text-[5.5px] truncate mt-0.5 font-sans font-black uppercase">
+                  {pair.right.name}
+                </div>
+                <div className="flex justify-between text-[5.5px] mt-0.5">
+                  <span>COL: {pair.right.color || "N/A"}</span>
+                  <span>SZ: {pair.right.size || "FREE"}</span>
+                </div>
+                {pair.right.item_code && (
+                  <div className="text-[5px]">
+                    CODE: {pair.right.item_code}
+                  </div>
+                )}
+                <div className="text-[7.5px] font-black text-center border-t border-b border-dashed border-black/30 py-0.5">
+                  MRP: ₹{(pair.right.mrp || pair.right.price || 0).toLocaleString("en-IN")}
+                </div>
+                <div className="w-full flex justify-center py-0.5">
+                  {generateCode39Svg(pair.right.sku || pair.right.company_barcode || 'SPE-000')}
+                </div>
+                <div className="flex justify-between text-[5px] font-mono mt-0.5">
+                  <span>{pair.right.sku || pair.right.company_barcode}</span>
+                  {pair.right.purchase_price && (
+                    <span className="text-[4.5px] opacity-75">
+                      SPE-{(pair.right.purchase_price * 1.5).toFixed(0)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="thermal-label-card opacity-0 pointer-events-none">
+                {/* Empty placeholder to fill right column of 2-up tape */}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Overview Inventory Valuation Banner */}
@@ -1283,10 +1457,33 @@ export default function Products() {
               Execute actions on {selectedIds.length} selected inventory items
             </div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={handleBulkPrintTags} className="shadow-sm">
-                <Printer className="w-3.5 h-3.5 mr-1.5" />
-                Print Tags
-              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="outline" className="shadow-sm gap-1.5">
+                    <Printer className="w-3.5 h-3.5" />
+                    Print Tags
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-2" align="end">
+                  <div className="text-[10px] font-bold px-2 py-1 text-muted-foreground uppercase tracking-wider">
+                    Select Target Printer
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start font-medium text-left text-xs h-8 px-2 mt-1"
+                    onClick={() => handleBulkPrintTags("thermal")}
+                  >
+                    2-up Thermal Roll (38x25mm)
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start font-medium text-left text-xs h-8 px-2"
+                    onClick={() => handleBulkPrintTags("a4")}
+                  >
+                    3-col A4 Sheet Grid (62x48mm)
+                  </Button>
+                </PopoverContent>
+              </Popover>
               <Button size="sm" variant="outline" onClick={handleBulkExport} className="shadow-sm">
                 <Download className="w-3.5 h-3.5 mr-1.5" />
                 Export CSV
