@@ -119,23 +119,23 @@ function generateCode39Svg(code: string): React.ReactNode {
   const height = 24;
 
   return (
-    <svg 
-      width="100%" 
-      height="24" 
-      viewBox={`0 0 ${width} ${height}`} 
+    <svg
+      width="100%"
+      height="24"
+      viewBox={`0 0 ${width} ${height}`}
       className="w-full h-6 mt-0.5 select-none"
       shapeRendering="crispEdges"
     >
       {bitString.split("").map((bit, idx) => {
         if (bit === "1") {
           return (
-            <rect 
-              key={idx} 
-              x={idx * 1} 
-              y="0" 
-              width="1" 
-              height={height} 
-              fill="black" 
+            <rect
+              key={idx}
+              x={idx * 1}
+              y="0"
+              width="1"
+              height={height}
+              fill="black"
               shapeRendering="crispEdges"
             />
           );
@@ -218,18 +218,8 @@ export default function Products() {
   const [printingTags, setPrintingTags] = useState(false);
   const [printMode, setPrintMode] = useState<"a4" | "thermal">("thermal");
 
-  // Helper to chunk products into pairs for 2-up print layout
-  const pairedProductsForPrint = useMemo(() => {
-    const selectedProducts = (products || []).filter(p => selectedIds.includes(p.id));
-    const pairs: { left: any; right: any | null }[] = [];
-    for (let i = 0; i < selectedProducts.length; i += 2) {
-      pairs.push({
-        left: selectedProducts[i],
-        right: selectedProducts[i + 1] || null
-      });
-    }
-    return pairs;
-  }, [products, selectedIds]);
+
+
 
   // Category Combobox Select States
   const [categoryComboboxOpen, setCategoryComboboxOpen] = useState(false);
@@ -292,6 +282,19 @@ export default function Products() {
       return data;
     },
   });
+
+  // Helper to chunk products into pairs for 2-up print layout
+  const pairedProductsForPrint = useMemo(() => {
+    const selectedProducts = (products || []).filter(p => selectedIds.includes(p.id));
+    const pairs: { left: any; right: any | null }[] = [];
+    for (let i = 0; i < selectedProducts.length; i += 2) {
+      pairs.push({
+        left: selectedProducts[i],
+        right: selectedProducts[i + 1] || null
+      });
+    }
+    return pairs;
+  }, [products, selectedIds]);
 
   // Calculate unique categories for dropdown suggestion
   const existingCategories = useMemo(() => {
@@ -1468,15 +1471,15 @@ export default function Products() {
                   <div className="text-[10px] font-bold px-2 py-1 text-muted-foreground uppercase tracking-wider">
                     Select Target Printer
                   </div>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     className="w-full justify-start font-medium text-left text-xs h-8 px-2 mt-1"
                     onClick={() => handleBulkPrintTags("thermal")}
                   >
                     2-up Thermal Roll (38x25mm)
                   </Button>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     className="w-full justify-start font-medium text-left text-xs h-8 px-2"
                     onClick={() => handleBulkPrintTags("a4")}
                   >
@@ -1789,7 +1792,7 @@ export default function Products() {
                     <TabsTrigger value="history" className="text-xs">Movement History</TabsTrigger>
                     <TabsTrigger value="units" className="text-xs">Physical Pieces ({physicalUnits?.length || 0})</TabsTrigger>
                   </TabsList>
-                  
+
                   {/* Tab 1: Movement History */}
                   <TabsContent value="history" className="flex-1 flex flex-col mt-2 min-h-0">
                     {loadingHistory ? (
@@ -1877,12 +1880,11 @@ export default function Products() {
                                     {unit.location ? unit.location.label : "Intake Area"}
                                   </TableCell>
                                   <TableCell className="py-1.5 text-[10px]">
-                                    <Badge className={`text-[8px] py-0 px-1 font-sans ${
-                                      unit.status === "in_stock" ? "bg-green-500/10 text-green-500 border-green-500/20" :
+                                    <Badge className={`text-[8px] py-0 px-1 font-sans ${unit.status === "in_stock" ? "bg-green-500/10 text-green-500 border-green-500/20" :
                                       unit.status === "on_floor" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
-                                      unit.status === "sold" ? "bg-slate-500/10 text-slate-500 border-slate-500/20" :
-                                      "bg-yellow-500/10 text-yellow-500 border-yellow-500/20"
-                                    }`}>
+                                        unit.status === "sold" ? "bg-slate-500/10 text-slate-500 border-slate-500/20" :
+                                          "bg-yellow-500/10 text-yellow-500 border-yellow-500/20"
+                                      }`}>
                                       {unit.status.replace(/_/g, " ").toUpperCase()}
                                     </Badge>
                                   </TableCell>
