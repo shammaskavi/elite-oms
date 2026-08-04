@@ -18,9 +18,14 @@ import {
   Check, 
   Plus, 
   Loader2, 
-  Printer, 
-  Volume2
+  Printer,
+  Volume2,
+  Zap,
+  Settings2
 } from "lucide-react";
+import { PrinterSetupDialog } from "@/components/PrinterSetupDialog";
+import { buildGarmentLabelJob, GarmentLabel } from "@/lib/tspl";
+import { loadPrinterSettings, sendTsplJob, PrintAgentOfflineError } from "@/lib/labelPrint";
 
 // Code 39 Barcode character mapping for native SVG drawing
 const CODE39_MAP: Record<string, string> = {
@@ -98,6 +103,8 @@ export default function Receive() {
   const [isLoading, setIsLoading] = useState(false);
   const [receivedUnits, setReceivedUnits] = useState<any[]>([]);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
+  const [sendingToPrinter, setSendingToPrinter] = useState(false);
   
   const navigate = useNavigate();
 
@@ -273,9 +280,43 @@ export default function Receive() {
     window.print();
   };
 
+  /** Sends the freshly registered units straight to the TSC label printer. */
+  const handleDirectPrint = async () => {
+    if (receivedUnits.length === 0) return;
+
+    const labels: GarmentLabel[] = receivedUnits.map((unit) => ({
+      storeName: "SAREE PALACE ELITE",
+      category: selectedProduct?.category,
+      name: selectedProduct?.name || "Boutique Collection",
+      color: selectedProduct?.color,
+      size: selectedProduct?.size,
+      mrp: Number(mrp) || selectedProduct?.price || 0,
+      code: unit.unit_code,
+      costCode: getEncodedVendorCode(unit),
+    }));
+
+    const settings = loadPrinterSettings();
+    setSendingToPrinter(true);
+    try {
+      await sendTsplJob(buildGarmentLabelJob(labels, settings.media), settings);
+      toast.success(`${labels.length} label${labels.length === 1 ? "" : "s"} sent to ${settings.printerName}`);
+    } catch (err: any) {
+      if (err instanceof PrintAgentOfflineError) {
+        toast.error(err.message, {
+          action: { label: "Setup", onClick: () => setPrinterSetupOpen(true) },
+        });
+      } else {
+        toast.error(err?.message || "Failed to print labels");
+      }
+    } finally {
+      setSendingToPrinter(false);
+    }
+  };
+
   return (
     <div className="container max-w-4xl py-6 space-y-6">
-      
+      <PrinterSetupDialog open={printerSetupOpen} onOpenChange={setPrinterSetupOpen} />
+
       {/* Dynamic Printing CSS for 38mm x 25mm thermal label tags */}
       <style>
         {`
@@ -629,9 +670,29 @@ export default function Receive() {
                   </div>
                 </div>
 
-                <Button onClick={handlePrint} className="w-full gap-2 mt-2 h-10">
-                  <Printer className="w-4 h-4" /> Print Thermal tags ({receivedUnits.length})
-                </Button>
+                <div className="space-y-2 mt-2">
+                  <Button onClick={handleDirectPrint} disabled={sendingToPrinter} className="w-full gap-2 h-10">
+                    {sendingToPrinter ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Zap className="w-4 h-4" />
+                    )}
+                    Print {receivedUnits.length} Label{receivedUnits.length === 1 ? "" : "s"}
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={handlePrint} variant="outline" size="sm" className="flex-1 gap-1.5 text-xs">
+                      <Printer className="w-3.5 h-3.5" /> Browser print
+                    </Button>
+                    <Button
+                      onClick={() => setPrinterSetupOpen(true)}
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" /> Setup
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="text-center py-10 text-muted-foreground text-sm flex flex-col items-center gap-2">

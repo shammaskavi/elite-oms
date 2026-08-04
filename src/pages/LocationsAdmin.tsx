@@ -28,6 +28,9 @@ import {
   ChevronRight,
   Barcode
 } from "lucide-react";
+import { PrinterSetupDialog } from "@/components/PrinterSetupDialog";
+import { buildShelfLabelJob, ShelfLabel } from "@/lib/tspl";
+import { loadPrinterSettings, sendTsplJob, PrintAgentOfflineError } from "@/lib/labelPrint";
 
 // Code 39 character map for location barcodes
 const CODE39_MAP: Record<string, string> = {
@@ -99,6 +102,7 @@ export default function LocationsAdmin() {
   
   const [expandedNodes, setExpandedNodes] = useState<{ [id: string]: boolean }>({});
   const [printTarget, setPrintTarget] = useState<any>(null);
+  const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
   
   const navigate = useNavigate();
 
@@ -197,11 +201,36 @@ export default function LocationsAdmin() {
     setExpandedNodes(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handlePrintTrigger = (loc: any) => {
+  /**
+   * Sends the shelf tag straight to the label printer. Falls back to the browser
+   * print path only if the agent is unreachable, so the flow stays one click.
+   */
+  const handlePrintTrigger = async (loc: any) => {
     setPrintTarget(loc);
-    setTimeout(() => {
-      window.print();
-    }, 100);
+
+    const shelfLabel: ShelfLabel = {
+      title: "SAREE PALACE LAYOUT",
+      name: loc.label,
+      code: loc.barcode,
+      subCode: loc.code,
+    };
+
+    const settings = loadPrinterSettings();
+    try {
+      await sendTsplJob(buildShelfLabelJob([shelfLabel], settings.media), settings);
+      toast.success(`Shelf tag sent to ${settings.printerName}`);
+    } catch (err: any) {
+      if (err instanceof PrintAgentOfflineError) {
+        // Keep the old browser-print behaviour rather than leaving the user
+        // with no way to print at all.
+        toast.warning("Print agent offline — falling back to browser print.", {
+          action: { label: "Setup", onClick: () => setPrinterSetupOpen(true) },
+        });
+        setTimeout(() => window.print(), 100);
+      } else {
+        toast.error(err?.message || "Failed to print shelf tag");
+      }
+    }
   };
 
   // Render locations tree recursively
@@ -306,6 +335,8 @@ export default function LocationsAdmin() {
           }
         `}
       </style>
+
+      <PrinterSetupDialog open={printerSetupOpen} onOpenChange={setPrinterSetupOpen} />
 
       {/* Hidden printable single tag frame */}
       {printTarget && (

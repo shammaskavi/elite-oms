@@ -1,0 +1,14 @@
+{
+  "name": "spe-print-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local raw-TSPL print agent for the TSC TA210 label printer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:lan": "cross-env-shell BIND=0.0.0.0 node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

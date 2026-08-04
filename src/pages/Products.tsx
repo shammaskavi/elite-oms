@@ -69,7 +69,9 @@ import {
   Tag,
   Truck,
   Palette,
-  Maximize2
+  Maximize2,
+  Settings2,
+  Zap
 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -88,6 +90,9 @@ import {
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { PrinterSetupDialog } from "@/components/PrinterSetupDialog";
+import { buildGarmentLabelJob, GarmentLabel } from "@/lib/tspl";
+import { loadPrinterSettings, sendTsplJob, PrintAgentOfflineError } from "@/lib/labelPrint";
 
 // Code 39 Barcode character mapping for native SVG drawing
 const CODE39_MAP: Record<string, string> = {
@@ -217,6 +222,8 @@ export default function Products() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [printingTags, setPrintingTags] = useState(false);
   const [printMode, setPrintMode] = useState<"a4" | "thermal">("thermal");
+  const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
+  const [sendingToPrinter, setSendingToPrinter] = useState(false);
 
 
 
@@ -544,7 +551,48 @@ export default function Products() {
     },
   });
 
-  // Bulk Tag Printing Handler
+  /**
+   * One-click thermal printing. Builds TSPL and hands it straight to the TSC via
+   * the local agent, so the printer's firmware draws the QR at native 203dpi
+   * instead of the browser rasterising it. No print dialog, no page setup.
+   */
+  const handleDirectThermalPrint = async () => {
+    if (selectedIds.length === 0) {
+      toast.info("Please select products to print tags for");
+      return;
+    }
+
+    const selectedProducts = (products || []).filter((p) => selectedIds.includes(p.id));
+    const labels: GarmentLabel[] = selectedProducts.map((p) => ({
+      storeName: "SAREE PALACE ELITE",
+      category: p.category,
+      name: p.name,
+      color: p.color,
+      size: p.size,
+      mrp: p.mrp || p.price || 0,
+      code: p.sku || p.company_barcode || `SPE-${p.id.slice(0, 8).toUpperCase()}`,
+      costCode: p.purchase_price ? `SPE-${Math.round(p.purchase_price * 1.5)}` : null,
+    }));
+
+    const settings = loadPrinterSettings();
+    setSendingToPrinter(true);
+    try {
+      await sendTsplJob(buildGarmentLabelJob(labels, settings.media), settings);
+      toast.success(`${labels.length} label${labels.length === 1 ? "" : "s"} sent to ${settings.printerName}`);
+    } catch (err: any) {
+      if (err instanceof PrintAgentOfflineError) {
+        toast.error(err.message, {
+          action: { label: "Setup", onClick: () => setPrinterSetupOpen(true) },
+        });
+      } else {
+        toast.error(err?.message || "Failed to print labels");
+      }
+    } finally {
+      setSendingToPrinter(false);
+    }
+  };
+
+  // Browser-print fallback, kept for A4 sheets and for printing without the agent.
   const handleBulkPrintTags = (mode: "a4" | "thermal") => {
     if (selectedIds.length === 0) {
       toast.info("Please select products to print tags for");
@@ -558,10 +606,20 @@ export default function Products() {
     setPrintMode(mode);
     setPrintingTags(true);
 
-    setTimeout(() => {
-      window.print();
+    // Clear up after the browser is actually finished. window.print() only blocks
+    // on some platforms, so stripping the class right after it can pull the
+    // layout out from under the render on Safari and iOS.
+    const cleanup = () => {
       setPrintingTags(false);
       document.body.classList.remove(`print-mode-${mode}`);
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+
+    setTimeout(() => {
+      window.print();
+      // Fallback for browsers that never fire afterprint.
+      setTimeout(cleanup, 1000);
     }, 450);
   };
 
@@ -892,6 +950,8 @@ export default function Products() {
 
   return (
     <div className="space-y-6 p-4 md:p-0 select-none">
+      <PrinterSetupDialog open={printerSetupOpen} onOpenChange={setPrinterSetupOpen} />
+
       {/* Dynamic print-tags styled layer which handles document tags printing layout */}
       <style>
         {`
@@ -941,6 +1001,8 @@ export default function Products() {
               justify-content: space-between;
               page-break-after: always;
               break-after: page;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
               box-sizing: border-box;
               background-color: white !important;
             }
@@ -961,9 +1023,17 @@ export default function Products() {
               -webkit-font-smoothing: none;
               text-rendering: optimizeSpeed;
             }
+            /* Without this the final row still forces a break, ejecting one
+               blank label at the end of every roll job. */
+            .thermal-page-row:last-child {
+              page-break-after: avoid;
+              break-after: avoid;
+            }
             .print-tag-card {
               break-inside: avoid;
               page-break-inside: avoid;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
             }
           }
         `}
@@ -1460,30 +1530,54 @@ export default function Products() {
               Execute actions on {selectedIds.length} selected inventory items
             </div>
             <div className="flex gap-2">
+              {/* Primary action: straight to the label printer, no dialog. */}
+              <Button
+                size="sm"
+                className="shadow-sm gap-1.5"
+                disabled={sendingToPrinter}
+                onClick={handleDirectThermalPrint}
+              >
+                {sendingToPrinter ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Zap className="w-3.5 h-3.5" />
+                )}
+                Print {selectedIds.length} Label{selectedIds.length === 1 ? "" : "s"}
+              </Button>
+
               <Popover>
                 <PopoverTrigger asChild>
                   <Button size="sm" variant="outline" className="shadow-sm gap-1.5">
                     <Printer className="w-3.5 h-3.5" />
-                    Print Tags
+                    More
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-56 p-2" align="end">
+                <PopoverContent className="w-64 p-2" align="end">
                   <div className="text-[10px] font-bold px-2 py-1 text-muted-foreground uppercase tracking-wider">
-                    Select Target Printer
+                    Browser Print (fallback)
                   </div>
                   <Button
                     variant="ghost"
                     className="w-full justify-start font-medium text-left text-xs h-8 px-2 mt-1"
-                    onClick={() => handleBulkPrintTags("thermal")}
+                    onClick={() => handleBulkPrintTags("a4")}
                   >
-                    2-up Thermal Roll (38x25mm)
+                    3-col A4 Sheet Grid (62x48mm)
                   </Button>
                   <Button
                     variant="ghost"
                     className="w-full justify-start font-medium text-left text-xs h-8 px-2"
-                    onClick={() => handleBulkPrintTags("a4")}
+                    onClick={() => handleBulkPrintTags("thermal")}
                   >
-                    3-col A4 Sheet Grid (62x48mm)
+                    2-up Thermal Roll (38x25mm)
+                  </Button>
+                  <div className="border-t my-1.5" />
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start font-medium text-left text-xs h-8 px-2 gap-1.5"
+                    onClick={() => setPrinterSetupOpen(true)}
+                  >
+                    <Settings2 className="w-3.5 h-3.5" />
+                    Printer Setup
                   </Button>
                 </PopoverContent>
               </Popover>
