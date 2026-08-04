@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertTriangle } from "lucide-react";
 
 interface ScannerProps {
   onScan: (code: string) => void;
@@ -10,10 +11,19 @@ interface ScannerProps {
 
 export function MobileBarcodeScanner({ onScan, open, onOpenChange }: ScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
+      setErrorMsg(null);
+      
       const timer = setTimeout(() => {
+        // Validate getUserMedia support first (blocked in in-app browsers on iOS)
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setErrorMsg("Camera access is blocked inside this in-app browser. Please click the (...) or share button and choose 'Open in Safari' or 'Open in Chrome' to scan.");
+          return;
+        }
+
         const html5QrCode = new Html5Qrcode("scanner-element-id", {
           formatsToSupport: [
             Html5QrcodeSupportedFormats.CODE_39,
@@ -67,6 +77,7 @@ export function MobileBarcodeScanner({ onScan, open, onOpenChange }: ScannerProp
             () => {}
           ).catch((fallbackErr) => {
             console.error("All camera start options failed:", fallbackErr);
+            setErrorMsg("Camera access failed. Ensure Saree Palace Elite has camera permissions allowed in your system settings, or open Saree Palace Elite in a standalone browser window (Safari/Chrome).");
           });
         });
       }, 450);
@@ -107,8 +118,18 @@ export function MobileBarcodeScanner({ onScan, open, onOpenChange }: ScannerProp
         </DialogHeader>
         <div className="relative border-2 border-primary/30 rounded-xl overflow-hidden bg-neutral-950 aspect-video shadow-inner flex items-center justify-center">
           <div id="scanner-element-id" className="w-full h-full" />
-          {/* Laser scanning visual guideline */}
-          <div className="absolute left-[8%] right-[8%] top-[50%] h-0.5 bg-red-500 animate-pulse shadow-[0_0_12px_#ef4444] z-10" />
+          
+          {errorMsg ? (
+            <div className="absolute inset-0 bg-neutral-900/95 flex flex-col items-center justify-center p-6 text-center z-20 animate-in fade-in duration-200">
+              <AlertTriangle className="w-8 h-8 text-destructive mb-2 animate-bounce" />
+              <p className="text-xs font-bold text-destructive-foreground bg-destructive/10 border border-destructive/20 rounded p-3 leading-relaxed">
+                {errorMsg}
+              </p>
+            </div>
+          ) : (
+            /* Laser scanning visual guideline */
+            <div className="absolute left-[8%] right-[8%] top-[50%] h-0.5 bg-red-500 animate-pulse shadow-[0_0_12px_#ef4444] z-10" />
+          )}
         </div>
         <p className="text-xs text-center text-muted-foreground">
           Align the boutique label barcode inside the scan frame to read.
