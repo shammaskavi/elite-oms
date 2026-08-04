@@ -18,6 +18,12 @@ import {
   PencilRuler,
   ChevronLeft,
   ChevronRight,
+  QrCode,
+  MapPin,
+  PlusCircle,
+  Map,
+  TrendingDown,
+  ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +36,12 @@ const navigation = [
   { name: "Products", href: "/products", icon: ShoppingBag },
   { name: "Payments", href: "/payments", icon: BadgeIndianRupee },
   { name: "Reports", href: "/reports", icon: FileChartPie },
+  { name: "Intake / Receive", href: "/receive", icon: PlusCircle },
+  { name: "Reshelve Floor", href: "/reshelve", icon: MapPin },
+  { name: "Scan Lookup", href: "/scan", icon: QrCode },
+  { name: "Stock Audit", href: "/stock-count", icon: ClipboardCheck },
+  { name: "Locations Layout", href: "/locations", icon: Map },
+  { name: "Deadstock", href: "/deadstock", icon: TrendingDown },
 ];
 
 const COLLAPSED_KEY = "spe.sidebar.collapsed";

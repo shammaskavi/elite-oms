@@ -46,7 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Search, Eye, UserPlus, ChevronDown, ChevronUp, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, Trash2, Search, Eye, UserPlus, ChevronDown, ChevronUp, Check, ChevronsUpDown, Camera } from "lucide-react";
 import { Command } from "@/components/ui/command";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -59,6 +59,7 @@ import { CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } fr
 
 import { cn } from "@/lib/utils";
 import { InvoiceRow } from "@/components/InvoiceRow";
+import { MobileBarcodeScanner } from "@/components/MobileBarcodeScanner";
 
 
 export default function Invoices() {
@@ -104,13 +105,14 @@ export default function Invoices() {
     address: "",
   });
   const [items, setItems] = useState<any[]>([
-    { name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null },
+    { name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null, unit_codes: [] },
   ]);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [activeDesktopSuggestionRow, setActiveDesktopSuggestionRow] = useState<number | null>(null);
   const [activeMobileSuggestionRow, setActiveMobileSuggestionRow] = useState<number | null>(null);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isScanningCamera, setIsScanningCamera] = useState(false);
   const queryClient = useQueryClient();
 
   // Auto-generate invoice number when dialog opens
@@ -173,6 +175,70 @@ export default function Invoices() {
       }));
     } else {
       setFormData(prev => ({ ...prev, invoice_number: "INV-001" }));
+    }
+  };
+
+  const processBarcodeScan = async (scannedCode: string) => {
+    if (!scannedCode) return;
+
+    if (items.some((item) => item.sku === scannedCode)) {
+      toast.error("This item is already added.");
+      return;
+    }
+
+    try {
+      const { data: unit } = await supabase
+        .from("stock_units")
+        .select("*, product:products(*)")
+        .eq("unit_code", scannedCode)
+        .maybeSingle();
+
+      let product = unit?.product;
+      let unitCodes: string[] = [];
+
+      if (unit) {
+        unitCodes = [unit.unit_code];
+      } else {
+        let { data: dbProduct } = await supabase
+          .from("products")
+          .select("*")
+          .eq("sku", scannedCode)
+          .maybeSingle();
+
+        if (!dbProduct) {
+          const { data: altProduct } = await supabase
+            .from("products")
+            .select("*")
+            .eq("company_barcode", scannedCode)
+            .maybeSingle();
+          dbProduct = altProduct;
+        }
+        product = dbProduct;
+      }
+
+      if (!product) {
+        toast.error("Product not found");
+        return;
+      }
+
+      const newItem = {
+        name: product.name,
+        qty: "1",
+        unit_price: product.price?.toString() || "0",
+        num_products: "1",
+        delivery_date: formData.delivery_date,
+        reference_name: "",
+        sku: product.sku || "",
+        product_id: product.id,
+        unit_codes: unitCodes
+      };
+
+      const updatedItems = [...items, newItem];
+      setItems(updatedItems);
+      updateTotals(updatedItems);
+    } catch (err) {
+      console.error("Scan error:", err);
+      toast.error("Failed to add product");
     }
   };
 
@@ -564,6 +630,7 @@ export default function Invoices() {
             delivery_date: item.delivery_date,
             reference_name: item.reference_name,
             product_id: item.product_id || null,
+            unit_codes: item.unit_codes || [],
           },
         });
       });
@@ -629,10 +696,32 @@ export default function Invoices() {
       }
       return invoice;
     },
-    onSuccess: () => {
+    onSuccess: async (invoice: any) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      
       toast.success(editingDraftId ? "Invoice finalized and order created" : "Invoice and order created");
+      
+      try {
+        const { data: warnings } = await supabase
+          .from("orders")
+          .select("order_code, metadata")
+          .eq("invoice_id", invoice.id);
+          
+        if (warnings) {
+          const oversoldOrders = warnings.filter((w: any) => w.metadata?.stock_warning === true || w.metadata?.stock_warning === "true");
+          if (oversoldOrders.length > 0) {
+            const codes = oversoldOrders.map(o => o.order_code).join(", ");
+            toast.warning(`Oversold Warning: Insufficient physical stock units for order(s) ${codes}. FIFO fallback allocated.`, {
+              duration: 8000
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Warning check failed:", err);
+      }
+
       setOpen(false);
       setEditingDraftId(null);
       resetForm();
@@ -685,7 +774,7 @@ export default function Invoices() {
       paid_amount: "",
       remarks: "",
     });
-    setItems([{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null }]);
+    setItems([{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null, unit_codes: [] }]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1039,70 +1128,35 @@ export default function Invoices() {
               {/* Barcode Scanner Input */}
               <div className="mb-3">
                 <Label className="text-xs">Scan Barcode</Label>
-                <Input
-                  placeholder="Scan or enter barcode and press Enter"
-                  value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                  onKeyDown={async (e) => {
-                    if (e.key === "Enter" && barcodeInput.trim()) {
-                      e.preventDefault();
-
-                      const scannedCode = barcodeInput.trim();
-
-                      // Check duplicate in current invoice
-                      if (items.some((item) => item.sku === scannedCode)) {
-                        toast.error("This item is already added.");
-                        setBarcodeInput("");
-                        return;
-                      }
-
-                      try {
-                        let { data: product } = await supabase
-                          .from("products")
-                          .select("*")
-                          .eq("sku", scannedCode)
-                          .maybeSingle();
-
-                        if (!product) {
-                          const { data: altProduct } = await supabase
-                            .from("products")
-                            .select("*")
-                            .eq("company_barcode", scannedCode)
-                            .maybeSingle();
-                          product = altProduct;
-                        }
-
-                        if (!product) {
-                          toast.error("Product not found");
-                          setBarcodeInput("");
-                          return;
-                        }
-
-                        const newItem = {
-                          name: product.name,
-                          qty: "1",
-                          unit_price: product.price?.toString() || "0",
-                          num_products: "1",
-                          delivery_date: formData.delivery_date,
-                          reference_name: "",
-                          sku: product.sku,
-                          product_id: product.id,
-                        };
-
-                        const updatedItems = [...items, newItem];
-                        setItems(updatedItems);
-                        updateTotals(updatedItems);
-
-                        setBarcodeInput("");
-                      } catch (err) {
-                        console.error("Scan error:", err);
-                        toast.error("Failed to add product");
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Scan or enter barcode and press Enter"
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter" && barcodeInput.trim()) {
+                        e.preventDefault();
+                        await processBarcodeScan(barcodeInput.trim());
                         setBarcodeInput("");
                       }
-                    }
-                  }}
-                  className="h-9"
-                  autoFocus
+                    }}
+                    className="h-9 flex-1"
+                  />
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="icon" 
+                    className="h-9 w-9 shrink-0 text-primary border-primary/20 hover:bg-primary/5"
+                    onClick={() => setIsScanningCamera(true)}
+                  >
+                    <Camera className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                <MobileBarcodeScanner 
+                  open={isScanningCamera} 
+                  onOpenChange={setIsScanningCamera} 
+                  onScan={processBarcodeScan} 
                 />
               </div>
               <div className="space-y-2">
@@ -1673,7 +1727,7 @@ export default function Invoices() {
               paid_amount: invoice.raw_payload?.paid_amount || "0",
               remarks: invoice.raw_payload?.remarks || "",
             });
-            setItems(invoice.raw_payload?.items || [{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null }]);
+            setItems(invoice.raw_payload?.items || [{ name: "", qty: "1", unit_price: "", num_products: "1", delivery_date: new Date().toISOString().split("T")[0], reference_name: "", sku: "", product_id: null, unit_codes: [] }]);
             setSelectedInvoice(null);
             setOpen(true);
           }}

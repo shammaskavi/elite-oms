@@ -30,6 +30,12 @@ const KarigarPortal = lazy(() => import("./pages/KarigarPortal"));
 const KarigarOrderDetail = lazy(() => import("./pages/KarigarOrderDetail"));
 const CreateMeasurement = lazy(() => import("./pages/CreateMeasurement"));
 const Measurements = lazy(() => import("./pages/Measurements"));
+const ScanLookup = lazy(() => import("./pages/ScanLookup"));
+const Reshelve = lazy(() => import("./pages/Reshelve"));
+const Receive = lazy(() => import("./pages/Receive"));
+const LocationsAdmin = lazy(() => import("./pages/LocationsAdmin"));
+const DeadstockReport = lazy(() => import("./pages/DeadstockReport"));
+const StockAudit = lazy(() => import("./pages/StockAudit"));
 
 /**
  * Global QueryClient with sensible defaults:
@@ -104,6 +110,12 @@ const App = () => (
                 <Route path="/payments" element={protectedPage(Payments)} />
                 <Route path="/reports-dusra" element={protectedPage(AnotherReports)} />
                 <Route path="/reports" element={protectedPage(Reports)} />
+                <Route path="/scan" element={protectedPage(ScanLookup)} />
+                <Route path="/reshelve" element={protectedPage(Reshelve)} />
+                <Route path="/receive" element={protectedPage(Receive)} />
+                <Route path="/locations" element={protectedPage(LocationsAdmin)} />
+                <Route path="/deadstock" element={protectedPage(DeadstockReport)} />
+                <Route path="/stock-count" element={protectedPage(StockAudit)} />
 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />

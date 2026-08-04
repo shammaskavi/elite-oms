@@ -52,6 +52,197 @@ export type Database = {
           },
         ]
       }
+      locations: {
+        Row: {
+          id: string
+          code: string
+          label: string
+          location_type: string
+          parent_id: string | null
+          barcode: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          code: string
+          label: string
+          location_type: string
+          parent_id?: string | null
+          barcode: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          code?: string
+          label?: string
+          location_type?: string
+          parent_id?: string | null
+          barcode?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locations_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      stock_units: {
+        Row: {
+          id: string
+          unit_code: string
+          product_id: string
+          current_location_id: string | null
+          status: string
+          source_type: string
+          cost_price: number | null
+          date_received: string
+          date_sold: string | null
+          last_moved_at: string
+          last_counted_at: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          unit_code: string
+          product_id: string
+          current_location_id?: string | null
+          status?: string
+          source_type?: string
+          cost_price?: number | null
+          date_received?: string
+          date_sold?: string | null
+          last_moved_at?: string
+          last_counted_at?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          unit_code?: string
+          product_id?: string
+          current_location_id?: string | null
+          status?: string
+          source_type?: string
+          cost_price?: number | null
+          date_received?: string
+          date_sold?: string | null
+          last_moved_at?: string
+          last_counted_at?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_units_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_units_current_location_id_fkey"
+            columns: ["current_location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      stock_movements: {
+        Row: {
+          id: string
+          unit_id: string
+          movement_type: string
+          from_location_id: string | null
+          to_location_id: string | null
+          old_status: string | null
+          new_status: string
+          actor_profile_id: string | null
+          order_id: string | null
+          moved_at: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          unit_id: string
+          movement_type: string
+          from_location_id?: string | null
+          to_location_id?: string | null
+          old_status?: string | null
+          new_status: string
+          actor_profile_id?: string | null
+          order_id?: string | null
+          moved_at?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          unit_id?: string
+          movement_type?: string
+          from_location_id?: string | null
+          to_location_id?: string | null
+          old_status?: string | null
+          new_status?: string
+          actor_profile_id?: string | null
+          order_id?: string | null
+          moved_at?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "stock_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_from_location_id_fkey"
+            columns: ["from_location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_to_location_id_fkey"
+            columns: ["to_location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_actor_profile_id_fkey"
+            columns: ["actor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       consents: {
         Row: {
           channel: string
@@ -1081,6 +1272,26 @@ export type Database = {
       }
     }
     Views: {
+      v_stock_units_deadstock: {
+        Row: {
+          unit_id: string | null
+          unit_code: string | null
+          product_id: string | null
+          current_location_id: string | null
+          status: string | null
+          cost_price: number | null
+          date_received: string | null
+          last_moved_at: string | null
+          product_name: string | null
+          product_category: string | null
+          product_mrp: number | null
+          location_label: string | null
+          location_code: string | null
+          age_days: number | null
+          age_bucket: string | null
+        }
+        Relationships: []
+      }
       order_items_calendar_view: {
         Row: {
           created_at: string | null
@@ -1128,6 +1339,20 @@ export type Database = {
       }
     }
     Functions: {
+      relocate: {
+        Args: {
+          p_unit_code: string
+          p_location_code: string
+          p_notes?: string
+        }
+        Returns: string
+      }
+      recount_product_stock: {
+        Args: {
+          p_product_id: string
+        }
+        Returns: unknown
+      }
       execute_sql: { Args: { sql: string }; Returns: Json }
       get_cash_inflow_daily:
         | {

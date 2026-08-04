@@ -73,6 +73,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { LoadingState, EmptyState, ErrorState } from "@/components/states";
 import {
   AlertDialog,
@@ -208,6 +209,13 @@ export default function Products() {
 
   // Stock Manual Adjustment States
   const [adjustStockProduct, setAdjustStockProduct] = useState<any | null>(null);
+  const handleAdjustStockClick = (product: any) => {
+    if (product?.stock_units && product.stock_units.length > 0 && product.stock_units[0].count > 0) {
+      toast.error("This product is tracked per piece. Please adjust stock by managing its units (Receive / Audit).");
+      return;
+    }
+    setAdjustStockProduct(product);
+  };
   const [adjustQty, setAdjustQty] = useState("");
   const [adjustType, setAdjustType] = useState<"add" | "deduct">("add");
   const [adjustNotes, setAdjustNotes] = useState("");
@@ -247,7 +255,7 @@ export default function Products() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("*")
+        .select("*, stock_units(count)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -338,6 +346,22 @@ export default function Products() {
 
       // Sort chronological descending
       return historyList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    },
+    enabled: !!selectedProductDetails?.id,
+  });
+
+  // Load physical stock units for selected product details
+  const { data: physicalUnits, isLoading: loadingUnits } = useQuery({
+    queryKey: ["product-units", selectedProductDetails?.id],
+    queryFn: async () => {
+      if (!selectedProductDetails?.id) return [];
+      const { data, error } = await supabase
+        .from("stock_units")
+        .select("*, location:locations(*)")
+        .eq("product_id", selectedProductDetails.id)
+        .order("unit_code", { ascending: true });
+      if (error) throw error;
+      return data;
     },
     enabled: !!selectedProductDetails?.id,
   });
@@ -1057,8 +1081,11 @@ export default function Products() {
                           onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                           required
                           min="0"
-                          disabled={!!editingProduct} // Require using the manual adjustment trigger for edits
+                          disabled={!!editingProduct || (editingProduct?.stock_units && editingProduct.stock_units.length > 0 && editingProduct.stock_units[0].count > 0)} // Require using the manual adjustment trigger for edits
                         />
+                        {editingProduct && editingProduct.stock_units && editingProduct.stock_units.length > 0 && editingProduct.stock_units[0].count > 0 && (
+                          <p className="text-[10px] text-destructive mt-1">This product is tracked per piece. Adjust stock via Receive/Audit screens.</p>
+                        )}
                       </div>
                       <div>
                         <Label htmlFor="inward_date">Inward Date</Label>
@@ -1363,7 +1390,7 @@ export default function Products() {
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => setAdjustStockProduct(product)}
+                          onClick={() => handleAdjustStockClick(product)}
                           className={`font-mono font-bold text-xs px-2.5 py-0.5 rounded-full border cursor-pointer hover:bg-muted flex items-center gap-1.5 transition-colors ${isLow
                             ? "bg-destructive/10 text-destructive border-destructive/20 hover:border-destructive/40"
                             : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-300"
@@ -1435,7 +1462,7 @@ export default function Products() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        setAdjustStockProduct(selectedProductDetails);
+                        handleAdjustStockClick(selectedProductDetails);
                       }}
                       className="h-8 text-xs shadow-sm"
                     >
@@ -1558,61 +1585,120 @@ export default function Products() {
                 </div>
               </div>
 
-              {/* Stock Movement History Column */}
-              <div className="space-y-4 flex flex-col max-h-[60vh]">
-                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 border-b pb-2">
-                  <History className="w-4 h-4 text-primary" />
-                  Stock Movement Timeline
-                </div>
+              {/* Stock Movement History & Physical Pieces Tab Column */}
+              <div className="space-y-4 flex flex-col max-h-[60vh] min-h-[350px]">
+                <Tabs defaultValue="history" className="w-full flex-1 flex flex-col min-h-0">
+                  <TabsList className="grid grid-cols-2 shadow-sm">
+                    <TabsTrigger value="history" className="text-xs">Movement History</TabsTrigger>
+                    <TabsTrigger value="units" className="text-xs">Physical Pieces ({physicalUnits?.length || 0})</TabsTrigger>
+                  </TabsList>
+                  
+                  {/* Tab 1: Movement History */}
+                  <TabsContent value="history" className="flex-1 flex flex-col mt-2 min-h-0">
+                    {loadingHistory ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-2">
+                        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                        <span className="text-xs text-muted-foreground">Loading movement logs...</span>
+                      </div>
+                    ) : !movementHistory || movementHistory.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed rounded-xl bg-muted/10">
+                        <History className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                        <div className="text-xs font-bold text-muted-foreground">No adjustments recorded</div>
+                        <p className="text-[10px] text-muted-foreground/70 max-w-xs mt-1 text-center">
+                          Manual stock corrections and production order sales will be displayed here in chronological order.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto pr-1 space-y-3.5 scrollbar-thin max-h-[48vh]">
+                        {movementHistory.map((item, idx) => {
+                          const isAddition = item.action === "added" || item.action === "returned";
+                          return (
+                            <div key={item.id || idx} className="flex gap-3 relative group">
+                              <div className="flex flex-col items-center">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] border shadow-sm ${isAddition
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-destructive/10 text-destructive border-destructive/20"
+                                  }`}>
+                                  {isAddition ? "+" : "-"}
+                                </div>
+                                {idx < movementHistory.length - 1 && (
+                                  <div className="w-0.5 flex-1 bg-border my-1.5 group-hover:bg-primary/20 transition-colors" />
+                                )}
+                              </div>
 
-                {loadingHistory ? (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-2">
-                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
-                    <span className="text-xs text-muted-foreground">Loading movement logs...</span>
-                  </div>
-                ) : !movementHistory || movementHistory.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border-2 border-dashed rounded-xl bg-muted/10">
-                    <History className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                    <div className="text-xs font-bold text-muted-foreground">No adjustments recorded</div>
-                    <p className="text-[10px] text-muted-foreground/70 max-w-xs mt-1">
-                      Manual stock corrections and production order sales will be displayed here in chronological order.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex-1 overflow-y-auto pr-1 space-y-3.5 scrollbar-thin">
-                    {movementHistory.map((item, idx) => {
-                      const isAddition = item.action === "added" || item.action === "returned";
-                      return (
-                        <div key={item.id || idx} className="flex gap-3 relative group">
-                          {/* Chronological bullet marker */}
-                          <div className="flex flex-col items-center">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] border shadow-sm ${isAddition
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-destructive/10 text-destructive border-destructive/20"
-                              }`}>
-                              {isAddition ? "+" : "-"}
+                              <div className="flex-1 bg-muted/30 border rounded-xl p-3 hover:bg-muted/50 transition-colors">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className={`text-xs font-bold uppercase ${isAddition ? "text-emerald-700" : "text-destructive"}`}>
+                                    {item.qty} Items {item.action === "added" ? "Added" : item.action === "returned" ? "Returned" : item.action === "sold" ? "Sold" : "Deducted"}
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground font-mono">
+                                    {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-medium text-foreground">{item.notes}</p>
+                              </div>
                             </div>
-                            {idx < movementHistory.length - 1 && (
-                              <div className="w-0.5 flex-1 bg-border my-1.5 group-hover:bg-primary/20 transition-colors" />
-                            )}
-                          </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </TabsContent>
 
-                          <div className="flex-1 bg-muted/30 border rounded-xl p-3 hover:bg-muted/50 transition-colors">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className={`text-xs font-bold uppercase ${isAddition ? "text-emerald-700" : "text-destructive"}`}>
-                                {item.qty} Items {item.action === "added" ? "Added" : item.action === "returned" ? "Returned" : item.action === "sold" ? "Sold" : "Deducted"}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                            <p className="text-xs font-medium text-foreground">{item.notes}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                  {/* Tab 2: Physical Stock Units */}
+                  <TabsContent value="units" className="flex-1 flex flex-col mt-2 min-h-0 overflow-y-auto max-h-[48vh] pr-1">
+                    {loadingUnits ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-2">
+                        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                        <span className="text-xs text-muted-foreground">Loading stock units...</span>
+                      </div>
+                    ) : !physicalUnits || physicalUnits.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed rounded-xl bg-muted/10">
+                        <Barcode className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                        <div className="text-xs font-bold text-muted-foreground">No pieces unitised yet</div>
+                        <p className="text-[10px] text-muted-foreground/70 max-w-xs mt-1 text-center">
+                          Register supplier deliveries in the Intake / Receive portal to initialize physical tags for this product.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="border rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader className="bg-neutral-500/5">
+                            <TableRow>
+                              <TableHead className="py-2 text-[10px] font-bold">Tag Code</TableHead>
+                              <TableHead className="py-2 text-[10px] font-bold">Location</TableHead>
+                              <TableHead className="py-2 text-[10px] font-bold">Status</TableHead>
+                              <TableHead className="py-2 text-[10px] font-bold">Age</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {physicalUnits.map((unit: any) => {
+                              const ageDays = Math.ceil(Math.abs(Date.now() - new Date(unit.date_received).getTime()) / (1000 * 60 * 60 * 24));
+                              return (
+                                <TableRow key={unit.id} className="hover:bg-neutral-500/5">
+                                  <TableCell className="py-1.5 font-mono text-[10px] font-bold">{unit.unit_code}</TableCell>
+                                  <TableCell className="py-1.5 text-[10px] font-semibold text-primary">
+                                    {unit.location ? unit.location.label : "Intake Area"}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-[10px]">
+                                    <Badge className={`text-[8px] py-0 px-1 font-sans ${
+                                      unit.status === "in_stock" ? "bg-green-500/10 text-green-500 border-green-500/20" :
+                                      unit.status === "on_floor" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
+                                      unit.status === "sold" ? "bg-slate-500/10 text-slate-500 border-slate-500/20" :
+                                      "bg-yellow-500/10 text-yellow-500 border-yellow-500/20"
+                                    }`}>
+                                      {unit.status.replace(/_/g, " ").toUpperCase()}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-[10px] text-muted-foreground">{ageDays}d</TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
           )}
