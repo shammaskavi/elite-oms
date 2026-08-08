@@ -77,6 +77,25 @@ fine for a private network, worth reconsidering on shared or guest WiFi.
 
 ## Troubleshooting
 
+**First thing to try, always:** on the shop PC, open <http://localhost:9110/health> in a
+browser. If you see text starting with `{"ok":true`, the agent is running correctly and
+the problem is on the app side — hit refresh in Printer Setup. If the browser says it
+cannot connect, the agent is not running.
+
+The agent also writes **`agent-log.txt`** next to `start-agent.bat`, which records why it
+stopped. That file is the fastest way to diagnose a start-up failure.
+
+**Setup says "Offline" but the agent window is open** — check `agent-log.txt` for
+`EADDRINUSE`, which means something else already holds port 9110 (often a second copy of
+the agent). Close the extra window, or set `PORT` to something else and update the Agent
+URL to match.
+
+**"Agent did not respond in time"** — the agent accepted the connection but answered too
+slowly. This should no longer happen: the server now binds both IPv4 and IPv6 loopback
+(Windows resolves `localhost` to `::1` first, and an IPv4-only bind made the browser stall
+on the failed IPv6 attempt), and `/health` answers from cache instead of spawning
+PowerShell on every call.
+
 **"Print agent is not running"** — the batch window is closed, or a firewall prompt was
 declined. Restart `start-agent.bat` and allow access when Windows asks.
 

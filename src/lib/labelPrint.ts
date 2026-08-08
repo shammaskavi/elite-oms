@@ -49,13 +49,19 @@ export interface AgentStatus {
   version?: string;
   printers?: string[];
   defaultPrinter?: string;
+  /** False while the agent is still compiling its raw-print helper on first run. */
+  ready?: boolean;
+  /** Set if the helper failed to build — printing will not work until resolved. */
+  helperError?: string | null;
   error?: string;
 }
 
 export async function probeAgent(settings: PrinterSettings = loadPrinterSettings()): Promise<AgentStatus> {
   try {
+    // Generous: the agent's first health check on a cold Windows box has to
+    // spawn PowerShell to enumerate printers, which is not fast.
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(`${settings.agentUrl}/health`, { signal: controller.signal });
     clearTimeout(timeout);
 
@@ -66,11 +72,16 @@ export async function probeAgent(settings: PrinterSettings = loadPrinterSettings
       version: body.version,
       printers: body.printers,
       defaultPrinter: body.defaultPrinter,
+      ready: body.ready !== false,
+      helperError: body.helperError ?? null,
     };
   } catch (err: any) {
     return {
       online: false,
-      error: err?.name === "AbortError" ? "Agent did not respond in time" : "Print agent is not running",
+      error:
+        err?.name === "AbortError"
+          ? "Agent did not respond in time. Is another program using port 9110?"
+          : "Could not reach the print agent on this PC.",
     };
   }
 }

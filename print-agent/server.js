@@ -123,20 +123,44 @@ function runPowerShell(script) {
 }
 
 /**
+ * Compilation state. The C# compile can take 10-20s on a cold machine, so the
+ * HTTP server must never wait on it — it starts listening immediately and this
+ * records progress for /health and for any print that arrives early.
+ */
+const helperState = { ready: false, error: null, promise: null };
+
+/**
  * Compile the spooler wrapper once at startup. Doing it per job would add a
  * second of csc time to every print.
  */
-async function ensureHelperCompiled() {
-  if (!IS_WINDOWS || PRINTER_SHARE) return;
-  if (fs.existsSync(HELPER_DLL)) return;
+function ensureHelperCompiled() {
+  if (helperState.promise) return helperState.promise;
 
-  const csPath = path.join(WORK_DIR, "RawPrinterHelper.cs");
-  fs.writeFileSync(csPath, RAW_PRINTER_HELPER_CS, "utf8");
+  helperState.promise = (async () => {
+    if (!IS_WINDOWS || PRINTER_SHARE) {
+      helperState.ready = true;
+      return;
+    }
+    if (fs.existsSync(HELPER_DLL)) {
+      helperState.ready = true;
+      return;
+    }
 
-  await runPowerShell(
-    `$src = Get-Content -Raw '${csPath}'; Add-Type -TypeDefinition $src -OutputAssembly '${HELPER_DLL}' -OutputType Library`
-  );
-  console.log("Compiled raw print helper ->", HELPER_DLL);
+    const csPath = path.join(WORK_DIR, "RawPrinterHelper.cs");
+    fs.writeFileSync(csPath, RAW_PRINTER_HELPER_CS, "utf8");
+
+    console.log("Compiling raw print helper (first run only, may take a moment)...");
+    await runPowerShell(
+      `$src = Get-Content -Raw '${csPath}'; Add-Type -TypeDefinition $src -OutputAssembly '${HELPER_DLL}' -OutputType Library`
+    );
+    helperState.ready = true;
+    console.log("Compiled raw print helper ->", HELPER_DLL);
+  })().catch((err) => {
+    helperState.error = err.message;
+    console.error("Could not compile the raw print helper:", err.message);
+  });
+
+  return helperState.promise;
 }
 
 async function listPrinters() {
@@ -154,9 +178,31 @@ async function listPrinters() {
   try {
     const out = await runPowerShell("Get-Printer | Select-Object -ExpandProperty Name");
     return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  } catch {
+  } catch (err) {
+    console.error("Could not enumerate printers:", err.message);
     return [];
   }
+}
+
+/**
+ * Spawning PowerShell costs seconds on a cold Windows box — far longer than a UI
+ * health check should ever block for. So the list is refreshed in the background
+ * and /health answers instantly from cache.
+ */
+let printerCache = null;
+let printerRefresh = null;
+
+function refreshPrinters() {
+  if (printerRefresh) return printerRefresh;
+  printerRefresh = listPrinters()
+    .then((names) => {
+      printerCache = names;
+      return names;
+    })
+    .finally(() => {
+      printerRefresh = null;
+    });
+  return printerRefresh;
 }
 
 async function sendToPrinter(printerName, data) {
@@ -177,6 +223,12 @@ async function sendToPrinter(printerName, data) {
     if (PRINTER_SHARE) {
       await runPowerShell(`cmd /c copy /b "${jobPath}" "${PRINTER_SHARE}"`);
       return;
+    }
+
+    // A print can arrive before the first-run compile finishes.
+    await ensureHelperCompiled();
+    if (helperState.error) {
+      throw new Error(`Raw print helper unavailable: ${helperState.error}`);
     }
 
     const result = await runPowerShell(
@@ -222,7 +274,7 @@ function readBody(req, limitBytes = 4 * 1024 * 1024) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
+const handleRequest = async (req, res) => {
   withCors(res, req.headers.origin);
 
   if (req.method === "OPTIONS") {
@@ -233,10 +285,29 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (req.method === "GET" && url.pathname === "/health") {
-    const printers = await listPrinters();
+    // Answer from cache. Only the very first call waits, and even then it is
+    // capped so the dialog never sits on a spinner.
+    if (printerCache === null) {
+      await Promise.race([refreshPrinters(), new Promise((r) => setTimeout(r, 6000))]);
+    } else {
+      refreshPrinters();
+    }
+
+    const printers = printerCache || [];
     const guess = printers.find((p) => /tsc|ta210|ttp/i.test(p)) || printers[0];
+
     res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ ok: true, version: VERSION, platform: process.platform, printers, defaultPrinter: guess }));
+    return res.end(
+      JSON.stringify({
+        ok: true,
+        version: VERSION,
+        platform: process.platform,
+        printers,
+        defaultPrinter: guess,
+        ready: helperState.ready,
+        helperError: helperState.error,
+      })
+    );
   }
 
   if (req.method === "POST" && url.pathname === "/print") {
@@ -261,20 +332,50 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(404, { "Content-Type": "text/plain" });
   res.end("Not found");
-});
+};
 
-ensureHelperCompiled()
-  .catch((err) => {
-    console.error("Could not compile the raw print helper:", err.message);
-    console.error("Falling back to PRINTER_SHARE mode requires setting that environment variable.");
-  })
-  .finally(() => {
-    server.listen(PORT, BIND, () => {
-      console.log(`Saree Palace Elite print agent v${VERSION}`);
-      console.log(`Listening on http://${BIND}:${PORT}`);
-      console.log(`Health check: http://${BIND}:${PORT}/health`);
-      if (BIND === "127.0.0.1") {
+console.log(`Saree Palace Elite print agent v${VERSION}`);
+console.log(`Node ${process.version} on ${process.platform}`);
+
+// Start these in the background. The server must be reachable immediately —
+// making it wait on a cold PowerShell spawn is what made the browser time out.
+ensureHelperCompiled();
+refreshPrinters();
+
+/**
+ * On Windows, `localhost` usually resolves to ::1 before 127.0.0.1. Binding only
+ * to IPv4 means the browser tries IPv6 first, fails, and falls back — a delay
+ * that surfaces in the UI as "agent did not respond in time". So bind both
+ * loopback stacks unless an explicit BIND was requested.
+ */
+const bindAddresses = process.env.BIND ? [process.env.BIND] : ["127.0.0.1", "::1"];
+let listening = 0;
+
+bindAddresses.forEach((address) => {
+  const server = http.createServer(handleRequest);
+
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`Port ${PORT} is already in use on ${address}.`);
+      console.error("The agent may already be running — check for another window before starting a second copy.");
+    } else if (err.code === "EAFNOSUPPORT" || err.code === "EADDRNOTAVAIL") {
+      // e.g. IPv6 disabled on this machine. Harmless as long as the other bind worked.
+      console.log(`(${address} unavailable on this system, skipping)`);
+    } else {
+      console.error(`Listen failed on ${address}:`, err.message);
+    }
+  });
+
+  server.listen(PORT, address, () => {
+    listening++;
+    const shown = address.includes(":") ? `[${address}]` : address;
+    console.log(`Listening on http://${shown}:${PORT}`);
+    if (listening === 1) {
+      console.log(`Health check: http://localhost:${PORT}/health`);
+      if (!process.env.BIND) {
         console.log("Only this PC can print. Set BIND=0.0.0.0 to allow phones on the same WiFi.");
       }
-    });
+      console.log("Leave this window open while the shop is running.");
+    }
   });
+});

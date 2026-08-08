@@ -5,15 +5,14 @@ import { z } from "zod";
  * so the rules behind "name", "phone", "email", etc. stay consistent.
  */
 
-// Indian phone numbers — 10 digits, optionally prefixed by +91 / 0 / spaces / dashes.
-// We strip non-digits before checking length so paste-friendly variants work.
+// Phone numbers validation — supports standard Indian (10 digits) and international numbers (E.164 standard: 7-15 digits starting with optional +)
 export const phoneNumberSchema = z
   .string()
   .trim()
   .transform((v) => v.replace(/[\s\-()]/g, ""))
   .refine(
-    (v) => v === "" || /^(\+?91)?0?\d{10}$/.test(v),
-    { message: "Enter a valid 10-digit phone number" }
+    (v) => v === "" || /^\+?\d{7,15}$/.test(v),
+    { message: "Enter a valid phone number (e.g., +15613077571 or 10-digit number)" }
   );
 
 export const optionalPhone = phoneNumberSchema.optional().or(z.literal(""));

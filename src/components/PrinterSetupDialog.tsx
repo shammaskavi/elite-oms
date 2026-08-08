@@ -184,11 +184,51 @@ export function PrinterSetupDialog({ open, onOpenChange }: Props) {
               )}
             </div>
 
-            {!status?.online && (
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
-                {status?.error || "Not connected."} Run <code className="font-mono">start-agent.bat</code>{" "}
-                from the <code className="font-mono">print-agent</code> folder on the PC the printer is
-                plugged into.
+            {!status?.online && !checking && (
+              <div className="text-[10px] text-muted-foreground leading-relaxed space-y-1.5 border-t pt-2">
+                <p className="font-semibold text-destructive">{status?.error || "Not connected."}</p>
+                <p className="font-semibold text-foreground">Check, in order:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>
+                    Open{" "}
+                    <a
+                      href={`${settings.agentUrl}/health`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono underline text-primary"
+                    >
+                      {settings.agentUrl}/health
+                    </a>{" "}
+                    on the shop PC. If you see text starting with{" "}
+                    <code className="font-mono">{'{"ok":true'}</code>, the agent is running and this dialog
+                    just needs a refresh.
+                  </li>
+                  <li>
+                    Is the <code className="font-mono">start-agent.bat</code> window still open? It has to
+                    stay open. If it closed, reopen it and read the message.
+                  </li>
+                  <li>
+                    Check <code className="font-mono">agent-log.txt</code> in the{" "}
+                    <code className="font-mono">print-agent</code> folder — it records why it stopped.
+                  </li>
+                  <li>
+                    Node.js must be installed on that PC —{" "}
+                    <span className="font-mono">nodejs.org</span>, LTS version.
+                  </li>
+                </ol>
+              </div>
+            )}
+
+            {status?.online && status.helperError && (
+              <p className="text-[10px] leading-relaxed text-destructive border-t pt-2">
+                Agent is running but its raw-print helper failed to build, so printing will not work:{" "}
+                {status.helperError}
+              </p>
+            )}
+
+            {status?.online && status.ready === false && !status.helperError && (
+              <p className="text-[10px] leading-relaxed text-muted-foreground border-t pt-2">
+                Agent is starting up (first-run setup). Give it a few seconds, then refresh.
               </p>
             )}
           </div>
