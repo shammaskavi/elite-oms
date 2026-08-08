@@ -24,3 +24,6 @@ supabase/.temp/*
 *.njsproj
 *.sln
 *.sw?
+
+# Print agent runtime log
+print-agent/agent-log.txt

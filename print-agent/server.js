@@ -35,6 +35,31 @@ const HELPER_DLL = path.join(WORK_DIR, "RawPrinterHelper.dll");
 fs.mkdirSync(WORK_DIR, { recursive: true });
 
 /**
+ * Mirror everything to agent-log.txt beside this script. Logging from inside
+ * Node keeps the console output unbuffered — piping the process through
+ * PowerShell to tee it hides startup messages exactly when they matter most.
+ */
+const LOG_PATH = path.join(__dirname, "agent-log.txt");
+try {
+  fs.writeFileSync(LOG_PATH, `=== Print agent started ${new Date().toISOString()} ===\n`);
+} catch {
+  /* read-only folder: console output still works */
+}
+
+function tee(stream, original) {
+  return (...args) => {
+    original(...args);
+    try {
+      fs.appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${stream} ${args.join(" ")}\n`);
+    } catch {
+      /* never let logging break printing */
+    }
+  };
+}
+console.log = tee("INFO", console.log.bind(console));
+console.error = tee("ERROR", console.error.bind(console));
+
+/**
  * Win32 spooler wrapper. Opening the printer with datatype "RAW" is what makes
  * the bytes reach the printer verbatim; anything else routes through the driver
  * and would re-render our TSPL as a bitmap.
@@ -334,8 +359,77 @@ const handleRequest = async (req, res) => {
   res.end("Not found");
 };
 
+/**
+ * `node server.js --check` runs every prerequisite once and prints a verdict,
+ * then exits. Faster to read out over a support call than tailing a live log.
+ */
+async function runDiagnostics() {
+  const line = (label, value) => console.log(`  ${label.padEnd(22)} ${value}`);
+
+  console.log("");
+  console.log("=== Print agent self-check ===");
+  console.log("");
+  console.log("System");
+  line("Node version", process.version);
+  line("Platform", `${process.platform} ${process.arch}`);
+  line("OS release", os.release());
+  line("Agent folder", __dirname);
+  line("Log file", LOG_PATH);
+
+  console.log("");
+  console.log("Port");
+  const portFree = await new Promise((resolve) => {
+    const probe = http.createServer();
+    probe.on("error", () => resolve(false));
+    probe.listen(PORT, "127.0.0.1", () => probe.close(() => resolve(true)));
+  });
+  line(`Port ${PORT}`, portFree ? "available" : "IN USE by another program");
+
+  console.log("");
+  console.log("Raw print helper");
+  await ensureHelperCompiled();
+  if (helperState.error) {
+    line("Status", `FAILED — ${helperState.error}`);
+  } else {
+    line("Status", helperState.ready ? "ready" : "not ready");
+  }
+
+  console.log("");
+  console.log("Printers Windows can see");
+  const printers = await listPrinters();
+  if (printers.length === 0) {
+    console.log("  (none found)");
+  } else {
+    printers.forEach((p) => {
+      const likely = /tsc|ta210|ttp/i.test(p) ? "  <-- looks like your label printer" : "";
+      console.log(`  - ${p}${likely}`);
+    });
+  }
+
+  console.log("");
+  const problems = [];
+  if (!portFree) problems.push(`Port ${PORT} is already in use.`);
+  if (helperState.error) problems.push("The raw print helper could not be built.");
+  if (printers.length === 0) problems.push("Windows reports no installed printers.");
+
+  if (problems.length === 0) {
+    console.log("RESULT: All checks passed. Run start-agent.bat and leave it open.");
+  } else {
+    console.log("RESULT: Problems found:");
+    problems.forEach((p) => console.log(`  * ${p}`));
+  }
+  console.log("");
+}
+
+if (process.argv.includes("--check")) {
+  runDiagnostics()
+    .catch((err) => console.error("Self-check crashed:", err.message))
+    .finally(() => process.exit(0));
+  return;
+}
+
 console.log(`Saree Palace Elite print agent v${VERSION}`);
-console.log(`Node ${process.version} on ${process.platform}`);
+console.log(`Node ${process.version} on ${process.platform} (${os.release()})`);
 
 // Start these in the background. The server must be reachable immediately —
 // making it wait on a cold PowerShell spawn is what made the browser time out.
