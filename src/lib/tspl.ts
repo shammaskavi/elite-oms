@@ -184,37 +184,45 @@ function drawGarmentLabel(builder: LabelBuilder, originX: number, originY: numbe
   const storeMax = innerWidth - (category ? textWidth(category, "1", 1) + 8 : 0);
   builder.text(left, originY + 4, "1", 1, fitToWidth(label.storeName, "1", 1, storeMax));
   if (category) {
-    builder.textRight(right, originY + 4, "1", 1, fitToWidth(category, "1", 1, innerWidth / 2));
+    builder.textRight(right, originY + 4, "1", 1, fitToWidth(category, "1", 1, innerWidth * 0.3));
   }
 
-  builder.bar(left, originY + 20, innerWidth, 2);
+  // Thin separator line
+  builder.bar(left, originY + 18, innerWidth, 1);
 
-  // Product name in the larger 12x20 cell.
-  builder.text(left, originY + 28, "2", 1, fitToWidth(label.name, "2", 1, innerWidth));
+  // Product name (Y=22)
+  builder.text(left, originY + 22, "2", 1, fitToWidth(label.name, "2", 1, innerWidth));
 
-  // QR occupies the left column, vertically isolated.
-  const qrSize = 21 * media.qrCellWidth; // version 1 symbol = 21 modules square
-  const qrX = left + 2;
-  const qrY = originY + 64;
-  builder.qrcode(qrX, qrY, media.qrEcc, media.qrCellWidth, label.code);
+  // Color & Size side-by-side (Y=44)
+  const colText = `COL: ${label.color || "N/A"}`;
+  const szText = `SZ: ${label.size || "FREE"}`;
+  builder.text(left, originY + 44, "1", 1, fitToWidth(colText, "1", 1, innerWidth * 0.5));
+  builder.textRight(right, originY + 44, "1", 1, fitToWidth(szText, "1", 1, innerWidth * 0.5));
 
-  // Detail column to the right of the QR.
-  const detailX = qrX + qrSize + mmToDots(2);
-  const detailWidth = right - detailX;
+  // Price & Cost Code side-by-side (Y=58)
+  const priceVal = `Rs.${Math.round(label.mrp || 0).toLocaleString("en-IN")}`;
+  builder.text(left, originY + 62, "1", 1, "MRP");
+  
+  // Choose font for price depending on length
+  const priceFont: TsplFont = textWidth(priceVal, "3", 1) <= innerWidth * 0.5 ? "3" : "2";
+  builder.text(left + 28, originY + 58, priceFont, 1, fitToWidth(priceVal, priceFont, 1, innerWidth * 0.5));
 
-  builder.text(detailX, originY + 64, "1", 1, fitToWidth(`COL: ${label.color || "N/A"}`, "1", 1, detailWidth));
-  builder.text(detailX, originY + 80, "1", 1, fitToWidth(`SZ: ${label.size || "FREE"}`, "1", 1, detailWidth));
-
-  builder.text(detailX, originY + 98, "1", 1, "MRP");
-  const price = `Rs.${Math.round(label.mrp || 0).toLocaleString("en-IN")}`;
-  // Step down a font size rather than let a long price overflow the label.
-  const priceFont: TsplFont = textWidth(price, "3", 1) <= detailWidth ? "3" : "2";
-  builder.text(detailX, originY + 110, priceFont, 1, fitToWidth(price, priceFont, 1, detailWidth));
-
-  builder.text(detailX, originY + 140, "1", 1, fitToWidth(label.code, "1", 1, detailWidth));
   if (label.costCode) {
-    builder.text(detailX, originY + 156, "1", 1, fitToWidth(label.costCode, "1", 1, detailWidth));
+    builder.textRight(right, originY + 62, "1", 1, fitToWidth(label.costCode, "1", 1, innerWidth * 0.4));
   }
+
+  // Centered 1D Code-128 Barcode (Y=88)
+  const codeVal = label.code || "00000000";
+  const barcodeWidth = (35 + 11 * codeVal.length) * 1;
+  const barcodeX = originX + Math.round((labelWidth - barcodeWidth) / 2);
+  const barcodeHeight = 70; // 8.75mm high
+  
+  builder.code128(barcodeX, originY + 88, barcodeHeight, 1, codeVal);
+
+  // SKU Text centered below barcode (Y=168)
+  const skuWidth = textWidth(codeVal, "1", 1);
+  const skuX = originX + Math.round((labelWidth - skuWidth) / 2);
+  builder.text(skuX, originY + 166, "1", 1, codeVal);
 }
 
 /**
@@ -295,18 +303,23 @@ export function buildShelfLabelJob(labels: ShelfLabel[], media: LabelMedia = DEF
 
       const originX = mmToDots(media.leftMarginMm + col * media.columnPitchMm);
       const left = originX + pad;
+      const right = originX + labelWidth - pad;
       const innerWidth = labelWidth - pad * 2;
 
       builder.text(left, 4, "1", 1, fitToWidth(label.title, "1", 1, innerWidth));
-      builder.bar(left, 20, innerWidth, 2);
-      builder.text(left, 28, "2", 1, fitToWidth(label.name, "2", 1, innerWidth));
+      builder.bar(left, 18, innerWidth, 1);
+      builder.text(left, 22, "2", 1, fitToWidth(label.name, "2", 1, innerWidth));
 
-      const qrSize = 21 * media.qrCellWidth;
-      builder.qrcode(originX + Math.round((labelWidth - qrSize) / 2), 68, media.qrEcc, media.qrCellWidth, label.code);
+      const codeVal = label.code || "";
+      const barcodeWidth = (35 + 11 * codeVal.length) * 1;
+      const barcodeX = originX + Math.round((labelWidth - barcodeWidth) / 2);
+      const barcodeHeight = 75; // 9.3mm high
+      
+      builder.code128(barcodeX, 64, barcodeHeight, 1, codeVal);
 
-      const footer = label.subCode ? `${label.code} (${label.subCode})` : label.code;
-      const fitted = fitToWidth(footer, "1", 1, innerWidth);
-      builder.text(originX + Math.round((labelWidth - textWidth(fitted, "1", 1)) / 2), 170, "1", 1, fitted);
+      const footer = label.subCode ? `${codeVal} (${label.subCode})` : codeVal;
+      const footerWidth = textWidth(footer, "1", 1);
+      builder.text(originX + Math.round((labelWidth - footerWidth) / 2), 160, "1", 1, footer);
     }
 
     builder.raw("PRINT 1,1");
@@ -343,7 +356,11 @@ export function buildCalibrationJob(media: LabelMedia = DEFAULT_MEDIA): string {
 
     builder.text(originX + 30, 30, "1", 1, `SPD ${media.speed} DEN ${media.density}`);
     builder.text(originX + 30, 46, "1", 1, `${media.labelWidthMm}x${media.labelHeightMm}mm C${col + 1}`);
-    builder.qrcode(originX + 30, 70, media.qrEcc, media.qrCellWidth, "SPE-CALIBRATION-TEST");
+
+    const codeVal = "SPE-CALIBRATION";
+    const barcodeWidth = (35 + 11 * codeVal.length) * 1;
+    const barcodeX = originX + Math.round((labelWidth - barcodeWidth) / 2);
+    builder.code128(barcodeX, 70, 75, 1, codeVal);
   }
 
   builder.raw("PRINT 1,1");
