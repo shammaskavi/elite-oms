@@ -271,6 +271,40 @@ export function PrinterSetupDialog({ open, onOpenChange }: Props) {
                 max: 15,
                 hint: "Grey bars? raise. Merged bars? lower.",
               })}
+              {numberField("min-module", "Min bar width (dots)", "minBarcodeModule", {
+                min: 1,
+                max: 4,
+                hint: "Floor, not fixed. 1 lets long codes fit; short codes still use 2.",
+              })}
+              <div className="space-y-1">
+                <Label htmlFor="font-style" className="text-[11px] font-semibold">
+                  Label font
+                </Label>
+                <Select
+                  value={settings.media.fontStyle}
+                  onValueChange={(value) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      media: { ...prev.media, fontStyle: value as "scalable" | "bitmap" },
+                    }))
+                  }
+                >
+                  <SelectTrigger id="font-style" className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="scalable" className="text-xs">
+                      Proportional
+                    </SelectItem>
+                    <SelectItem value="bitmap" className="text-xs">
+                      Fixed-width
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground leading-tight">
+                  Proportional matches the supplier tags.
+                </p>
+              </div>
             </div>
           </div>
         </div>

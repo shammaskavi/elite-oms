@@ -57,6 +57,21 @@ export interface LabelMedia {
   qrCellWidth: number;
   /** QR error correction. M tolerates ~15% damage — right for garment tags. */
   qrEcc: "L" | "M" | "Q" | "H";
+  /**
+   * Narrowest Code 128 bar, in printer dots, at 203dpi (1 dot = 0.125mm).
+   *
+   * This is a floor, not a fixed width: each label still uses the widest module
+   * its code can fit in, so short codes print at 2 dots and only long ones drop
+   * to 1. Set to 2 to refuse to go below 0.25mm, at the cost of long codes
+   * overflowing the label.
+   */
+  minBarcodeModule: number;
+  /**
+   * "scalable" uses the printer's built-in proportional typeface, matching the
+   * look of the supplier reference labels. "bitmap" uses the fixed-width
+   * internal fonts — blockier, but every glyph width is exactly known.
+   */
+  fontStyle: "scalable" | "bitmap";
 }
 
 export const DEFAULT_MEDIA: LabelMedia = {
@@ -73,19 +88,32 @@ export const DEFAULT_MEDIA: LabelMedia = {
   direction: 1,
   qrCellWidth: 4,
   qrEcc: "M",
+  minBarcodeModule: 1,
+  fontStyle: "scalable",
 };
 
 export interface GarmentLabel {
-  storeName: string;
+  /** Top-left kicker, e.g. "SAREE". */
   category?: string | null;
+  /** Top-right kicker, e.g. "BANDHNI". */
+  collection?: string | null;
+  /** Main description line. */
   name: string;
-  color?: string | null;
+  /** Sub-detail shown lower-left, e.g. fabric "DOLA". */
+  detail?: string | null;
+  /** Shown lower-right, e.g. "6.30MTRS" or a garment size. */
   size?: string | null;
+  /** Colour name, given its own emphasised line. */
+  color?: string | null;
   mrp?: number | null;
-  /** The value encoded in the QR. Must match what the scanner looks up. */
+  /** The value encoded in the barcode. Must match what the scanner looks up. */
   code: string;
-  /** Optional obfuscated cost marking. */
+  /** Small reference printed bottom-right, e.g. supplier or lot code. */
+  vendorCode?: string | null;
+  /** @deprecated Kept so existing callers keep compiling; use vendorCode. */
   costCode?: string | null;
+  /** @deprecated No longer printed — the reference labels carry no store name. */
+  storeName?: string;
 }
 
 /**
@@ -109,37 +137,79 @@ function escapeTspl(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-/** Truncate to what actually fits, so text can never overrun the label edge. */
-function fitToWidth(value: string, font: TsplFont, multiplier: number, availableDots: number): string {
-  const charWidth = TSPL_FONTS[font].width * multiplier;
-  const maxChars = Math.floor(availableDots / charWidth);
-  if (maxChars <= 0) return "";
-  if (value.length <= maxChars) return value;
-  return value.slice(0, maxChars);
+/**
+ * A text style is either one of the printer's fixed bitmap fonts, or the
+ * built-in scalable Monotype CG Triumvirate ("0"). The scalable font is
+ * proportional, so it looks like a proper typeface rather than a terminal —
+ * which is what the supplier reference labels use.
+ */
+export type TextStyle =
+  | { kind: "bitmap"; font: TsplFont; mult?: number }
+  | { kind: "scalable"; pt: number };
+
+/** 203 dpi head: one typographic point is 203/72 dots. */
+const DOTS_PER_POINT = DOTS_PER_MM * 25.4 / 72;
+
+/**
+ * Triumvirate is proportional, so exact widths are only known to the printer.
+ * 0.62em per character is a deliberate over-estimate across upper-case Latin —
+ * it makes truncation land slightly early rather than letting text run off the
+ * label edge, which is the failure that actually matters.
+ */
+const SCALABLE_WIDTH_RATIO = 0.62;
+
+function styleCharWidth(style: TextStyle): number {
+  return style.kind === "bitmap"
+    ? TSPL_FONTS[style.font].width * (style.mult ?? 1)
+    : style.pt * DOTS_PER_POINT * SCALABLE_WIDTH_RATIO;
 }
 
-function textWidth(value: string, font: TsplFont, multiplier: number): number {
-  return value.length * TSPL_FONTS[font].width * multiplier;
+export function styleHeight(style: TextStyle): number {
+  return style.kind === "bitmap"
+    ? TSPL_FONTS[style.font].height * (style.mult ?? 1)
+    : Math.round(style.pt * DOTS_PER_POINT);
+}
+
+function textWidth(value: string, style: TextStyle): number {
+  return Math.round(value.length * styleCharWidth(style));
+}
+
+/** Truncate to what actually fits, so text can never overrun the label edge. */
+function fitToWidth(value: string, style: TextStyle, availableDots: number): string {
+  const maxChars = Math.floor(availableDots / styleCharWidth(style));
+  if (maxChars <= 0) return "";
+  return value.length <= maxChars ? value : value.slice(0, maxChars);
 }
 
 class LabelBuilder {
   private lines: string[] = [];
 
-  text(x: number, y: number, font: TsplFont, multiplier: number, value: string) {
+  text(x: number, y: number, style: TextStyle, value: string) {
     const clean = escapeTspl(toPrintableAscii(value));
     if (!clean) return;
-    this.lines.push(`TEXT ${x},${y},"${font}",0,${multiplier},${multiplier},"${clean}"`);
+    if (style.kind === "bitmap") {
+      const m = style.mult ?? 1;
+      this.lines.push(`TEXT ${x},${y},"${style.font}",0,${m},${m},"${clean}"`);
+    } else {
+      // For font "0" the multiplication params carry the point size instead.
+      this.lines.push(`TEXT ${x},${y},"0",0,${style.pt},${style.pt},"${clean}"`);
+    }
   }
 
-  /** Right-aligns by measuring the string against the known font cell width. */
-  textRight(rightEdge: number, y: number, font: TsplFont, multiplier: number, value: string) {
+  /** Right-aligns by measuring the string against the style's advance width. */
+  textRight(rightEdge: number, y: number, style: TextStyle, value: string) {
     const clean = toPrintableAscii(value);
     if (!clean) return;
-    this.text(rightEdge - textWidth(clean, font, multiplier), y, font, multiplier, clean);
+    this.text(rightEdge - textWidth(clean, style), y, style, clean);
   }
 
   bar(x: number, y: number, width: number, height: number) {
     this.lines.push(`BAR ${x},${y},${width},${height}`);
+  }
+
+  /** Inverts a rectangle — used for the white-on-black currency mark. */
+  reverse(x: number, y: number, width: number, height: number) {
+    this.lines.push(`REVERSE ${x},${y},${width},${height}`);
   }
 
   qrcode(x: number, y: number, ecc: LabelMedia["qrEcc"], cellWidth: number, value: string) {
@@ -166,63 +236,154 @@ class LabelBuilder {
 }
 
 /**
- * Draws one garment tag at the given origin.
- *
- * Layout keeps the QR isolated in the left column so it retains a clear quiet
- * zone on all four sides — Code 39 in the old labels ran flush to the label
- * edge, which alone is enough to make a symbol unreadable.
+ * Code 128 symbol width in modules. Set C packs two digits per symbol, so an
+ * all-numeric code is close to half the width of the same length in Set B —
+ * which is the whole reason supplier labels use numeric article codes.
+ */
+export function code128Modules(value: string): number {
+  const symbols = /^[0-9]+$/.test(value) && value.length >= 4
+    ? Math.ceil(value.length / 2)
+    : value.length;
+  // start + data + check + stop(13)
+  return 11 + symbols * 11 + 11 + 13;
+}
+
+/**
+ * Largest module width that still fits, floored at the media's minimum.
+ * Below about 2 dots (0.25mm) at 203dpi, thermal bar growth starts pushing the
+ * symbol out of spec and phone cameras stop reading it reliably.
+ */
+export function pickBarcodeModule(value: string, availableDots: number, minModule: number): {
+  module: number;
+  width: number;
+  /** False when even a 1-dot module cannot fit — the symbol would run off the label. */
+  fits: boolean;
+  /** True when the code only fits by going below the reliable module width. */
+  belowMinimum: boolean;
+} {
+  const modules = code128Modules(value);
+  const widest = Math.floor(availableDots / modules);
+
+  if (widest >= minModule) {
+    const module = Math.min(4, widest);
+    return { module, width: modules * module, fits: true, belowMinimum: false };
+  }
+
+  // Cannot honour the minimum. Degrade to the widest module that still fits
+  // rather than printing a symbol that runs off the edge of the label.
+  const module = Math.max(1, widest);
+  return { module, width: modules * module, fits: modules * module <= availableDots, belowMinimum: true };
+}
+
+/**
+ * Reports codes that will not print reliably at the configured module width,
+ * so the UI can warn before a whole roll is wasted.
+ */
+export function findUnscannableCodes(
+  codes: string[],
+  media: LabelMedia = DEFAULT_MEDIA
+): { code: string; widthMm: number }[] {
+  const innerWidth = mmToDots(media.labelWidthMm) - mmToDots(1.2) * 2;
+  return codes
+    .map((code) => ({ code, result: pickBarcodeModule(code, innerWidth, media.minBarcodeModule) }))
+    .filter(({ result }) => result.belowMinimum || !result.fits)
+    .map(({ code, result }) => ({
+      code,
+      widthMm: Math.round((code128Modules(code) * media.minBarcodeModule) / DOTS_PER_MM * 10) / 10,
+    }));
+}
+
+/**
+ * Draws one garment tag, following the layout of the supplier reference labels:
+ * no store branding, a strong price line with a reversed currency mark, and a
+ * full-width barcode with its human-readable value beneath.
  */
 function drawGarmentLabel(builder: LabelBuilder, originX: number, originY: number, media: LabelMedia, label: GarmentLabel) {
   const labelWidth = mmToDots(media.labelWidthMm);
-  const pad = mmToDots(1.5);
+  const labelHeight = mmToDots(media.labelHeightMm);
+  const pad = mmToDots(1.2);
   const left = originX + pad;
   const right = originX + labelWidth - pad;
   const innerWidth = right - left;
 
-  // Header: store name, with category right-aligned on the same baseline.
-  const category = toPrintableAscii(label.category || "");
-  const storeMax = innerWidth - (category ? textWidth(category, "1", 1) + 8 : 0);
-  builder.text(left, originY + 4, "1", 1, fitToWidth(label.storeName, "1", 1, storeMax));
-  if (category) {
-    builder.textRight(right, originY + 4, "1", 1, fitToWidth(category, "1", 1, innerWidth * 0.3));
+  const scalable = media.fontStyle !== "bitmap";
+  const S = {
+    kicker: scalable ? ({ kind: "scalable", pt: 6 } as TextStyle) : ({ kind: "bitmap", font: "1" } as TextStyle),
+    name: scalable ? ({ kind: "scalable", pt: 7 } as TextStyle) : ({ kind: "bitmap", font: "1" } as TextStyle),
+    color: scalable ? ({ kind: "scalable", pt: 8 } as TextStyle) : ({ kind: "bitmap", font: "2" } as TextStyle),
+    price: scalable ? ({ kind: "scalable", pt: 12 } as TextStyle) : ({ kind: "bitmap", font: "3" } as TextStyle),
+    micro: scalable ? ({ kind: "scalable", pt: 6 } as TextStyle) : ({ kind: "bitmap", font: "1" } as TextStyle),
+  };
+
+  let y = originY + 2;
+
+  // Row 1 — category left, collection right.
+  const collection = toPrintableAscii(label.collection || "");
+  if (collection) {
+    builder.textRight(right, y, S.kicker, fitToWidth(collection, S.kicker, innerWidth * 0.45));
+  }
+  const categoryRoom = innerWidth - (collection ? textWidth(collection, S.kicker) + 10 : 0);
+  builder.text(left, y, S.kicker, fitToWidth(label.category || "", S.kicker, categoryRoom));
+  y += styleHeight(S.kicker) + 3;
+
+  // Row 2 — description.
+  builder.text(left, y, S.name, fitToWidth(label.name, S.name, innerWidth));
+  y += styleHeight(S.name) + 2;
+
+  // Row 3 — detail left, size/length right.
+  const detail = toPrintableAscii(label.detail || "");
+  const sizeText = toPrintableAscii(label.size || "");
+  if (sizeText) {
+    builder.textRight(right, y, S.micro, fitToWidth(sizeText, S.micro, innerWidth * 0.45));
+  }
+  if (detail) {
+    const room = innerWidth - (sizeText ? textWidth(sizeText, S.micro) + 10 : 0);
+    builder.text(left, y, S.micro, fitToWidth(detail, S.micro, room));
+  }
+  if (detail || sizeText) y += styleHeight(S.micro) + 2;
+
+  // Row 4 — colour, emphasised on its own line.
+  if (label.color) {
+    builder.text(left, y, S.color, fitToWidth(label.color, S.color, innerWidth));
+    y += styleHeight(S.color) + 2;
   }
 
-  // Thin separator line
-  builder.bar(left, originY + 18, innerWidth, 1);
+  // Row 5 — price, with a reversed currency mark standing in for the rupee
+  // glyph (the printer's internal fonts have no codepoint for it).
+  const priceText = Math.round(label.mrp || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+  const markW = Math.round(styleHeight(S.price) * 0.72);
+  const markH = styleHeight(S.price);
+  builder.text(left + 2, y + Math.round(markH * 0.18), S.micro, "RS");
+  builder.reverse(left, y, markW, markH);
+  builder.text(
+    left + markW + 6,
+    y,
+    S.price,
+    fitToWidth(priceText, S.price, innerWidth - markW - 6)
+  );
+  y += markH + 4;
 
-  // Product name (Y=22)
-  builder.text(left, originY + 22, "2", 1, fitToWidth(label.name, "2", 1, innerWidth));
+  // Barcode — as wide as the label allows, at the largest safe module width.
+  const codeVal = toPrintableAscii(label.code || "00000000");
+  const { module, width: barcodeWidth } = pickBarcodeModule(codeVal, innerWidth, media.minBarcodeModule);
 
-  // Color & Size side-by-side (Y=44)
-  const colText = `COL: ${label.color || "N/A"}`;
-  const szText = `SZ: ${label.size || "FREE"}`;
-  builder.text(left, originY + 44, "1", 1, fitToWidth(colText, "1", 1, innerWidth * 0.5));
-  builder.textRight(right, originY + 44, "1", 1, fitToWidth(szText, "1", 1, innerWidth * 0.5));
+  const footerH = styleHeight(S.micro);
+  // One footer line carries the readable code and the vendor reference, keeping
+  // as much of the remaining height as possible for the bars themselves — a
+  // Code 128 symbol needs ~6.4mm of bar height to scan dependably.
+  const barcodeHeight = Math.max(48, labelHeight - (y - originY) - footerH - 6);
+  const barcodeX = originX + Math.max(pad, Math.round((labelWidth - barcodeWidth) / 2));
 
-  // Price & Cost Code side-by-side (Y=58)
-  const priceVal = `Rs.${Math.round(label.mrp || 0).toLocaleString("en-IN")}`;
-  builder.text(left, originY + 62, "1", 1, "MRP");
-  
-  // Choose font for price depending on length
-  const priceFont: TsplFont = textWidth(priceVal, "3", 1) <= innerWidth * 0.5 ? "3" : "2";
-  builder.text(left + 28, originY + 58, priceFont, 1, fitToWidth(priceVal, priceFont, 1, innerWidth * 0.5));
+  builder.code128(barcodeX, y, barcodeHeight, module, codeVal);
+  y += barcodeHeight + 2;
 
-  if (label.costCode) {
-    builder.textRight(right, originY + 62, "1", 1, fitToWidth(label.costCode, "1", 1, innerWidth * 0.4));
+  // Footer: readable code left, vendor reference right.
+  const vendor = toPrintableAscii(String(label.vendorCode || label.costCode || ""));
+  if (vendor) {
+    builder.textRight(right, y, S.micro, fitToWidth(vendor, S.micro, innerWidth * 0.45));
   }
-
-  // Centered 1D Code-128 Barcode (Y=88)
-  const codeVal = label.code || "00000000";
-  const barcodeWidth = (35 + 11 * codeVal.length) * 1;
-  const barcodeX = originX + Math.round((labelWidth - barcodeWidth) / 2);
-  const barcodeHeight = 70; // 8.75mm high
-  
-  builder.code128(barcodeX, originY + 88, barcodeHeight, 1, codeVal);
-
-  // SKU Text centered below barcode (Y=168)
-  const skuWidth = textWidth(codeVal, "1", 1);
-  const skuX = originX + Math.round((labelWidth - skuWidth) / 2);
-  builder.text(skuX, originY + 166, "1", 1, codeVal);
+  const codeRoom = innerWidth - (vendor ? textWidth(vendor, S.micro) + 10 : 0);
+  builder.text(left, y, S.micro, fitToWidth(codeVal, S.micro, codeRoom));
 }
 
 /**
@@ -306,20 +467,23 @@ export function buildShelfLabelJob(labels: ShelfLabel[], media: LabelMedia = DEF
       const right = originX + labelWidth - pad;
       const innerWidth = labelWidth - pad * 2;
 
-      builder.text(left, 4, "1", 1, fitToWidth(label.title, "1", 1, innerWidth));
-      builder.bar(left, 18, innerWidth, 1);
-      builder.text(left, 22, "2", 1, fitToWidth(label.name, "2", 1, innerWidth));
+      const scalable = media.fontStyle !== "bitmap";
+      const titleStyle: TextStyle = scalable ? { kind: "scalable", pt: 6 } : { kind: "bitmap", font: "1" };
+      const nameStyle: TextStyle = scalable ? { kind: "scalable", pt: 9 } : { kind: "bitmap", font: "2" };
 
-      const codeVal = label.code || "";
-      const barcodeWidth = (35 + 11 * codeVal.length) * 1;
-      const barcodeX = originX + Math.round((labelWidth - barcodeWidth) / 2);
-      const barcodeHeight = 75; // 9.3mm high
-      
-      builder.code128(barcodeX, 64, barcodeHeight, 1, codeVal);
+      builder.text(left, 4, titleStyle, fitToWidth(label.title, titleStyle, innerWidth));
+      builder.bar(left, 18, innerWidth, 1);
+      builder.text(left, 22, nameStyle, fitToWidth(label.name, nameStyle, innerWidth));
+
+      const codeVal = toPrintableAscii(label.code || "");
+      const { module, width: barcodeWidth } = pickBarcodeModule(codeVal, innerWidth, media.minBarcodeModule);
+      const barcodeX = originX + Math.max(pad, Math.round((labelWidth - barcodeWidth) / 2));
+
+      builder.code128(barcodeX, 64, 75, module, codeVal);
 
       const footer = label.subCode ? `${codeVal} (${label.subCode})` : codeVal;
-      const footerWidth = textWidth(footer, "1", 1);
-      builder.text(originX + Math.round((labelWidth - footerWidth) / 2), 160, "1", 1, footer);
+      const footerWidth = textWidth(footer, titleStyle);
+      builder.text(originX + Math.round((labelWidth - footerWidth) / 2), 160, titleStyle, footer);
     }
 
     builder.raw("PRINT 1,1");
@@ -354,13 +518,16 @@ export function buildCalibrationJob(media: LabelMedia = DEFAULT_MEDIA): string {
     builder.bar(originX + labelWidth - 24, labelHeight - 3, 24, 3);
     builder.bar(originX + labelWidth - 3, labelHeight - 24, 3, 24);
 
-    builder.text(originX + 30, 30, "1", 1, `SPD ${media.speed} DEN ${media.density}`);
-    builder.text(originX + 30, 46, "1", 1, `${media.labelWidthMm}x${media.labelHeightMm}mm C${col + 1}`);
+    const infoStyle: TextStyle = { kind: "bitmap", font: "1" };
+    builder.text(originX + 30, 30, infoStyle, `SPD ${media.speed} DEN ${media.density}`);
+    builder.text(originX + 30, 46, infoStyle, `${media.labelWidthMm}x${media.labelHeightMm}mm C${col + 1}`);
 
-    const codeVal = "SPE-CALIBRATION";
-    const barcodeWidth = (35 + 11 * codeVal.length) * 1;
+    // Numeric so the test symbol uses Set C, exercising the same encoding the
+    // real labels use when the code is all digits.
+    const codeVal = "012504010752";
+    const { module, width: barcodeWidth } = pickBarcodeModule(codeVal, labelWidth - 24, media.minBarcodeModule);
     const barcodeX = originX + Math.round((labelWidth - barcodeWidth) / 2);
-    builder.code128(barcodeX, 70, 75, 1, codeVal);
+    builder.code128(barcodeX, 70, 75, module, codeVal);
   }
 
   builder.raw("PRINT 1,1");

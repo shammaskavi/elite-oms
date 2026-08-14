@@ -118,7 +118,10 @@ export function MobileBarcodeScanner({ onScan, open, onOpenChange }: ScannerProp
         return;
       }
 
-      const scanner = new Html5Qrcode(containerId, { formatsToSupport: SUPPORTED_FORMATS });
+      const scanner = new Html5Qrcode(containerId, {
+        formatsToSupport: SUPPORTED_FORMATS,
+        verbose: false,
+      });
       scannerRef.current = scanner;
 
       try {
@@ -138,8 +141,11 @@ export function MobileBarcodeScanner({ onScan, open, onOpenChange }: ScannerProp
               width: { ideal: 1280 },
               height: { ideal: 720 },
             },
+            // Uses the platform's native BarcodeDetector where available, which
+            // is far faster than the JS decoder. The library reads this at
+            // runtime but omits it from its published config type.
             experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-          },
+          } as Parameters<Html5Qrcode["start"]>[1],
           handleDecoded,
           () => {
             /* per-frame decode misses are normal and extremely noisy */

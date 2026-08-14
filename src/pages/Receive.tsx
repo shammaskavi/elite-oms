@@ -285,14 +285,15 @@ export default function Receive() {
     if (receivedUnits.length === 0) return;
 
     const labels: GarmentLabel[] = receivedUnits.map((unit) => ({
-      storeName: "SAREE PALACE ELITE",
       category: selectedProduct?.category,
+      collection: selectedProduct?.supplier_name,
       name: selectedProduct?.name || "Boutique Collection",
-      color: selectedProduct?.color,
+      detail: selectedProduct?.item_code,
       size: selectedProduct?.size,
+      color: selectedProduct?.color,
       mrp: Number(mrp) || selectedProduct?.price || 0,
       code: unit.unit_code,
-      costCode: getEncodedVendorCode(unit),
+      vendorCode: getEncodedVendorCode(unit),
     }));
 
     const settings = loadPrinterSettings();

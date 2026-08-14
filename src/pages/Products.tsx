@@ -91,7 +91,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { PrinterSetupDialog } from "@/components/PrinterSetupDialog";
-import { buildGarmentLabelJob, GarmentLabel } from "@/lib/tspl";
+import { buildGarmentLabelJob, findUnscannableCodes, GarmentLabel } from "@/lib/tspl";
 import { loadPrinterSettings, sendTsplJob, PrintAgentOfflineError } from "@/lib/labelPrint";
 
 // Code 39 Barcode character mapping for native SVG drawing
@@ -564,17 +564,31 @@ export default function Products() {
 
     const selectedProducts = (products || []).filter((p) => selectedIds.includes(p.id));
     const labels: GarmentLabel[] = selectedProducts.map((p) => ({
-      storeName: "SAREE PALACE ELITE",
       category: p.category,
+      collection: p.supplier_name,
       name: p.name,
-      color: p.color,
+      detail: p.item_code,
       size: p.size,
+      color: p.color,
       mrp: p.mrp || p.price || 0,
       code: p.sku || p.company_barcode || `SPE-${p.id.slice(0, 8).toUpperCase()}`,
-      costCode: p.purchase_price ? `SPE-${Math.round(p.purchase_price * 1.5)}` : null,
+      vendorCode: p.company_barcode,
     }));
 
     const settings = loadPrinterSettings();
+
+    // A code too long for the label prints at a module width thin enough that
+    // thermal bar growth makes it unreadable. Say so before a roll is spent.
+    const risky = findUnscannableCodes(labels.map((l) => l.code), settings.media);
+    if (risky.length > 0) {
+      toast.warning(
+        `${risky.length} code${risky.length === 1 ? " is" : "s are"} too long for a ${settings.media.labelWidthMm}mm label ` +
+          `(e.g. "${risky[0].code}" needs ${risky[0].widthMm}mm). These will print but may not scan. ` +
+          `Shorter or numeric-only codes fix this.`,
+        { duration: 10000 }
+      );
+    }
+
     setSendingToPrinter(true);
     try {
       await sendTsplJob(buildGarmentLabelJob(labels, settings.media), settings);
