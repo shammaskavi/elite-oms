@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { InvoiceView } from "@/components/InvoiceView";
 import { derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
-import { EmptyState } from "@/components/states";
+import { EmptyState, LoadingState } from "@/components/states";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/lib/auth";
 
@@ -53,16 +54,6 @@ export default function Dashboard() {
   const { isAdmin } = useAuth();
 
   const [timePeriod, setTimePeriod] = useState<string>("today");
-  const [stats, setStats] = useState({
-    totalOrders: 0,
-    pendingOrders: 0,
-    cashInflow: 0,
-    revenue: 0,
-  });
-  const [overdueOrders, setOverdueOrders] = useState<OverdueOrderItem[]>([]);
-  const [pendingInvoices, setPendingInvoices] = useState<any[]>([]);
-  const [pendingOrders, setPendingOrders] = useState<any[]>([]);
-  const [deliveriesToday, setDeliveriesToday] = useState<any[]>([]);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -70,18 +61,7 @@ export default function Dashboard() {
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const openInvoiceId = (location.state as any)?.openInvoiceId;
 
-  useEffect(() => {
-    if (!openInvoiceId || pendingInvoices.length === 0) return;
-
-    const invoice = pendingInvoices.find((inv) => inv.id === openInvoiceId);
-
-    if (invoice) {
-      setSelectedInvoice(invoice);
-      setInvoiceModalOpen(true);
-    }
-  }, [openInvoiceId, pendingInvoices]);
-
-  const getDateRange = () => {
+  const getDateRange = useCallback(() => {
     const now = new Date();
     let startDate: Date;
 
@@ -110,82 +90,123 @@ export default function Dashboard() {
     }
 
     return startDate.toISOString();
-  };
+  }, [timePeriod]);
 
-  const fetchStatsForRange = async (startDate: string) => {
-    const queries: Promise<any>[] = [
-      (supabase as any)
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", startDate),
-      (supabase as any)
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .neq("order_status", "delivered")
-        .neq("order_status", "cancelled")
-        .gte("created_at", startDate),
-    ];
-
-    if (isAdmin) {
-      queries.push(
-        (supabase as any)
-          .from("invoice_payments")
-          .select("amount, date")
-          .gte("date", startDate),
-        (supabase as any)
-          .from("orders")
-          .select("total_amount")
-          .gte("created_at", startDate)
-      );
-    }
-
-    const [totalOrdersRes, pendingOrdersRes, paymentsDataRes, ordersDataRes] =
-      await Promise.all(queries);
-
-    return {
-      totalOrders: totalOrdersRes?.count || 0,
-      pendingOrders: pendingOrdersRes?.count || 0,
-      cashInflow:
-        paymentsDataRes?.data?.reduce((sum: number, p: any) => sum + Number(p.amount), 0) || 0,
-      revenue:
-        ordersDataRes?.data?.reduce((sum: number, order: any) => sum + Number(order.total_amount), 0) || 0,
-    };
-  };
-
-  const loadDashboardData = useCallback(async () => {
-    try {
+  // Unified high-performance dashboard query with instant in-memory cache
+  const { data: dashboardData, isLoading } = useQuery({
+    queryKey: ["dashboard-data", timePeriod, isAdmin],
+    placeholderData: (prev) => prev,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
       const selectedStartDate = getDateRange();
       const localTodayStr = getLocalDateString(new Date());
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
-      const periodStats = await fetchStatsForRange(selectedStartDate);
-      setStats(periodStats);
+      // Run independent queries in parallel
+      const [
+        totalOrdersRes,
+        pendingOrdersRes,
+        paymentsDataRes,
+        ordersDataRes,
+        invoicesRes,
+        activeOrdersRes,
+        deliveriesRes,
+      ] = await Promise.all([
+        (supabase as any)
+          .from("orders")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", selectedStartDate),
+        (supabase as any)
+          .from("orders")
+          .select("*", { count: "exact", head: true })
+          .neq("order_status", "delivered")
+          .neq("order_status", "cancelled")
+          .gte("created_at", selectedStartDate),
+        isAdmin
+          ? (supabase as any)
+              .from("invoice_payments")
+              .select("amount, date")
+              .gte("date", selectedStartDate)
+          : Promise.resolve({ data: [] }),
+        isAdmin
+          ? (supabase as any)
+              .from("orders")
+              .select("total_amount")
+              .gte("created_at", selectedStartDate)
+          : Promise.resolve({ data: [] }),
+        (supabase as any)
+          .from("invoices")
+          .select(`
+            id,
+            invoice_number,
+            total,
+            status,
+            payment_status,
+            settled,
+            raw_payload,
+            created_at,
+            customers (
+              name,
+              phone,
+              address
+            )
+          `)
+          .order("created_at", { ascending: false })
+          .limit(30),
+        (supabase as any)
+          .from("orders")
+          .select(`
+            id,
+            order_code,
+            metadata,
+            order_status,
+            created_at,
+            customers(name, phone),
+            invoices(invoice_number),
+            order_stages(stage_name, vendor_name, created_at)
+          `)
+          .neq("order_status", "delivered")
+          .neq("order_status", "cancelled")
+          .order("created_at", { ascending: false })
+          .limit(200),
+        (supabase as any)
+          .from("order_items_calendar_view")
+          .select(`
+            order_id,
+            invoice_number,
+            item_name,
+            delivery_date,
+            customer_name,
+            stage,
+            vendor_name
+          `)
+          .eq("delivery_date", localTodayStr)
+          .neq("stage", "Delivered")
+          .order("invoice_number"),
+      ]);
 
-      // 1. Fetch Invoices & Payments for Pending Invoices
-      const { data: invoicesData } = await (supabase as any)
-        .from("invoices")
-        .select(`
-          *,
-          customers (
-            name,
-            phone,
-            address
-          )
-        `)
-        .order("created_at", { ascending: false })
-        .limit(30);
+      // Calculate Stats
+      const stats = {
+        totalOrders: totalOrdersRes?.count || 0,
+        pendingOrders: pendingOrdersRes?.count || 0,
+        cashInflow:
+          paymentsDataRes?.data?.reduce((sum: number, p: any) => sum + Number(p.amount), 0) || 0,
+        revenue:
+          ordersDataRes?.data?.reduce((sum: number, order: any) => sum + Number(order.total_amount), 0) || 0,
+      };
 
-      const invoiceIds = invoicesData?.map((i: any) => i.id) || [];
+      // Enrich Invoices with Payments
+      const invoicesData = invoicesRes?.data || [];
+      const invoiceIds = invoicesData.map((i: any) => i.id);
 
       const { data: invoicePayments } = invoiceIds.length
         ? await (supabase as any)
             .from("invoice_payments")
-            .select("*")
+            .select("invoice_id, amount, date")
             .in("invoice_id", invoiceIds)
         : { data: [] };
 
-      // groupBy is supported in modern browsers; fall back if missing.
       const paymentsByInvoice: Record<string, any[]> =
         typeof (Object as any).groupBy === "function"
           ? (Object as any).groupBy(invoicePayments || [], (p: any) => p.invoice_id)
@@ -194,40 +215,23 @@ export default function Dashboard() {
               return acc;
             }, {});
 
-      const enrichedInvoices =
-        invoicesData && invoicesData.length > 0
-          ? invoicesData.map((inv: any) => ({
-              ...inv,
-              __payment: derivePaymentStatusFromData(
-                inv,
-                paymentsByInvoice[inv.id] || []
-              ),
-            }))
-          : [];
+      const enrichedInvoices = invoicesData.map((inv: any) => ({
+        ...inv,
+        __payment: derivePaymentStatusFromData(
+          inv,
+          paymentsByInvoice[inv.id] || []
+        ),
+      }));
 
-      const pending = enrichedInvoices.filter(
-        (inv: any) => inv.__payment?.status !== "paid"
-      );
-      setPendingInvoices(pending.slice(0, 10));
+      const pendingInvoices = enrichedInvoices
+        .filter((inv: any) => inv.__payment?.status !== "paid")
+        .slice(0, 10);
 
-      // 2. Fetch Active Orders for Pending Orders and Overdue Calculation
-      const { data: activeOrdersData } = await (supabase as any)
-        .from("orders")
-        .select(`
-          *,
-          customers(name, phone),
-          invoices(invoice_number),
-          order_stages(stage_name, vendor_name, created_at)
-        `)
-        .neq("order_status", "delivered")
-        .neq("order_status", "cancelled")
-        .order("created_at", { ascending: false });
+      // Process Active & Overdue Orders
+      const allActive = activeOrdersRes?.data || [];
+      const pendingOrders = allActive.slice(0, 10);
 
-      const allActive = activeOrdersData || [];
-      setPendingOrders(allActive.slice(0, 10));
-
-      // 3. Compute Overdue Orders (delivery_date < localTodayStr and active)
-      const overdueList: OverdueOrderItem[] = allActive
+      const overdueOrders: OverdueOrderItem[] = allActive
         .filter((order: any) => {
           const deliveryDateStr = order.metadata?.delivery_date;
           if (!deliveryDateStr) return false;
@@ -273,34 +277,39 @@ export default function Dashboard() {
             new Date(b.delivery_date).getTime()
         );
 
-      setOverdueOrders(overdueList);
+      const deliveriesToday = deliveriesRes?.data || [];
 
-      // 4. Fetch Deliveries Today (using local date string)
-      const { data: deliveries } = await (supabase as any)
-        .from("order_items_calendar_view")
-        .select(`
-          order_id,
-          invoice_number,
-          item_name,
-          delivery_date,
-          customer_name,
-          stage,
-          vendor_name
-        `)
-        .eq("delivery_date", localTodayStr)
-        .neq("stage", "Delivered")
-        .order("invoice_number");
-      setDeliveriesToday(deliveries || []);
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.error("[Dashboard] failed to load:", err);
-      }
-    }
-  }, [timePeriod]);
+      return {
+        stats,
+        pendingInvoices,
+        pendingOrders,
+        overdueOrders,
+        deliveriesToday,
+      };
+    },
+  });
+
+  const stats = dashboardData?.stats || {
+    totalOrders: 0,
+    pendingOrders: 0,
+    cashInflow: 0,
+    revenue: 0,
+  };
+  const overdueOrders = dashboardData?.overdueOrders || [];
+  const pendingInvoices = dashboardData?.pendingInvoices || [];
+  const pendingOrders = dashboardData?.pendingOrders || [];
+  const deliveriesToday = dashboardData?.deliveriesToday || [];
 
   useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    if (!openInvoiceId || pendingInvoices.length === 0) return;
+
+    const invoice = pendingInvoices.find((inv: any) => inv.id === openInvoiceId);
+
+    if (invoice) {
+      setSelectedInvoice(invoice);
+      setInvoiceModalOpen(true);
+    }
+  }, [openInvoiceId, pendingInvoices]);
 
   const getStatusBadge = useCallback((status: string) => {
     const variants: Record<string, any> = {

@@ -1602,6 +1602,26 @@ CREATE INDEX "idx_products_status" ON "public"."products" USING "btree" ("status
 
 CREATE INDEX "invoice_payments_invoice_idx" ON "public"."invoice_payments" USING "btree" ("invoice_id");
 
+CREATE INDEX IF NOT EXISTS "idx_invoices_created_at_desc" ON "public"."invoices" USING "btree" ("created_at" DESC);
+CREATE INDEX IF NOT EXISTS "idx_invoices_customer_id" ON "public"."invoices" USING "btree" ("customer_id");
+CREATE INDEX IF NOT EXISTS "idx_invoices_invoice_number" ON "public"."invoices" USING "btree" ("invoice_number");
+CREATE INDEX IF NOT EXISTS "idx_invoices_settled" ON "public"."invoices" USING "btree" ("settled") WHERE ("settled" IS TRUE);
+
+CREATE INDEX IF NOT EXISTS "idx_orders_customer_id" ON "public"."orders" USING "btree" ("customer_id");
+CREATE INDEX IF NOT EXISTS "idx_orders_invoice_id" ON "public"."orders" USING "btree" ("invoice_id");
+CREATE INDEX IF NOT EXISTS "idx_orders_active_created_at" ON "public"."orders" USING "btree" ("created_at" DESC) WHERE ("order_status" NOT IN ('delivered', 'cancelled'));
+
+CREATE INDEX IF NOT EXISTS "idx_order_stages_vendor_id" ON "public"."order_stages" USING "btree" ("vendor_id");
+CREATE INDEX IF NOT EXISTS "idx_order_stages_composite" ON "public"."order_stages" USING "btree" ("order_id", "created_at" DESC);
+
+CREATE INDEX IF NOT EXISTS "idx_invoice_payments_invoice_date" ON "public"."invoice_payments" USING "btree" ("invoice_id", "date" DESC);
+CREATE INDEX IF NOT EXISTS "idx_invoice_payments_date_desc" ON "public"."invoice_payments" USING "btree" ("date" DESC);
+CREATE INDEX IF NOT EXISTS "idx_customer_payments_customer_id" ON "public"."customer_payments" USING "btree" ("customer_id", "received_at" DESC);
+
+CREATE INDEX IF NOT EXISTS "idx_customers_created_at_desc" ON "public"."customers" USING "btree" ("created_at" DESC);
+CREATE INDEX IF NOT EXISTS "idx_profiles_user_id" ON "public"."profiles" USING "btree" ("user_id");
+
+
 
 
 CREATE OR REPLACE TRIGGER "after_payment_insert" AFTER INSERT ON "public"."invoice_payments" FOR EACH ROW EXECUTE FUNCTION "public"."trigger_recalculate_status"();
