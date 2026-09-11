@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InvoiceView } from "@/components/InvoiceView";
+import { derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 import { pdf } from "@react-pdf/renderer";
 import { PrintableInvoice } from "@/components/PrintableInvoice";
 import {
@@ -251,7 +252,8 @@ export default function Invoices() {
         .select(`
           *, 
           customers(id, name, phone, email, address),
-          orders(payment_status)
+          orders(payment_status),
+          invoice_payments(amount)
         `)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -869,32 +871,37 @@ export default function Invoices() {
   // Filter invoices
   const filteredInvoices = invoices?.filter(invoice => {
     const matchesSearch =
-      invoice.invoice_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.customers?.name.toLowerCase().includes(searchQuery.toLowerCase());
+      invoice.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      invoice.customers?.name?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const isDraft = invoice.status === "draft";
+    const isSettled = invoice.settled === true;
 
-    // Determine payment status
-    const paymentStatus =
-      invoice.payment_status ||
-      invoice.raw_payload?.payment_status ||
-      (invoice.orders?.every((o: any) => o.payment_status === "paid") ? "paid" : "unpaid");
+    // Derive payment status with reconciled DB payments + legacy payload
+    const paymentInfo = derivePaymentStatusFromData(
+      invoice,
+      invoice.invoice_payments || []
+    );
 
-    // Derived flags
-    const isPaid = paymentStatus === "paid";
-    const isPartial = paymentStatus === "partial";
-    const isUnpaid = paymentStatus === "unpaid";
+    // An invoice is paid if explicit payment_status is 'paid', all orders are paid,
+    // raw payload is 'paid', or reconciled payments equal total.
+    const isPaid =
+      invoice.payment_status === "paid" ||
+      invoice.raw_payload?.payment_status === "paid" ||
+      (invoice.orders && invoice.orders.length > 0 && invoice.orders.every((o: any) => o.payment_status === "paid")) ||
+      paymentInfo.status === "paid";
 
-
+    // Settled invoices are treated as closed under the Paid tab
+    const isPaidOrSettled = isSettled || isPaid;
 
     const matchesPayment =
       paymentFilter === "all" ||
       (paymentFilter === "draft" && isDraft) ||
-      (paymentFilter === "paid" && !isDraft && isPaid) ||
-      (paymentFilter === "unpaid" && !isDraft && !isPaid);
+      (paymentFilter === "paid" && !isDraft && isPaidOrSettled) ||
+      (paymentFilter === "unpaid" && !isDraft && !isPaidOrSettled);
 
     const matchesDate = !dateFilter ||
-      new Date(invoice.date).toISOString().split("T")[0] === dateFilter;
+      (invoice.date && new Date(invoice.date).toISOString().split("T")[0] === dateFilter);
 
     return matchesSearch && matchesPayment && matchesDate;
   });

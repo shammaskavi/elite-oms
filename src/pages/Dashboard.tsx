@@ -2,15 +2,48 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Package, DollarSign, HandCoins, TrendingDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  FileText,
+  Package,
+  DollarSign,
+  HandCoins,
+  TrendingDown,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { InvoiceView } from "@/components/InvoiceView";
 import { derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 import { EmptyState } from "@/components/states";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
+interface OverdueOrderItem {
+  order_id: string;
+  order_code: string;
+  invoice_number?: string;
+  item_name: string;
+  reference_name?: string;
+  customer_name: string;
+  customer_phone?: string;
+  delivery_date: string;
+  days_overdue: number;
+  stage: string;
+  vendor_name?: string;
+}
+
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export default function Dashboard() {
   useDocumentTitle("Dashboard");
@@ -22,6 +55,7 @@ export default function Dashboard() {
     cashInflow: 0,
     revenue: 0,
   });
+  const [overdueOrders, setOverdueOrders] = useState<OverdueOrderItem[]>([]);
   const [pendingInvoices, setPendingInvoices] = useState<any[]>([]);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
   const [deliveriesToday, setDeliveriesToday] = useState<any[]>([]);
@@ -32,20 +66,16 @@ export default function Dashboard() {
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const openInvoiceId = (location.state as any)?.openInvoiceId;
 
-
   useEffect(() => {
     if (!openInvoiceId || pendingInvoices.length === 0) return;
 
-    const invoice = pendingInvoices.find(
-      (inv) => inv.id === openInvoiceId
-    );
+    const invoice = pendingInvoices.find((inv) => inv.id === openInvoiceId);
 
     if (invoice) {
       setSelectedInvoice(invoice);
       setInvoiceModalOpen(true);
     }
   }, [openInvoiceId, pendingInvoices]);
-
 
   const getDateRange = () => {
     const now = new Date();
@@ -62,7 +92,11 @@ export default function Dashboard() {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         break;
       case "quarter":
-        startDate = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+        startDate = new Date(
+          now.getFullYear(),
+          Math.floor(now.getMonth() / 3) * 3,
+          1
+        );
         break;
       case "year":
         startDate = new Date(now.getFullYear(), 0, 1);
@@ -73,6 +107,7 @@ export default function Dashboard() {
 
     return startDate.toISOString();
   };
+
   const fetchStatsForRange = async (startDate: string) => {
     const [
       { count: totalOrders },
@@ -80,37 +115,57 @@ export default function Dashboard() {
       { data: paymentsData },
       { data: ordersData },
     ] = await Promise.all([
-      (supabase as any).from("orders").select("*", { count: "exact", head: true }).gte("created_at", startDate),
-      (supabase as any).from("orders").select("*", { count: "exact", head: true }).neq("order_status", "delivered").neq("order_status", "cancelled").gte("created_at", startDate),
-      (supabase as any).from("invoice_payments").select("amount, date").gte("date", startDate),
-      (supabase as any).from("orders").select("total_amount").gte("created_at", startDate),
+      (supabase as any)
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", startDate),
+      (supabase as any)
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .neq("order_status", "delivered")
+        .neq("order_status", "cancelled")
+        .gte("created_at", startDate),
+      (supabase as any)
+        .from("invoice_payments")
+        .select("amount, date")
+        .gte("date", startDate),
+      (supabase as any)
+        .from("orders")
+        .select("total_amount")
+        .gte("created_at", startDate),
     ]);
 
     return {
       totalOrders: totalOrders || 0,
       pendingOrders: pendingOrders || 0,
-      cashInflow: paymentsData?.reduce((sum, p: any) => sum + Number(p.amount), 0) || 0,
-      revenue: ordersData?.reduce((sum, order: any) => sum + Number(order.total_amount), 0) || 0,
+      cashInflow:
+        paymentsData?.reduce((sum, p: any) => sum + Number(p.amount), 0) || 0,
+      revenue:
+        ordersData?.reduce((sum, order: any) => sum + Number(order.total_amount), 0) || 0,
     };
   };
 
   const loadDashboardData = useCallback(async () => {
     try {
       const selectedStartDate = getDateRange();
+      const localTodayStr = getLocalDateString(new Date());
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
 
       const periodStats = await fetchStatsForRange(selectedStartDate);
       setStats(periodStats);
 
+      // 1. Fetch Invoices & Payments for Pending Invoices
       const { data: invoicesData } = await (supabase as any)
         .from("invoices")
         .select(`
-      *,
-      customers (
-        name,
-        phone,
-        address
-      )
-    `)
+          *,
+          customers (
+            name,
+            phone,
+            address
+          )
+        `)
         .order("created_at", { ascending: false })
         .limit(30);
 
@@ -118,9 +173,9 @@ export default function Dashboard() {
 
       const { data: invoicePayments } = invoiceIds.length
         ? await (supabase as any)
-          .from("invoice_payments")
-          .select("*")
-          .in("invoice_id", invoiceIds)
+            .from("invoice_payments")
+            .select("*")
+            .in("invoice_id", invoiceIds)
         : { data: [] };
 
       // groupBy is supported in modern browsers; fall back if missing.
@@ -132,46 +187,105 @@ export default function Dashboard() {
               return acc;
             }, {});
 
-      const enrichedInvoices = (invoicesData && invoicesData.length > 0)
-        ? invoicesData.map((inv: any) => ({
-            ...inv,
-            __payment: derivePaymentStatusFromData(inv, paymentsByInvoice[inv.id] || []),
-          }))
-        : [];
+      const enrichedInvoices =
+        invoicesData && invoicesData.length > 0
+          ? invoicesData.map((inv: any) => ({
+              ...inv,
+              __payment: derivePaymentStatusFromData(
+                inv,
+                paymentsByInvoice[inv.id] || []
+              ),
+            }))
+          : [];
 
       const pending = enrichedInvoices.filter(
         (inv: any) => inv.__payment?.status !== "paid"
       );
       setPendingInvoices(pending.slice(0, 10));
 
-      const { data: ordersDataPending } = await (supabase as any)
+      // 2. Fetch Active Orders for Pending Orders and Overdue Calculation
+      const { data: activeOrdersData } = await (supabase as any)
         .from("orders")
-        .select("*, customers(name)")
+        .select(`
+          *,
+          customers(name, phone),
+          invoices(invoice_number),
+          order_stages(stage_name, vendor_name, created_at)
+        `)
         .neq("order_status", "delivered")
         .neq("order_status", "cancelled")
-        .order("created_at", { ascending: false })
-        .limit(10);
-      setPendingOrders(ordersDataPending || []);
+        .order("created_at", { ascending: false });
 
+      const allActive = activeOrdersData || [];
+      setPendingOrders(allActive.slice(0, 10));
+
+      // 3. Compute Overdue Orders (delivery_date < localTodayStr and active)
+      const overdueList: OverdueOrderItem[] = allActive
+        .filter((order: any) => {
+          const deliveryDateStr = order.metadata?.delivery_date;
+          if (!deliveryDateStr) return false;
+          return deliveryDateStr < localTodayStr;
+        })
+        .map((order: any) => {
+          const stages = [...(order.order_stages || [])].sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime()
+          );
+          const latestStage = stages[0];
+          const deliveryDate = new Date(order.metadata.delivery_date);
+          deliveryDate.setHours(0, 0, 0, 0);
+          const diffTime = todayStart.getTime() - deliveryDate.getTime();
+          const diffDays = Math.max(
+            1,
+            Math.round(diffTime / (1000 * 60 * 60 * 24))
+          );
+
+          return {
+            order_id: order.id,
+            order_code: order.order_code,
+            invoice_number: order.invoices?.invoice_number,
+            item_name: order.metadata?.item_name || "Order Item",
+            reference_name: order.metadata?.reference_name,
+            customer_name: order.customers?.name || "Customer",
+            customer_phone: order.customers?.phone,
+            delivery_date: order.metadata.delivery_date,
+            days_overdue: diffDays,
+            stage:
+              latestStage?.stage_name ||
+              (order.order_status
+                ? order.order_status.charAt(0).toUpperCase() +
+                  order.order_status.slice(1)
+                : "In Progress"),
+            vendor_name: latestStage?.vendor_name,
+          };
+        })
+        .sort(
+          (a, b) =>
+            new Date(a.delivery_date).getTime() -
+            new Date(b.delivery_date).getTime()
+        );
+
+      setOverdueOrders(overdueList);
+
+      // 4. Fetch Deliveries Today (using local date string)
       const { data: deliveries } = await (supabase as any)
         .from("order_items_calendar_view")
         .select(`
-      order_id,
-      invoice_number,
-      item_name,
-      delivery_date,
-      customer_name,
-      stage,
-      vendor_name
-    `)
-        .eq("delivery_date", new Date().toISOString().slice(0, 10))
+          order_id,
+          invoice_number,
+          item_name,
+          delivery_date,
+          customer_name,
+          stage,
+          vendor_name
+        `)
+        .eq("delivery_date", localTodayStr)
         .neq("stage", "Delivered")
         .order("invoice_number");
       setDeliveriesToday(deliveries || []);
     } catch (err) {
-      // Errors will be surfaced by the global onError handler / toasts.
       if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
         console.error("[Dashboard] failed to load:", err);
       }
     }
@@ -202,17 +316,26 @@ export default function Dashboard() {
 
   const periodLabel = useMemo(() => {
     switch (timePeriod) {
-      case "today": return "Today";
-      case "week": return "This week";
-      case "month": return "This month";
-      case "quarter": return "This quarter";
-      case "year": return "This year";
-      default: return "All time";
+      case "today":
+        return "Today";
+      case "week":
+        return "This week";
+      case "month":
+        return "This month";
+      case "quarter":
+        return "This quarter";
+      case "year":
+        return "This year";
+      default:
+        return "All time";
     }
   }, [timePeriod]);
 
   const activeGreeting = useMemo(() => {
-    const greetings: Record<string, { title: string; subtitle: string; icon: string }> = {
+    const greetings: Record<
+      string,
+      { title: string; subtitle: string; icon: string }
+    > = {
       morning: {
         title: "Good morning!",
         subtitle: `You have ${stats.pendingOrders} pending orders today.`,
@@ -232,14 +355,14 @@ export default function Dashboard() {
     return greetings[context];
   }, [stats, context]);
 
-
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Dashboard</h1>
       </div>
-      {/* add a summary card below that shows greetings and stats in it */}
-      <Card className="p-6 ">
+
+      {/* Greeting Summary Card */}
+      <Card className="p-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold mb-2">
@@ -257,7 +380,6 @@ export default function Dashboard() {
           </div>
         </div>
       </Card>
-
 
       {/* Time Period Filter */}
       <div className="flex items-center gap-2">
@@ -277,7 +399,7 @@ export default function Dashboard() {
         </Select>
       </div>
 
-      {/* Stats */}
+      {/* Stats Cards (Original 4 Cards) */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Total orders"
@@ -305,12 +427,142 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Pending Activity */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {/*  Deliveries Today */}
+      {/* Activity Grid (4 panels) */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {/* Overdue Orders Panel */}
+        <Card
+          className={
+            overdueOrders.length > 0
+              ? "border-destructive/40 bg-destructive/[0.02]"
+              : ""
+          }
+        >
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-semibold">
+                Overdue Orders
+              </CardTitle>
+              {overdueOrders.length > 0 && (
+                <Badge variant="destructive" className="text-xs px-2 py-0.5">
+                  {overdueOrders.length}
+                </Badge>
+              )}
+            </div>
+            {overdueOrders.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-foreground h-7 px-2"
+                onClick={() =>
+                  navigate("/orders", {
+                    state: { quickFilter: "overdue", statusFilter: "active" },
+                  })
+                }
+              >
+                View all
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-3">
+                {overdueOrders.map((item) => (
+                  <div
+                    key={item.order_id}
+                    className="flex items-start justify-between p-2.5 rounded-lg cursor-pointer hover:bg-muted/80 border border-border/50 hover:border-border transition"
+                    onClick={() => navigate(`/orders/${item.order_id}`)}
+                  >
+                    <div className="space-y-1 min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-semibold text-sm">
+                          {item.invoice_number
+                            ? `#${item.invoice_number}`
+                            : item.order_code}
+                        </p>
+                        <Badge
+                          variant="destructive"
+                          className="text-[10px] px-1.5 py-0 h-4"
+                        >
+                          {item.days_overdue}d late
+                        </Badge>
+                      </div>
+
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {item.item_name}
+                      </p>
+
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="truncate">{item.customer_name}</span>
+                        {item.delivery_date && (
+                          <>
+                            <span>•</span>
+                            <span className="text-destructive font-medium whitespace-nowrap">
+                              Due{" "}
+                              {new Date(
+                                item.delivery_date
+                              ).toLocaleDateString("en-IN", {
+                                day: "numeric",
+                                month: "short",
+                              })}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right space-y-1 shrink-0">
+                      <Badge variant="outline" className="text-xs">
+                        {item.stage}
+                      </Badge>
+
+                      {item.vendor_name && (
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[100px]">
+                          {item.vendor_name}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {overdueOrders.length === 0 && (
+                  <EmptyState
+                    compact
+                    title="No overdue orders"
+                    description="All orders are on schedule. Great job!"
+                  />
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        {/* Deliveries Today Panel */}
         <Card>
-          <CardHeader>
-            <CardTitle>Deliveries Today</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-semibold">
+                Deliveries Today
+              </CardTitle>
+              {deliveriesToday.length > 0 && (
+                <Badge variant="outline" className="text-xs px-2 py-0.5">
+                  {deliveriesToday.length}
+                </Badge>
+              )}
+            </div>
+            {deliveriesToday.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-foreground h-7 px-2"
+                onClick={() =>
+                  navigate("/orders", {
+                    state: { dateFilter: "today", statusFilter: "active" },
+                  })
+                }
+              >
+                View all
+              </Button>
+            )}
           </CardHeader>
 
           <CardContent>
@@ -319,30 +571,32 @@ export default function Dashboard() {
                 {deliveriesToday.map((item) => (
                   <div
                     key={`${item.order_id}-${item.item_name}`}
-                    className="flex items-start justify-between p-2 rounded-lg cursor-pointer hover:bg-muted transition"
+                    className="flex items-start justify-between p-2.5 rounded-lg cursor-pointer hover:bg-muted/80 border border-border/50 hover:border-border transition"
                     onClick={() => navigate(`/orders/${item.order_id}`)}
                   >
-                    <div className="space-y-0.5">
-                      <p className="font-medium text-sm">
-                        {item.invoice_number}
+                    <div className="space-y-1 min-w-0 pr-2">
+                      <p className="font-semibold text-sm">
+                        {item.invoice_number
+                          ? `#${item.invoice_number}`
+                          : "Order"}
                       </p>
 
-                      <p className="text-sm">
+                      <p className="text-sm font-medium text-foreground truncate">
                         {item.item_name}
                       </p>
 
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground truncate">
                         {item.customer_name}
                       </p>
                     </div>
 
-                    <div className="text-right space-y-1">
+                    <div className="text-right space-y-1 shrink-0">
                       <Badge variant="outline" className="text-xs">
                         {item.stage}
                       </Badge>
 
                       {item.vendor_name && (
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[100px]">
                           {item.vendor_name}
                         </p>
                       )}
@@ -354,7 +608,7 @@ export default function Dashboard() {
                   <EmptyState
                     compact
                     title="No deliveries today"
-                    description="You're all clear for the day."
+                    description="You're all clear for today."
                   />
                 )}
               </div>
@@ -362,36 +616,126 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Pending invoices */}
+        {/* Pending Orders Panel */}
         <Card>
-          <CardHeader>
-            <CardTitle>Pending Invoices</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-semibold">
+                Pending Orders
+              </CardTitle>
+              {pendingOrders.length > 0 && (
+                <Badge variant="outline" className="text-xs px-2 py-0.5">
+                  {stats.pendingOrders || pendingOrders.length}
+                </Badge>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-foreground h-7 px-2"
+              onClick={() =>
+                navigate("/orders", { state: { statusFilter: "active" } })
+              }
+            >
+              View all
+            </Button>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-4">
+              <div className="space-y-3">
+                {pendingOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex items-center justify-between p-2.5 rounded-lg cursor-pointer hover:bg-muted/80 border border-border/50 hover:border-border transition"
+                    onClick={() => navigate(`/orders/${order.id}`)}
+                  >
+                    <div className="min-w-0 pr-2 space-y-0.5">
+                      <p className="font-semibold text-sm">
+                        {order.invoices?.invoice_number
+                          ? `#${order.invoices.invoice_number}`
+                          : order.order_code}
+                      </p>
+                      <p className="text-xs text-foreground truncate">
+                        {order.metadata?.item_name || order.order_code}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {order.customers?.name}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {getStatusBadge(order.order_status)}
+                    </div>
+                  </div>
+                ))}
+                {pendingOrders.length === 0 && (
+                  <EmptyState
+                    compact
+                    title="No pending orders"
+                    description="Nothing in the queue right now."
+                  />
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        {/* Pending Invoices Panel */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-semibold">
+                Pending Invoices
+              </CardTitle>
+              {pendingInvoices.length > 0 && (
+                <Badge variant="outline" className="text-xs px-2 py-0.5">
+                  {pendingInvoices.length}
+                </Badge>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-foreground h-7 px-2"
+              onClick={() => navigate("/invoices")}
+            >
+              View all
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-3">
                 {pendingInvoices.map((invoice) => (
                   <div
                     key={invoice.id}
-                    className="flex items-center justify-between p-2 rounded-lg cursor-pointer hover:bg-muted transition"
+                    className="flex items-center justify-between p-2.5 rounded-lg cursor-pointer hover:bg-muted/80 border border-border/50 hover:border-border transition"
                     onClick={() => {
                       setSelectedInvoice(invoice);
                       setInvoiceModalOpen(true);
                     }}
                   >
-                    <div>
-                      <p className="font-medium">{invoice.invoice_number}</p>
-                      <p className="text-sm text-muted-foreground">
+                    <div className="min-w-0 pr-2 space-y-0.5">
+                      <p className="font-semibold text-sm">
+                        #{invoice.invoice_number}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
                         {invoice.customers?.name}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium">₹{invoice.total.toLocaleString()}</p>
+                    <div className="text-right shrink-0 space-y-1">
+                      <p className="font-semibold text-sm">
+                        ₹{Number(invoice.total || 0).toLocaleString()}
+                      </p>
                       <Badge
-                        variant={invoice.payment_status === "partial" ? "info" : "warning"}
-                        className="text-xs"
+                        variant={
+                          invoice.payment_status === "partial"
+                            ? "info"
+                            : "warning"
+                        }
+                        className="text-[10px] px-1.5 py-0"
                       >
-                        {invoice.payment_status === "partial" ? "Partial" : "Unpaid"}
+                        {invoice.payment_status === "partial"
+                          ? "Partial"
+                          : "Unpaid"}
                       </Badge>
                     </div>
                   </div>
@@ -401,39 +745,6 @@ export default function Dashboard() {
                     compact
                     title="No pending invoices"
                     description="Everything is paid up."
-                  />
-                )}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        {/* Pending Orders */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Pending Orders</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-4">
-                {pendingOrders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="flex items-center justify-between p-2 rounded-lg cursor-pointer hover:bg-muted transition"
-                    onClick={() => navigate(`/orders/${order.id}`)}
-                  >
-                    <div>
-                      <p className="font-medium">{order.order_code}</p>
-                      <p className="text-sm text-muted-foreground">{order.customers?.name}</p>
-                    </div>
-                    <div className="text-right">{getStatusBadge(order.order_status)}</div>
-                  </div>
-                ))}
-                {pendingOrders.length === 0 && (
-                  <EmptyState
-                    compact
-                    title="No pending orders"
-                    description="Nothing in the queue right now."
                   />
                 )}
               </div>

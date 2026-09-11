@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
+import { derivePaymentStatus, derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 import { TableCell, TableRow } from "./ui/table";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
@@ -20,22 +20,28 @@ export function InvoiceRow({
     const isDraft = invoice.status === "draft";
     const isSettled = invoice.settled === true;
 
-    // ✅ use the unified resolver
+    // ✅ use the unified resolver pre-seeded from invoice_payments if available
     const { data: paymentInfo } = useQuery({
         queryKey: ["invoice-payment-status", invoice.id],
         queryFn: () => derivePaymentStatus(invoice),
+        initialData: invoice.invoice_payments
+            ? derivePaymentStatusFromData(invoice, invoice.invoice_payments)
+            : undefined,
     });
 
-    // Fallback to legacy if resolver not ready yet
-    const status =
+    // Reconcile status respecting explicit paid fields, orders, or reconciled payments
+    const rawStatus =
+        (invoice.payment_status === "paid" ? "paid" : null) ??
+        (invoice.raw_payload?.payment_status === "paid" ? "paid" : null) ??
+        (invoice.orders && invoice.orders.length > 0 && invoice.orders.every((o: any) => o.payment_status === "paid") ? "paid" : null) ??
         paymentInfo?.status ??
-        invoice.payment_status ??
-        invoice.raw_payload?.payment_status ??
-        "unpaid";
+        (invoice.invoice_payments
+            ? derivePaymentStatusFromData(invoice, invoice.invoice_payments).status
+            : (invoice.payment_status ?? invoice.raw_payload?.payment_status ?? "unpaid"));
 
-    const isPaid = status === "paid";
-    const isPartial = status === "partial";
-    const isUnpaid = status === "unpaid";
+    const isPaid = rawStatus === "paid";
+    const isPartial = rawStatus === "partial";
+    const isUnpaid = rawStatus === "unpaid";
 
     const total = Number(invoice.total || 0);
     const paidAmount = Number(
@@ -43,9 +49,9 @@ export function InvoiceRow({
         invoice.paid_amount ??
         0
     );
-    const remaining =
-        paymentInfo?.remaining ??
-        Math.max(0, invoice.total - paidAmount);
+    const remaining = isSettled || isPaid
+        ? 0
+        : (paymentInfo?.remaining ?? Math.max(0, invoice.total - paidAmount));
 
     return (
         <TableRow

@@ -91,7 +91,7 @@ export default function OrdersNew() {
     });
   };
 
-  // restore view mode and anchor date from navigation state
+  // restore view mode, anchor date, filters from navigation state
   useEffect(() => {
     const state = location.state as any;
     if (!state) return;
@@ -101,6 +101,12 @@ export default function OrdersNew() {
       const d = new Date(state.anchorDate);
       d.setHours(0, 0, 0, 0);
       setAnchorDate(d);
+    }
+    if (state.quickFilter !== undefined) {
+      setQuickFilter(state.quickFilter);
+    }
+    if (state.statusFilter !== undefined) {
+      setStatusFilter(state.statusFilter);
     }
   }, [location.state]);
 
