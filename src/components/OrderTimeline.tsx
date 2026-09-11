@@ -29,12 +29,17 @@ import {
     ChevronDown,
     ChevronUp,
     ClipboardList,
-    History
+    History,
+    MessageSquare,
+    Send,
+    Copy,
 } from "lucide-react";
 import { ActivityLog } from "./ActivityLog";
+import { buildStageNotificationMessage, openWhatsApp, ensureInvoiceTrackingToken } from "@/lib/whatsapp";
 
 export function OrderTimeline({
     order,
+    invoice,
     stages,
     stagesList = [],
     productNumber,
@@ -47,6 +52,10 @@ export function OrderTimeline({
     const [isExpanded, setIsExpanded] = useState(false);
     const [selectedStage, setSelectedStage] = useState("");
     const [selectedVendor, setSelectedVendor] = useState("");
+
+    const [waModalOpen, setWaModalOpen] = useState(false);
+    const [waMessage, setWaMessage] = useState("");
+    const [waStageName, setWaStageName] = useState("");
 
     const [editingNotes, setEditingNotes] = useState(false);
     const [productNotes, setProductNotes] = useState(order.metadata?.product_notes?.[productNumber] || "");
@@ -123,6 +132,42 @@ export function OrderTimeline({
         enabled: !!selectedStageId,
     });
 
+    const prepareWhatsAppMessage = async (targetStage: string) => {
+        try {
+            let token = invoice?.tracking_token;
+            if (!token && invoice?.id) {
+                try {
+                    token = await ensureInvoiceTrackingToken(invoice.id);
+                } catch (e) {
+                    console.warn("Could not ensure tracking token:", e);
+                }
+            }
+            const trackingUrl = token ? `${window.location.origin}/track/${token}` : undefined;
+
+            const customerName = invoice?.customers?.name || order.metadata?.customer_name || "Customer";
+            const invoiceNumber = invoice?.invoice_number;
+            const itemName = localProductName || order.metadata?.item_name || "Custom Garment";
+            const isSettled = invoice?.settled === true;
+            const balanceDue = isSettled ? 0 : (parseFloat(String(invoice?.total ?? 0)) || 0);
+
+            const msg = buildStageNotificationMessage({
+                stage: targetStage,
+                customerName,
+                invoiceNumber,
+                itemName,
+                balanceDue,
+                isSettled,
+                trackingUrl,
+            });
+
+            setWaStageName(targetStage);
+            setWaMessage(msg);
+            setWaModalOpen(true);
+        } catch (err) {
+            console.error("Failed to prepare WhatsApp message", err);
+        }
+    };
+
     /* ---------------- Mutations ---------------- */
     const moveToStageMutation = useMutation({
         mutationFn: async () => {
@@ -163,12 +208,19 @@ export function OrderTimeline({
             }
         },
         onSuccess: () => {
-            toast.success(`Moved to ${selectedStage}`);
+            const movedStage = selectedStage;
+            toast.success(`Moved to ${movedStage}`);
             queryClient.invalidateQueries({ queryKey: ["orders"] });
             queryClient.invalidateQueries({ queryKey: ["order-stages", order.id] });
             queryClient.invalidateQueries({ queryKey: ["order-stages-log", order.id, productNumber] });
             onStageUpdate?.();
             setOpen(false);
+
+            // If milestone stage (Packed, Dispatched, Delivered), open WhatsApp prompt
+            const isMilestone = /(pack|ready|dispatch|deliver)/i.test(movedStage);
+            if (isMilestone) {
+                prepareWhatsAppMessage(movedStage);
+            }
         },
     });
 
@@ -244,7 +296,20 @@ export function OrderTimeline({
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2">
+                        {currentStageName && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                                title="Send WhatsApp notification for current stage"
+                                onClick={() => prepareWhatsAppMessage(currentStageName)}
+                            >
+                                <MessageSquare className="h-3.5 w-3.5 sm:mr-1 text-emerald-600" />
+                                <span className="hidden sm:inline">WhatsApp</span>
+                            </Button>
+                        )}
+
                         <Dialog open={open} onOpenChange={setOpen}>
                             <DialogTrigger asChild>
                                 <Button size="sm" variant="outline" className="h-8 text-xs">
@@ -364,6 +429,94 @@ export function OrderTimeline({
                     </div>
                 </CollapsibleContent>
             </Collapsible>
+
+            {/* WhatsApp Stage Notification Modal */}
+            <Dialog open={waModalOpen} onOpenChange={setWaModalOpen}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <MessageSquare className="h-5 w-5 text-emerald-600" />
+                            Notify Customer: {waStageName}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-2">
+                        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg text-sm">
+                            <div>
+                                <p className="text-muted-foreground text-xs">Customer</p>
+                                <p className="font-semibold text-sm">{invoice?.customers?.name || order.metadata?.customer_name || "Customer"}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-muted-foreground text-xs">Phone</p>
+                                <p className="font-medium text-xs">
+                                    {invoice?.customers?.phone ? (
+                                        <span className="text-foreground">{invoice.customers.phone}</span>
+                                    ) : (
+                                        <span className="text-destructive font-semibold">No phone number</span>
+                                    )}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <Label>WhatsApp Message Preview</Label>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(waMessage);
+                                        toast.success("Message copied to clipboard");
+                                    }}
+                                >
+                                    <Copy className="h-3.5 w-3.5 mr-1" /> Copy Text
+                                </Button>
+                            </div>
+                            <Textarea
+                                value={waMessage}
+                                onChange={(e) => setWaMessage(e.target.value)}
+                                rows={8}
+                                className="text-xs font-mono bg-muted/20"
+                            />
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                                You can customize this message before sending.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2">
+                            <Button
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => setWaModalOpen(false)}
+                            >
+                                Skip / Close
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    const phone = invoice?.customers?.phone;
+                                    if (!phone) {
+                                        toast.error("Customer phone number is missing.");
+                                        return;
+                                    }
+                                    try {
+                                        openWhatsApp(phone, waMessage);
+                                        toast.success("Opened in WhatsApp!");
+                                        setWaModalOpen(false);
+                                    } catch (err: any) {
+                                        toast.error(err.message || "Failed to open WhatsApp");
+                                    }
+                                }}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                disabled={!invoice?.customers?.phone}
+                            >
+                                <Send className="mr-2 h-4 w-4" />
+                                Send via WhatsApp
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </Card>
     );
 }

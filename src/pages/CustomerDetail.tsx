@@ -14,12 +14,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Mail, Phone, MapPin, FileText, ShoppingBag, DollarSign, AlertCircle } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, FileText, ShoppingBag, DollarSign, AlertCircle, Send, Copy, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { InvoiceView } from "@/components/InvoiceView";
 
 import { allocateCustomerPayment } from "@/lib/allocateCustomerPayment";
 import { ReceiptView } from "@/components/ReceiptView";
+import { buildCustomerPaymentReminder, openWhatsApp } from "@/lib/whatsapp";
 
 function safeParsePayload(raw: any) {
     if (!raw) return {};
@@ -249,13 +250,58 @@ export default function CustomerDetail() {
         return <Badge variant={variants[status] || "default"}>{(status || "").toUpperCase()}</Badge>;
     };
 
+    const unpaidInvoicesList = invoicesWithStatus
+        .filter(inv => (inv.__state?.collectibleDue ?? 0) > 0)
+        .map(inv => ({
+            invoice_number: inv.invoice_number,
+            date: inv.date,
+            collectibleDue: inv.__state?.collectibleDue ?? 0,
+        }));
+
+    const handleOpenReminderDialog = (open: boolean) => {
+        if (open) {
+            const msg = buildCustomerPaymentReminder({
+                customerName: customer?.name || "Customer",
+                totalOutstanding: outstandingBalance,
+                unpaidInvoices: unpaidInvoicesList,
+            });
+            setReminderMessage(msg);
+        }
+        setReminderDialogOpen(open);
+    };
+
     const handleSendReminder = () => {
+        if (!customer?.phone) {
+            toast({
+                title: "Phone Number Missing",
+                description: "Customer does not have a phone number saved.",
+                variant: "destructive",
+            });
+            return;
+        }
+        try {
+            openWhatsApp(customer.phone, reminderMessage);
+            toast({
+                title: "WhatsApp Opened",
+                description: `Payment reminder ready to send to ${customer.name || "customer"}`,
+            });
+            setReminderDialogOpen(false);
+        } catch (err: any) {
+            toast({
+                title: "Failed to Open WhatsApp",
+                description: err.message || "Invalid phone number format",
+                variant: "destructive",
+            });
+        }
+    };
+
+    const handleCopyReminder = () => {
+        if (!reminderMessage) return;
+        navigator.clipboard.writeText(reminderMessage);
         toast({
-            title: "Reminder Sent",
-            description: `Payment reminder sent to ${customer?.name || "customer"}`,
+            title: "Copied",
+            description: "Reminder message copied to clipboard",
         });
-        setReminderMessage("");
-        setReminderDialogOpen(false);
     };
 
     // --- Save Payment Mutation ---
@@ -433,29 +479,81 @@ export default function CustomerDetail() {
                     </Button>
                 )}
                 {hasUnpaidInvoices && (
-                    <Dialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>
+                    <Dialog open={reminderDialogOpen} onOpenChange={handleOpenReminderDialog}>
                         <DialogTrigger asChild>
                             <Button variant="outline" className="w-full sm:w-auto">
-                                <AlertCircle className="mr-2 h-4 w-4" />
+                                <AlertCircle className="mr-2 h-4 w-4 text-amber-500" />
                                 <span className="hidden sm:inline">Send Payment Reminder</span>
                                 <span className="sm:hidden">Reminder</span>
                             </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="max-w-lg">
                             <DialogHeader>
-                                <DialogTitle>Send Payment Reminder</DialogTitle>
+                                <DialogTitle className="flex items-center gap-2">
+                                    <MessageSquare className="h-5 w-5 text-emerald-600" />
+                                    Send Payment Reminder
+                                </DialogTitle>
                             </DialogHeader>
-                            <div className="space-y-4">
+                            <div className="space-y-4 pt-2">
+                                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg text-sm">
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Total Outstanding</p>
+                                        <p className="font-bold text-base text-destructive">₹{outstandingBalance.toLocaleString("en-IN")}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-muted-foreground text-xs">Recipient Phone</p>
+                                        <p className="font-medium text-xs">
+                                            {customer?.phone ? (
+                                                <span className="text-foreground">{customer.phone}</span>
+                                            ) : (
+                                                <span className="text-destructive font-semibold">No phone number</span>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <div>
-                                    <Label>Message</Label>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <Label>WhatsApp Message Preview</Label>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                            onClick={handleCopyReminder}
+                                        >
+                                            <Copy className="h-3.5 w-3.5 mr-1" /> Copy Text
+                                        </Button>
+                                    </div>
                                     <Textarea
                                         placeholder="Enter reminder message..."
                                         value={reminderMessage}
                                         onChange={(e) => setReminderMessage(e.target.value)}
-                                        rows={4}
+                                        rows={8}
+                                        className="text-xs font-mono bg-muted/20"
                                     />
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                        You can edit this message before launching WhatsApp.
+                                    </p>
                                 </div>
-                                <Button onClick={handleSendReminder} className="w-full">Send Reminder</Button>
+
+                                <div className="flex items-center gap-2 pt-2">
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => setReminderDialogOpen(false)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleSendReminder}
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        disabled={!customer?.phone}
+                                    >
+                                        <Send className="mr-2 h-4 w-4" />
+                                        Send via WhatsApp
+                                    </Button>
+                                </div>
                             </div>
                         </DialogContent>
                     </Dialog>

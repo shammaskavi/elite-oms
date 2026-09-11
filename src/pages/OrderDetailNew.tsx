@@ -23,8 +23,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronDown, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Trash2, MessageSquare, Send, Copy, Calendar } from "lucide-react";
 import { OrderTimeline } from "@/components/OrderTimeline";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { buildStageNotificationMessage, openWhatsApp, ensureInvoiceTrackingToken } from "@/lib/whatsapp";
 
 export default function OrderDetailNew() {
     const { id } = useParams();
@@ -43,6 +52,9 @@ export default function OrderDetailNew() {
     const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: "delivered" | "cancelled" | "delete" }>({ open: false, action: "delivered" });
     const [rescheduleOpen, setRescheduleOpen] = useState(false);
     const [newDeliveryDate, setNewDeliveryDate] = useState("");
+    const [headerWaOpen, setHeaderWaOpen] = useState(false);
+    const [headerWaStage, setHeaderWaStage] = useState("Packed");
+    const [headerWaMessage, setHeaderWaMessage] = useState("");
     const queryClient = useQueryClient();
 
     // --- get current order by id ---
@@ -69,7 +81,7 @@ export default function OrderDetailNew() {
 
             const { data, error } = await (supabase as any)
                 .from("invoices")
-                .select("*, customers(name)")
+                .select("*, customers(id, name, phone, address)")
                 .eq("id", currentOrder.invoice_id)
                 .single();
 
@@ -78,6 +90,42 @@ export default function OrderDetailNew() {
         },
         enabled: !!currentOrder?.invoice_id,
     });
+
+    const openHeaderWhatsApp = async (stageTarget: string) => {
+        try {
+            let token = invoice?.tracking_token;
+            if (!token && invoice?.id) {
+                try {
+                    token = await ensureInvoiceTrackingToken(invoice.id);
+                } catch (e) {
+                    console.warn("Could not ensure tracking token:", e);
+                }
+            }
+            const trackingUrl = token ? `${window.location.origin}/track/${token}` : undefined;
+
+            const customerName = invoice?.customers?.name || currentOrder?.metadata?.customer_name || "Customer";
+            const invoiceNumber = invoice?.invoice_number;
+            const itemName = currentOrder?.metadata?.item_name || "Custom Garment";
+            const isSettled = invoice?.settled === true;
+            const balanceDue = isSettled ? 0 : (parseFloat(String(invoice?.total ?? 0)) || 0);
+
+            const msg = buildStageNotificationMessage({
+                stage: stageTarget,
+                customerName,
+                invoiceNumber,
+                itemName,
+                balanceDue,
+                isSettled,
+                trackingUrl,
+            });
+
+            setHeaderWaStage(stageTarget);
+            setHeaderWaMessage(msg);
+            setHeaderWaOpen(true);
+        } catch (err) {
+            console.error("Failed to prepare WhatsApp message", err);
+        }
+    };
     // --- invoice (by order id) --- old 
     // const { data: invoice } = useQuery({
     //     queryKey: ["invoice-by-order", id],
@@ -268,6 +316,10 @@ export default function OrderDetailNew() {
             queryClient.invalidateQueries({ queryKey: ["orders"] });
             toast.success(`All orders marked as ${status === "delivered" ? "delivered" : "cancelled"}!`);
             setConfirmDialog({ open: false, action: "delivered" });
+
+            if (status === "delivered") {
+                openHeaderWhatsApp("Delivered");
+            }
         },
         onError: () => {
             toast.error("Failed to update order status");
@@ -365,15 +417,42 @@ export default function OrderDetailNew() {
                     ← Back
                 </Button>
 
-                <Button
-                    variant="outline"
-                    onClick={() => {
-                        setNewDeliveryDate(currentOrder?.metadata?.delivery_date || "");
-                        setRescheduleOpen(true);
-                    }}
-                >
-                    Change delivery date
-                </Button>
+                <div className="flex items-center gap-2">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                            >
+                                <MessageSquare className="mr-2 h-4 w-4 text-emerald-600" />
+                                Notify Customer
+                                <ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-60" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openHeaderWhatsApp("Packed")}>
+                                🛍️ Packed & Ready for Pickup
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openHeaderWhatsApp("Dispatched")}>
+                                🚚 Dispatched for Delivery
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openHeaderWhatsApp("Delivered")}>
+                                🎉 Delivered Successfully
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            setNewDeliveryDate(currentOrder?.metadata?.delivery_date || "");
+                            setRescheduleOpen(true);
+                        }}
+                    >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        Change delivery date
+                    </Button>
+                </div>
             </div>
 
             <div>
@@ -441,6 +520,7 @@ export default function OrderDetailNew() {
                                 <OrderTimeline
                                     key={`${order.id}-${i}`}
                                     order={order}
+                                    invoice={invoice}
                                     stages={productStages}
                                     stagesList={stagesList || []}     // <-- pass DB stages here
                                     productNumber={i}
@@ -519,6 +599,94 @@ export default function OrderDetailNew() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Header WhatsApp Notification Modal */}
+            <Dialog open={headerWaOpen} onOpenChange={setHeaderWaOpen}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <MessageSquare className="h-5 w-5 text-emerald-600" />
+                            Notify Customer: {headerWaStage}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-2">
+                        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg text-sm">
+                            <div>
+                                <p className="text-muted-foreground text-xs">Customer</p>
+                                <p className="font-semibold text-sm">{invoice?.customers?.name || "Customer"}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-muted-foreground text-xs">Phone</p>
+                                <p className="font-medium text-xs">
+                                    {invoice?.customers?.phone ? (
+                                        <span className="text-foreground">{invoice.customers.phone}</span>
+                                    ) : (
+                                        <span className="text-destructive font-semibold">No phone number</span>
+                                    )}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <Label>WhatsApp Message Preview</Label>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(headerWaMessage);
+                                        toast.success("Message copied to clipboard");
+                                    }}
+                                >
+                                    <Copy className="h-3.5 w-3.5 mr-1" /> Copy Text
+                                </Button>
+                            </div>
+                            <Textarea
+                                value={headerWaMessage}
+                                onChange={(e) => setHeaderWaMessage(e.target.value)}
+                                rows={8}
+                                className="text-xs font-mono bg-muted/20"
+                            />
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                                You can customize this message before sending.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2">
+                            <Button
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() => setHeaderWaOpen(false)}
+                            >
+                                Skip / Close
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    const phone = invoice?.customers?.phone;
+                                    if (!phone) {
+                                        toast.error("Customer phone number is missing.");
+                                        return;
+                                    }
+                                    try {
+                                        openWhatsApp(phone, headerWaMessage);
+                                        toast.success("Opened in WhatsApp!");
+                                        setHeaderWaOpen(false);
+                                    } catch (err: any) {
+                                        toast.error(err.message || "Failed to open WhatsApp");
+                                    }
+                                }}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                disabled={!invoice?.customers?.phone}
+                            >
+                                <Send className="mr-2 h-4 w-4" />
+                                Send via WhatsApp
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

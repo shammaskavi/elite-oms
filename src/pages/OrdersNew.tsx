@@ -180,34 +180,27 @@ export default function OrdersNew() {
     queryKey: ["orders"],
     placeholderData: (prev) => prev,
     queryFn: async () => {
-      const pageSize = 1000;
-      let from = 0;
-      let allOrders: any[] = [];
+      const { data, error } = await (supabase as any)
+        .from("orders")
+        .select(`
+          id,
+          order_code,
+          invoice_id,
+          customer_id,
+          order_status,
+          payment_status,
+          total_amount,
+          metadata,
+          created_at,
+          customers(name),
+          invoices(invoice_number),
+          order_stages(id, stage_name, vendor_name, metadata, created_at)
+        `)
+        .order("created_at", { ascending: false })
+        .limit(1000);
 
-      while (true) {
-        const { data, error } = await (supabase as any)
-          .from("orders")
-          .select(`
-            *,
-            customers(name),
-            invoices(invoice_number),
-            order_stages(*)
-          `)
-          .order("created_at", { ascending: false })
-          .range(from, from + pageSize - 1);
-
-        if (error) throw error;
-
-        if (!data || data.length === 0) break;
-
-        allOrders = [...allOrders, ...data];
-
-        if (data.length < pageSize) break;
-
-        from += pageSize;
-      }
-
-      return allOrders;
+      if (error) throw error;
+      return data || [];
     },
   });
 
