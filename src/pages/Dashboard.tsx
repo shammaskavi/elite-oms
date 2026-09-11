@@ -356,36 +356,34 @@ export default function Dashboard() {
   }, [stats, context]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold">Dashboard</h1>
       </div>
 
       {/* Greeting Summary Card */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold mb-2">
+      <Card className="p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold mb-1 sm:mb-2 truncate">
               {activeGreeting.title} <span>{activeGreeting.icon}</span>
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs sm:text-sm text-muted-foreground">
               {/* {activeGreeting.subtitle} */}
-              Timeley delivery insights at your fingertips!
-              <br />
-              Hang tight as we prepare your personalized dashboard.
+              Timely delivery insights at your fingertips!
             </p>
           </div>
-          <div>
-            <FileText className="h-12 w-12 text-primary" />
+          <div className="shrink-0">
+            <FileText className="h-9 w-9 sm:h-12 sm:w-12 text-primary" />
           </div>
         </div>
       </Card>
 
       {/* Time Period Filter */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Time Period:</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs sm:text-sm font-medium">Time Period:</span>
         <Select value={timePeriod} onValueChange={setTimePeriod}>
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-[140px] sm:w-[150px] h-9 text-xs sm:text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -400,7 +398,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Cards (Original 4 Cards) */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Total orders"
           value={stats.totalOrders}
@@ -428,7 +426,7 @@ export default function Dashboard() {
       </div>
 
       {/* Activity Grid (4 panels) */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
         {/* Overdue Orders Panel */}
         <Card
           className={

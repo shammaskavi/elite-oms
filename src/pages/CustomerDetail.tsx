@@ -438,129 +438,136 @@ export default function CustomerDetail() {
 
             {/* Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4 w-full">
-                    <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 w-full">
+                    <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="shrink-0">
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
                     <div className="flex-1 min-w-0">
-                        <h1 className="text-2xl sm:text-3xl font-bold truncate">{customer.name}</h1>
-                        <div className="flex flex-wrap gap-2 sm:gap-4 mt-2 text-xs sm:text-sm text-muted-foreground">
+                        <h1 className="text-xl sm:text-3xl font-bold truncate">{customer.name}</h1>
+                        <div className="flex flex-wrap gap-2 sm:gap-4 mt-1.5 sm:mt-2 text-xs sm:text-sm text-muted-foreground">
                             {customer.phone && (
                                 <div className="flex items-center gap-1">
-                                    <Phone className="h-4 w-4" />
-                                    {customer.phone}
+                                    <Phone className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                                    <span className="truncate">{customer.phone}</span>
                                 </div>
                             )}
                             {customer.email && (
                                 <div className="flex items-center gap-1">
-                                    <Mail className="h-4 w-4" />
-                                    {customer.email}
+                                    <Mail className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                                    <span className="truncate">{customer.email}</span>
                                 </div>
                             )}
                             {customer.address && (
                                 <div className="flex items-center gap-1">
-                                    <MapPin className="h-4 w-4" />
-                                    {customer.address}
+                                    <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                                    <span className="truncate">{customer.address}</span>
                                 </div>
                             )}
                         </div>
                     </div>
                 </div>
-                {/* Collect Payment Button */}
+
+                {/* Header Action Buttons (grouped) */}
                 {hasUnpaidInvoices && (
-                    <Button
-                        variant="default"
-                        className="w-full sm:w-auto"
-                        onClick={() => setCollectPaymentOpen(true)}
-                    >
-                        <DollarSign className="mr-2 h-4 w-4" />
-                        <span className="hidden sm:inline">Collect Payment</span>
-                        <span className="sm:hidden">Collect</span>
-                    </Button>
-                )}
-                {hasUnpaidInvoices && (
-                    <Dialog open={reminderDialogOpen} onOpenChange={handleOpenReminderDialog}>
-                        <DialogTrigger asChild>
-                            <Button variant="outline" className="w-full sm:w-auto">
-                                <AlertCircle className="mr-2 h-4 w-4 text-amber-500" />
-                                <span className="hidden sm:inline">Send Payment Reminder</span>
-                                <span className="sm:hidden">Reminder</span>
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-lg">
-                            <DialogHeader>
-                                <DialogTitle className="flex items-center gap-2">
-                                    <MessageSquare className="h-5 w-5 text-emerald-600" />
-                                    Send Payment Reminder
-                                </DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4 pt-2">
-                                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg text-sm">
-                                    <div>
-                                        <p className="text-muted-foreground text-xs">Total Outstanding</p>
-                                        <p className="font-bold text-base text-destructive">₹{outstandingBalance.toLocaleString("en-IN")}</p>
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                        <Button
+                            variant="default"
+                            size="sm"
+                            className="flex-1 sm:flex-none h-9 text-xs sm:text-sm"
+                            onClick={() => setCollectPaymentOpen(true)}
+                        >
+                            <DollarSign className="mr-1.5 h-4 w-4" />
+                            <span className="hidden sm:inline">Collect Payment</span>
+                            <span className="sm:hidden">Collect</span>
+                        </Button>
+
+                        <Dialog open={reminderDialogOpen} onOpenChange={handleOpenReminderDialog}>
+                            <DialogTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 sm:flex-none h-9 text-xs sm:text-sm"
+                                >
+                                    <AlertCircle className="mr-1.5 h-4 w-4 text-amber-500" />
+                                    <span className="hidden sm:inline">Send Payment Reminder</span>
+                                    <span className="sm:hidden">Reminder</span>
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-[95vw] sm:max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                                <DialogHeader>
+                                    <DialogTitle className="flex items-center gap-2">
+                                        <MessageSquare className="h-5 w-5 text-emerald-600" />
+                                        Send Payment Reminder
+                                    </DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 pt-2">
+                                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg text-sm">
+                                        <div>
+                                            <p className="text-muted-foreground text-xs">Total Outstanding</p>
+                                            <p className="font-bold text-base text-destructive">₹{outstandingBalance.toLocaleString("en-IN")}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-muted-foreground text-xs">Recipient Phone</p>
+                                            <p className="font-medium text-xs">
+                                                {customer?.phone ? (
+                                                    <span className="text-foreground">{customer.phone}</span>
+                                                ) : (
+                                                    <span className="text-destructive font-semibold">No phone number</span>
+                                                )}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-muted-foreground text-xs">Recipient Phone</p>
-                                        <p className="font-medium text-xs">
-                                            {customer?.phone ? (
-                                                <span className="text-foreground">{customer.phone}</span>
-                                            ) : (
-                                                <span className="text-destructive font-semibold">No phone number</span>
-                                            )}
+
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <Label>WhatsApp Message Preview</Label>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                                onClick={handleCopyReminder}
+                                            >
+                                                <Copy className="h-3.5 w-3.5 mr-1" /> Copy Text
+                                            </Button>
+                                        </div>
+                                        <Textarea
+                                            placeholder="Enter reminder message..."
+                                            value={reminderMessage}
+                                            onChange={(e) => setReminderMessage(e.target.value)}
+                                            rows={8}
+                                            className="text-xs font-mono bg-muted/20"
+                                        />
+                                        <p className="text-[11px] text-muted-foreground mt-1">
+                                            You can edit this message before launching WhatsApp.
                                         </p>
                                     </div>
-                                </div>
 
-                                <div>
-                                    <div className="flex items-center justify-between mb-1.5">
-                                        <Label>WhatsApp Message Preview</Label>
+                                    <div className="flex items-center gap-2 pt-2">
                                         <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                                            onClick={handleCopyReminder}
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => setReminderDialogOpen(false)}
                                         >
-                                            <Copy className="h-3.5 w-3.5 mr-1" /> Copy Text
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            onClick={handleSendReminder}
+                                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                            disabled={!customer?.phone}
+                                        >
+                                            <Send className="mr-2 h-4 w-4" />
+                                            Send via WhatsApp
                                         </Button>
                                     </div>
-                                    <Textarea
-                                        placeholder="Enter reminder message..."
-                                        value={reminderMessage}
-                                        onChange={(e) => setReminderMessage(e.target.value)}
-                                        rows={8}
-                                        className="text-xs font-mono bg-muted/20"
-                                    />
-                                    <p className="text-[11px] text-muted-foreground mt-1">
-                                        You can edit this message before launching WhatsApp.
-                                    </p>
                                 </div>
-
-                                <div className="flex items-center gap-2 pt-2">
-                                    <Button
-                                        variant="outline"
-                                        className="flex-1"
-                                        onClick={() => setReminderDialogOpen(false)}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        onClick={handleSendReminder}
-                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                                        disabled={!customer?.phone}
-                                    >
-                                        <Send className="mr-2 h-4 w-4" />
-                                        Send via WhatsApp
-                                    </Button>
-                                </div>
-                            </div>
-                        </DialogContent>
-                    </Dialog>
+                            </DialogContent>
+                        </Dialog>
+                    </div>
                 )}
                 {/* Collect Payment Dialog */}
                 <Dialog open={collectPaymentOpen} onOpenChange={setCollectPaymentOpen}>
-                    <DialogContent>
+                    <DialogContent className="max-w-[95vw] sm:max-w-lg w-full max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>Collect Payment</DialogTitle>
                         </DialogHeader>

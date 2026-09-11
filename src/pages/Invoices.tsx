@@ -1601,30 +1601,30 @@ export default function Invoices() {
       </div>
 
       {/* Search & Filter */}
-      <Card className="p-6">
+      <Card className="p-4 sm:p-6">
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Search className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">Search Invoices</h2>
+            <h2 className="text-lg sm:text-xl font-semibold">Search Invoices</h2>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap md:flex-nowrap gap-3 sm:gap-4">
             <Input
               placeholder="Search by invoice number or customer..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1"
+              className="flex-1 min-w-[180px]"
             />
 
             <Input
               type="date"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full md:w-auto"
+              className="w-full sm:w-auto"
             />
 
-            <Tabs value={paymentFilter} onValueChange={setPaymentFilter} className="w-full md:w-auto">
-              <TabsList className="grid grid-cols-4 w-full md:w-auto">
+            <Tabs value={paymentFilter} onValueChange={setPaymentFilter} className="w-full sm:w-auto">
+              <TabsList className="grid grid-cols-4 w-full sm:w-auto">
                 <TabsTrigger value="all">All</TabsTrigger>
                 <TabsTrigger value="paid">Paid</TabsTrigger>
                 <TabsTrigger value="unpaid">Unpaid</TabsTrigger>
@@ -1635,14 +1635,14 @@ export default function Invoices() {
         </div>
       </Card>
 
-      <Card>
-        <Table>
+      <Card className="overflow-x-auto">
+        <Table className="min-w-[650px]">
           <TableHeader>
             <TableRow>
               <TableHead>Invoice #</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead >Total</TableHead>
+              <TableHead>Total</TableHead>
               <TableHead>Due</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Actions</TableHead>
@@ -1651,11 +1651,11 @@ export default function Invoices() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
               </TableRow>
             ) : filteredInvoices?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center">No invoices found</TableCell>
+                <TableCell colSpan={7} className="text-center py-8">No invoices found</TableCell>
               </TableRow>
             ) : (
               filteredInvoices?.map((invoice: any) => (

@@ -693,137 +693,138 @@ export default function OrdersNew() {
         <h1 className="text-3xl font-bold">Orders</h1>
       </div>
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Total Orders</p>
-              <h3 className="text-3xl font-bold mt-2">{stats.total}</h3>
-              <p className="text-xs text-muted-foreground mt-1">All orders in system</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        <Card className="p-3.5 sm:p-5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Total Orders</p>
+              <h3 className="text-xl sm:text-3xl font-bold mt-1 sm:mt-2">{stats.total}</h3>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">All in system</p>
             </div>
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Package className="h-6 w-6 text-primary" />
+            <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Package className="h-4 w-4 sm:h-6 sm:w-6 text-primary" />
             </div>
           </div>
         </Card>
 
         <Card
-          className="p-6 cursor-pointer hover:shadow-md"
+          className="p-3.5 sm:p-5 cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => {
             setStatusFilter("completed");
             setQuickFilter(null);
           }}
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Completed</p>
-              <h3 className="text-3xl font-bold mt-2">{stats.completed}</h3>
-              <p className="text-xs text-muted-foreground mt-1">Successfully delivered</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Completed</p>
+              <h3 className="text-xl sm:text-3xl font-bold mt-1 sm:mt-2">{stats.completed}</h3>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">Delivered</p>
             </div>
-            <div className="h-12 w-12 rounded-lg bg-success/10 flex items-center justify-center">
-              <CheckCircle2 className="h-6 w-6 text-success" />
+            <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg bg-success/10 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-4 w-4 sm:h-6 sm:w-6 text-success" />
             </div>
           </div>
         </Card>
 
         <Card
-          className="p-6 cursor-pointer hover:shadow-md"
+          className="p-3.5 sm:p-5 cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => {
             setStatusFilter("active");
             setQuickFilter(null);
           }}
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Active Orders</p>
-              <h3 className="text-3xl font-bold mt-2">{stats.active}</h3>
-              <p className="text-xs text-muted-foreground mt-1">Currently in progress</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Active</p>
+              <h3 className="text-xl sm:text-3xl font-bold mt-1 sm:mt-2">{stats.active}</h3>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">In progress</p>
             </div>
-            <div className="h-12 w-12 rounded-lg bg-warning/10 flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-warning" />
+            <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
+              <TrendingUp className="h-4 w-4 sm:h-6 sm:w-6 text-warning" />
             </div>
           </div>
         </Card>
 
         <Card
-          className="p-6 border border-destructive/40 bg-destructive/5 cursor-pointer hover:shadow-md"
+          className="p-3.5 sm:p-5 border border-destructive/40 bg-destructive/5 cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => {
             setStatusFilter("active");
             setQuickFilter("overdue");
           }}
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Overdue</p>
-              <h3 className="text-3xl font-bold mt-2 text-destructive">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Overdue</p>
+              <h3 className="text-xl sm:text-3xl font-bold mt-1 sm:mt-2 text-destructive">
                 {stats.overdue}
               </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Past delivery date
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">
+                Past date
               </p>
             </div>
-            <div className="h-12 w-12 rounded-lg bg-destructive/15 flex items-center justify-center">
-              <AlertTriangle className="h-6 w-6 text-destructive" />
+            <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg bg-destructive/15 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-4 w-4 sm:h-6 sm:w-6 text-destructive" />
             </div>
           </div>
         </Card>
 
         <Card
-          className="p-6 cursor-pointer hover:shadow-md"
+          className="p-3.5 sm:p-5 cursor-pointer hover:shadow-md transition-shadow col-span-2 sm:col-span-1"
           onClick={() => {
             setStatusFilter("active");
             setQuickFilter("dueSoon");
           }}
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Due Soon</p>
-              <h3 className="text-3xl font-bold mt-2">{stats.dueSoon}</h3>
-              <p className="text-xs text-muted-foreground mt-1">Due within 3 days</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Due Soon</p>
+              <h3 className="text-xl sm:text-3xl font-bold mt-1 sm:mt-2">{stats.dueSoon}</h3>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">Within 3 days</p>
             </div>
-            <div className="h-12 w-12 rounded-lg bg-destructive/10 flex items-center justify-center">
-              <AlertCircle className="h-6 w-6 text-destructive" />
+            <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+              <AlertCircle className="h-4 w-4 sm:h-6 sm:w-6 text-destructive" />
             </div>
           </div>
         </Card>
       </div>
 
       {/* Search & Filter */}
-      <Card className="p-6">
+      <Card className="p-4 sm:p-6">
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <Search className="h-5 w-5 text-muted-foreground" />
-              <h2 className="text-xl font-semibold">Search Orders</h2>
+              <h2 className="text-lg sm:text-xl font-semibold">Search Orders</h2>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-1 sm:gap-2">
               <Button
                 variant={viewMode === "list" ? "default" : "outline"}
                 size="sm"
+                className="h-8 px-2.5"
                 onClick={() => setViewMode("list")}
               >
                 <List className="h-4 w-4" />
-                {/* List */}
               </Button>
               <Button
                 variant={viewMode === "kanban" ? "default" : "outline"}
                 size="sm"
+                className="h-8 px-2.5"
                 onClick={() => setViewMode("kanban")}
               >
                 <LayoutGrid className="h-4 w-4" />
-                {/* Kanban */}
               </Button>
               <Button
                 variant={viewMode === "calendar" ? "default" : "outline"}
                 size="sm"
+                className="h-8 px-2.5"
                 onClick={() => setViewMode("calendar")}
               >
                 <CalendarDays className="h-4 w-4" />
-                {/* Calendar */}
               </Button>
               <Button
                 variant={viewMode === "table" ? "default" : "outline"}
                 size="sm"
+                className="h-8 px-2.5"
                 onClick={() => setViewMode("table")}
               >
                 <Table2 className="h-4 w-4" />
@@ -831,28 +832,28 @@ export default function OrdersNew() {
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap gap-3 items-stretch sm:items-center">
             <Input
               placeholder="Search by order number, customer name, or item..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1"
+              className="flex-1 min-w-[180px]"
             />
 
             <Input
               type="date"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full md:w-auto"
+              className="w-full sm:w-auto"
             />
             {/* Stage Filter */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="min-w-[140px] justify-between">
+                <Button variant="outline" size="sm" className="min-w-[130px] justify-between h-9">
                   <span className="truncate">
                     {stageFilter ? `Stage: ${stageFilter}` : <div>All Stages</div>}
                   </span>
-                  <SlidersHorizontal className="h-4 w-4 ml-2 opacity-50" />
+                  <SlidersHorizontal className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
 
@@ -881,12 +882,12 @@ export default function OrdersNew() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="min-w-[160px] justify-between"
+                  className="min-w-[130px] justify-between h-9"
                 >
                   <span className="truncate">
                     {vendorFilter ? `Vendor: ${vendorFilter}` : "All Vendors"}
                   </span>
-                  <SlidersHorizontal className="h-4 w-4 ml-2 opacity-50" />
+                  <SlidersHorizontal className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
 
@@ -913,15 +914,13 @@ export default function OrdersNew() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-auto md:w-auto">
-              <TabsList className="grid grid-cols-3 w-full md:w-auto">
+            <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full sm:w-auto">
+              <TabsList className="grid grid-cols-3 w-full sm:w-auto h-9">
                 <TabsTrigger value="all">All</TabsTrigger>
                 <TabsTrigger value="active">Active</TabsTrigger>
                 <TabsTrigger value="completed">Completed</TabsTrigger>
-                {/* <TabsTrigger value="cancelled">Cancelled</TabsTrigger> */}
               </TabsList>
             </Tabs>
-
           </div>
         </div>
         {/* Active Filters */}

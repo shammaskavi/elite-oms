@@ -400,10 +400,12 @@ export default function OrderDetailNew() {
     const mainOrder = orders?.[0];
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
-            <div className="flex items-center justify-between">
+        <div className="space-y-6 p-3 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <Button
                     variant="ghost"
+                    size="sm"
+                    className="h-9"
                     onClick={() => {
                         if (!returnTo) {
                             navigate(-1);
@@ -417,19 +419,21 @@ export default function OrderDetailNew() {
                     ← Back
                 </Button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 variant="outline"
-                                className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                                size="sm"
+                                className="h-9 text-xs sm:text-sm text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
                             >
-                                <MessageSquare className="mr-2 h-4 w-4 text-emerald-600" />
-                                Notify Customer
-                                <ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-60" />
+                                <MessageSquare className="mr-1.5 h-4 w-4 text-emerald-600" />
+                                <span className="hidden sm:inline">Notify Customer</span>
+                                <span className="sm:hidden">Notify</span>
+                                <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-60" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" className="w-56">
                             <DropdownMenuItem onClick={() => openHeaderWhatsApp("Packed")}>
                                 🛍️ Packed & Ready for Pickup
                             </DropdownMenuItem>
@@ -444,50 +448,53 @@ export default function OrderDetailNew() {
 
                     <Button
                         variant="outline"
+                        size="sm"
+                        className="h-9 text-xs sm:text-sm"
                         onClick={() => {
                             setNewDeliveryDate(currentOrder?.metadata?.delivery_date || "");
                             setRescheduleOpen(true);
                         }}
                     >
-                        <Calendar className="mr-2 h-4 w-4" />
-                        Change delivery date
+                        <Calendar className="mr-1.5 h-4 w-4" />
+                        <span className="hidden sm:inline">Change delivery date</span>
+                        <span className="sm:hidden">Reschedule</span>
                     </Button>
                 </div>
             </div>
 
             <div>
-                <div className="flex items-center gap-3">
-                    <h1 className="text-3xl font-bold">Invoice: {invoice?.invoice_number}</h1>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <h1 className="text-2xl sm:text-3xl font-bold truncate">Invoice: {invoice?.invoice_number}</h1>
                     {mainOrder && (
-                        <Badge variant={getStatusVariant(mainOrder.order_status)} className="text-sm">
+                        <Badge variant={getStatusVariant(mainOrder.order_status)} className="text-xs sm:text-sm">
                             {mainOrder.order_status}
                         </Badge>
                     )}
                 </div>
-                <p className="text-muted-foreground mt-1">
+                <p className="text-muted-foreground mt-1 text-xs sm:text-sm">
                     Created on {invoice?.date ? new Date(invoice.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="p-6">
-                    <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">Customer</p>
-                        <p className="font-medium">{invoice?.customers?.name}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
+                <Card className="p-4 sm:p-6">
+                    <div className="space-y-1 sm:space-y-2">
+                        <p className="text-xs sm:text-sm text-muted-foreground">Customer</p>
+                        <p className="font-medium text-sm sm:text-base truncate">{invoice?.customers?.name || "-"}</p>
                     </div>
                 </Card>
-                <Card className="p-6">
-                    <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">Total Products</p>
-                        <p className="font-medium text-2xl">
+                <Card className="p-4 sm:p-6">
+                    <div className="space-y-1 sm:space-y-2">
+                        <p className="text-xs sm:text-sm text-muted-foreground">Total Products</p>
+                        <p className="font-medium text-xl sm:text-2xl">
                             {orders?.reduce((sum, order) => sum + parseInt(order.metadata?.num_products || 1), 0) || 0}
                         </p>
                     </div>
                 </Card>
-                <Card className="p-6">
-                    <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">Total Amount</p>
-                        <p className="font-medium text-2xl">₹{invoice?.total}</p>
+                <Card className="p-4 sm:p-6">
+                    <div className="space-y-1 sm:space-y-2">
+                        <p className="text-xs sm:text-sm text-muted-foreground">Total Amount</p>
+                        <p className="font-medium text-xl sm:text-2xl">₹{invoice?.total}</p>
                     </div>
                 </Card>
             </div>
@@ -602,7 +609,7 @@ export default function OrderDetailNew() {
 
             {/* Header WhatsApp Notification Modal */}
             <Dialog open={headerWaOpen} onOpenChange={setHeaderWaOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-w-[95vw] sm:max-w-lg w-full max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <MessageSquare className="h-5 w-5 text-emerald-600" />

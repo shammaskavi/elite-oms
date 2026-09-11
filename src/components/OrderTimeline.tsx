@@ -263,31 +263,31 @@ export function OrderTimeline({
     return (
         <Card className="overflow-hidden  shadow-sm transition-all">
             {/* 1. COMPACT HEADER */}
-            <div className="p-4 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
+            <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1 min-w-0">
                         <div className="flex items-center gap-2">
                             {editingProductName ? (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                     <input
-                                        className="border rounded px-2 py-0.5 text-sm w-40"
+                                        className="border rounded px-2 py-0.5 text-sm w-36 sm:w-40"
                                         value={localProductName}
                                         onChange={(e) => setLocalProductName(e.target.value)}
                                         autoFocus
                                     />
-                                    <Button size="sm" className="h-7 px-2" onClick={() => updateProductNameMutation.mutate(localProductName)}>Save</Button>
-                                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingProductName(false)}>Cancel</Button>
+                                    <Button size="sm" className="h-7 px-2 text-xs" onClick={() => updateProductNameMutation.mutate(localProductName)}>Save</Button>
+                                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditingProductName(false)}>Cancel</Button>
                                 </div>
                             ) : (
                                 <>
-                                    <h3 className="font-bold text-base">{localProductName || "Product"}</h3>
-                                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground" onClick={() => setEditingProductName(true)}>
+                                    <h3 className="font-bold text-sm sm:text-base truncate">{localProductName || "Product"}</h3>
+                                    <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground shrink-0" onClick={() => setEditingProductName(true)}>
                                         <Edit2 className="h-3 w-3" />
                                     </Button>
                                 </>
                             )}
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                             <Badge variant={currentStageName ? "default" : "secondary"} className="h-5 text-[10px] px-1.5">
                                 {currentStageName || "Not Started"}
                             </Badge>
@@ -296,7 +296,7 @@ export function OrderTimeline({
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-1 sm:gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 self-start sm:self-auto flex-wrap">
                         {currentStageName && (
                             <Button
                                 size="sm"
@@ -313,10 +313,10 @@ export function OrderTimeline({
                         <Dialog open={open} onOpenChange={setOpen}>
                             <DialogTrigger asChild>
                                 <Button size="sm" variant="outline" className="h-8 text-xs">
-                                    <MoveRight className="h-3.5 w-3.5 mr-1.5" /> Move Stage
+                                    <MoveRight className="h-3.5 w-3.5 mr-1" /> Move Stage
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className="max-w-[95vw] sm:max-w-md w-full max-h-[90vh] overflow-y-auto">
                                 <DialogHeader><DialogTitle>Move Product to Another Stage</DialogTitle></DialogHeader>
                                 <div className="space-y-4 pt-4">
                                     <div className="space-y-2">
@@ -432,7 +432,7 @@ export function OrderTimeline({
 
             {/* WhatsApp Stage Notification Modal */}
             <Dialog open={waModalOpen} onOpenChange={setWaModalOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-w-[95vw] sm:max-w-lg w-full max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <MessageSquare className="h-5 w-5 text-emerald-600" />
