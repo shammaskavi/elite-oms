@@ -223,7 +223,7 @@ export default function OrderDetailNew() {
         const orderIds = orders.map(o => o.id);
 
         const ordersChannel = supabase
-            .channel('orders-detail-changes')
+            .channel(`orders-detail-${invoice.id}`)
             .on(
                 'postgres_changes',
                 {
@@ -239,7 +239,7 @@ export default function OrderDetailNew() {
             .subscribe();
 
         const stagesChannel = supabase
-            .channel('stages-detail-changes')
+            .channel(`stages-detail-${invoice.id}`)
             .on(
                 'postgres_changes',
                 {

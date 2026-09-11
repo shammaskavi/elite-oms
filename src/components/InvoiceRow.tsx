@@ -20,14 +20,20 @@ export function InvoiceRow({
     const isDraft = invoice.status === "draft";
     const isSettled = invoice.settled === true;
 
-    // ✅ use the unified resolver pre-seeded from invoice_payments if available
-    const { data: paymentInfo } = useQuery({
+    // Use synchronous in-memory calculation if invoice_payments is already joined (0 network calls)
+    const synchronousStatus = invoice.invoice_payments
+        ? derivePaymentStatusFromData(invoice, invoice.invoice_payments)
+        : null;
+
+    // Only fire network query as fallback if invoice_payments was NOT joined by parent
+    const { data: fallbackPaymentInfo } = useQuery({
         queryKey: ["invoice-payment-status", invoice.id],
         queryFn: () => derivePaymentStatus(invoice),
-        initialData: invoice.invoice_payments
-            ? derivePaymentStatusFromData(invoice, invoice.invoice_payments)
-            : undefined,
+        enabled: !invoice.invoice_payments,
+        staleTime: 5 * 60 * 1000,
     });
+
+    const paymentInfo = synchronousStatus || fallbackPaymentInfo;
 
     // Reconcile status respecting explicit paid fields, orders, or reconciled payments
     const rawStatus =
