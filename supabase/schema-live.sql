@@ -684,39 +684,52 @@ ALTER FUNCTION "public"."get_vendor_load"() OWNER TO "postgres";
 CREATE OR REPLACE FUNCTION "public"."get_vendor_work"("p_token" "text") RETURNS TABLE("vendor_name" "text", "order_id" "uuid", "invoice_number" "text", "customer_name" "text", "item_name" "text", "delivery_date" "date", "stage_name" "text")
     LANGUAGE "sql" SECURITY DEFINER
     AS $$
-  select
-    v.name as vendor_name,
-
-    o.id,
+  WITH latest_product_stages AS (
+    SELECT DISTINCT ON (
+      os.order_id, 
+      COALESCE((os.metadata->>'product_number')::text, '1')
+    )
+      os.id,
+      os.order_id,
+      os.stage_name,
+      os.vendor_id,
+      os.status,
+      os.metadata,
+      os.created_at
+    FROM order_stages os
+    ORDER BY 
+      os.order_id, 
+      COALESCE((os.metadata->>'product_number')::text, '1'), 
+      os.created_at DESC
+  )
+  SELECT
+    v.name AS vendor_name,
+    o.id AS order_id,
     i.invoice_number,
-    c.name as customer_name,
-
-    coalesce(
+    c.name AS customer_name,
+    COALESCE(
       s.metadata->>'product_name',
-      o.metadata->>'item_name'
-    ) as item_name,
-
-    (o.metadata->>'delivery_date')::date as delivery_date,
+      o.metadata->>'item_name',
+      'Custom Garment'
+    ) AS item_name,
+    COALESCE(
+      NULLIF(o.metadata->>'delivery_date', '')::date,
+      NULLIF(i.raw_payload->>'delivery_date', '')::date
+    ) AS delivery_date,
     s.stage_name
-
-  from vendors v
-
-  join order_stages s
-    on s.vendor_id = v.id
-
-  join orders o
-    on o.id = s.order_id
-
-  join invoices i
-    on i.id = o.invoice_id
-
-  join customers c
-    on c.id = o.customer_id
-
-  where v.access_token = p_token
-    and o.order_status <> 'delivered'
-
-  order by delivery_date asc;
+  FROM vendors v
+  JOIN latest_product_stages s
+    ON s.vendor_id = v.id
+  JOIN orders o
+    ON o.id = s.order_id
+  JOIN invoices i
+    ON i.id = o.invoice_id
+  JOIN customers c
+    ON c.id = o.customer_id
+  WHERE v.access_token = p_token
+    AND o.order_status NOT IN ('delivered', 'cancelled')
+    AND LOWER(s.stage_name) NOT IN ('delivered', 'cancelled')
+  ORDER BY delivery_date ASC NULLS LAST;
 $$;
 
 

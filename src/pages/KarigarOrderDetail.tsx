@@ -63,11 +63,38 @@ export default function KarigarOrderDetail() {
     });
 
     // 🔐 Security & Loading
-    if (!currentOrder) return <div className="p-10 text-center text-slate-400 animate-pulse">Loading job details...</div>;
+    if (!currentOrder) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen text-slate-400 text-sm gap-2">
+                <div className="h-6 w-6 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                <span>Loading order details...</span>
+            </div>
+        );
+    }
 
-    const latestStage = allStages?.[allStages.length - 1];
-    if (vendor && latestStage && latestStage.vendor_id !== vendor.id) {
-        return <div className="p-10 text-center text-red-500 font-bold">Unauthorized Access</div>;
+    // Check if this vendor is assigned to any stage for this order
+    const isVendorAssigned = !vendor || !allStages || allStages.length === 0 || allStages.some((s: any) => s.vendor_id === vendor.id);
+
+    if (token && vendor && allStages && allStages.length > 0 && !isVendorAssigned) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 max-w-sm w-full space-y-3">
+                    <div className="h-12 w-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                        ⚠️
+                    </div>
+                    <h2 className="text-base font-bold text-slate-900">Task Not Assigned</h2>
+                    <p className="text-xs text-slate-500">
+                        This order is not currently assigned to your account.
+                    </p>
+                    <button
+                        onClick={() => navigate(`/karigar/${token}`)}
+                        className="w-full mt-2 py-2 px-4 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors"
+                    >
+                        Return to Tasks
+                    </button>
+                </div>
+            </div>
+        );
     }
 
     const numProducts = parseInt(currentOrder.metadata?.num_products || "1");
