@@ -1332,6 +1332,7 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "user_id" "uuid" NOT NULL,
     "full_name" "text",
     "role" "public"."app_role" DEFAULT 'staff'::"public"."app_role" NOT NULL,
+    "is_active" boolean DEFAULT true NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 

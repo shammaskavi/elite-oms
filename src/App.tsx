@@ -36,6 +36,7 @@ const Receive = lazy(() => import("./pages/Receive"));
 const LocationsAdmin = lazy(() => import("./pages/LocationsAdmin"));
 const DeadstockReport = lazy(() => import("./pages/DeadstockReport"));
 const StockAudit = lazy(() => import("./pages/StockAudit"));
+const TeamAdmin = lazy(() => import("./pages/TeamAdmin"));
 
 /**
  * Global QueryClient with sensible defaults:
@@ -74,8 +75,8 @@ const queryClient = new QueryClient({
 
 const RouteFallback = () => <LoadingState fullScreen message="Loading…" />;
 
-const protectedPage = (Page: React.ComponentType) => (
-  <ProtectedRoute>
+const protectedPage = (Page: React.ComponentType, adminOnly?: boolean) => (
+  <ProtectedRoute adminOnly={adminOnly}>
     <Layout>
       <Page />
     </Layout>
@@ -92,32 +93,37 @@ const App = () => (
           <AuthProvider>
             <Suspense fallback={<RouteFallback />}>
               <Routes>
+                {/* Public / Token Routes */}
                 <Route path="/track/:token" element={<PublicInvoiceTracking />} />
                 <Route path="/m/:token" element={<PublicMeasurementForm />} />
                 <Route path="/karigar/:token" element={<KarigarPortal />} />
                 <Route path="/karigar/order/:id" element={<KarigarOrderDetail />} />
                 <Route path="/auth" element={<Auth />} />
 
+                {/* Core Staff & Operations Routes */}
                 <Route path="/" element={protectedPage(Dashboard)} />
-                <Route path="/products" element={protectedPage(Products)} />
-                <Route path="/customers" element={protectedPage(Customers)} />
-                <Route path="/measurements" element={protectedPage(Measurements)} />
-                <Route path="/measurements/new" element={protectedPage(CreateMeasurement)} />
-                <Route path="/customers/:id" element={protectedPage(CustomerDetail)} />
                 <Route path="/invoices" element={protectedPage(Invoices)} />
                 <Route path="/orders" element={protectedPage(OrdersNew)} />
                 <Route path="/orders/:id" element={protectedPage(OrderDetailNew)} />
-                <Route path="/payments" element={protectedPage(Payments)} />
-                <Route path="/reports-dusra" element={protectedPage(AnotherReports)} />
-                <Route path="/reports" element={protectedPage(Reports)} />
+                <Route path="/customers" element={protectedPage(Customers)} />
+                <Route path="/customers/:id" element={protectedPage(CustomerDetail)} />
+                <Route path="/measurements" element={protectedPage(Measurements)} />
+                <Route path="/measurements/new" element={protectedPage(CreateMeasurement)} />
+                <Route path="/products" element={protectedPage(Products)} />
                 <Route path="/scan" element={protectedPage(ScanLookup)} />
-                <Route path="/reshelve" element={protectedPage(Reshelve)} />
                 <Route path="/receive" element={protectedPage(Receive)} />
-                <Route path="/locations" element={protectedPage(LocationsAdmin)} />
-                <Route path="/deadstock" element={protectedPage(DeadstockReport)} />
+                <Route path="/reshelve" element={protectedPage(Reshelve)} />
                 <Route path="/stock-count" element={protectedPage(StockAudit)} />
 
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                {/* Restricted Owner/Admin Financial & Setup Routes */}
+                <Route path="/payments" element={protectedPage(Payments, true)} />
+                <Route path="/reports" element={protectedPage(Reports, true)} />
+                <Route path="/reports-dusra" element={protectedPage(AnotherReports, true)} />
+                <Route path="/deadstock" element={protectedPage(DeadstockReport, true)} />
+                <Route path="/locations" element={protectedPage(LocationsAdmin, true)} />
+                <Route path="/team" element={protectedPage(TeamAdmin, true)} />
+
+                {/* Catch-all */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

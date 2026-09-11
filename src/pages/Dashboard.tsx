@@ -9,6 +9,8 @@ import {
   DollarSign,
   HandCoins,
   TrendingDown,
+  Truck,
+  AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,6 +25,7 @@ import { InvoiceView } from "@/components/InvoiceView";
 import { derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 import { EmptyState } from "@/components/states";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useAuth } from "@/lib/auth";
 
 interface OverdueOrderItem {
   order_id: string;
@@ -47,6 +50,7 @@ const getLocalDateString = (d = new Date()) => {
 
 export default function Dashboard() {
   useDocumentTitle("Dashboard");
+  const { isAdmin } = useAuth();
 
   const [timePeriod, setTimePeriod] = useState<string>("today");
   const [stats, setStats] = useState({
@@ -109,12 +113,7 @@ export default function Dashboard() {
   };
 
   const fetchStatsForRange = async (startDate: string) => {
-    const [
-      { count: totalOrders },
-      { count: pendingOrders },
-      { data: paymentsData },
-      { data: ordersData },
-    ] = await Promise.all([
+    const queries: Promise<any>[] = [
       (supabase as any)
         .from("orders")
         .select("*", { count: "exact", head: true })
@@ -125,23 +124,31 @@ export default function Dashboard() {
         .neq("order_status", "delivered")
         .neq("order_status", "cancelled")
         .gte("created_at", startDate),
-      (supabase as any)
-        .from("invoice_payments")
-        .select("amount, date")
-        .gte("date", startDate),
-      (supabase as any)
-        .from("orders")
-        .select("total_amount")
-        .gte("created_at", startDate),
-    ]);
+    ];
+
+    if (isAdmin) {
+      queries.push(
+        (supabase as any)
+          .from("invoice_payments")
+          .select("amount, date")
+          .gte("date", startDate),
+        (supabase as any)
+          .from("orders")
+          .select("total_amount")
+          .gte("created_at", startDate)
+      );
+    }
+
+    const [totalOrdersRes, pendingOrdersRes, paymentsDataRes, ordersDataRes] =
+      await Promise.all(queries);
 
     return {
-      totalOrders: totalOrders || 0,
-      pendingOrders: pendingOrders || 0,
+      totalOrders: totalOrdersRes?.count || 0,
+      pendingOrders: pendingOrdersRes?.count || 0,
       cashInflow:
-        paymentsData?.reduce((sum, p: any) => sum + Number(p.amount), 0) || 0,
+        paymentsDataRes?.data?.reduce((sum: number, p: any) => sum + Number(p.amount), 0) || 0,
       revenue:
-        ordersData?.reduce((sum, order: any) => sum + Number(order.total_amount), 0) || 0,
+        ordersDataRes?.data?.reduce((sum: number, order: any) => sum + Number(order.total_amount), 0) || 0,
     };
   };
 
@@ -397,7 +404,7 @@ export default function Dashboard() {
         </Select>
       </div>
 
-      {/* Stats Cards (Original 4 Cards) */}
+      {/* Stats Cards (Role-Aware: Financials for Admin, Operations for Staff) */}
       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Total orders"
@@ -411,18 +418,37 @@ export default function Dashboard() {
           icon={<TrendingDown className="h-6 w-6 text-primary" />}
           hint="Active orders"
         />
-        <StatCard
-          label="Cash inflow"
-          value={`₹${stats.cashInflow.toLocaleString()}`}
-          icon={<HandCoins className="h-6 w-6 text-primary" />}
-          hint={periodLabel}
-        />
-        <StatCard
-          label={`Revenue · ${periodLabel}`}
-          value={`₹${stats.revenue.toLocaleString()}`}
-          icon={<DollarSign className="h-6 w-6 text-primary" />}
-          hint={periodLabel}
-        />
+        {isAdmin ? (
+          <>
+            <StatCard
+              label="Cash inflow"
+              value={`₹${stats.cashInflow.toLocaleString()}`}
+              icon={<HandCoins className="h-6 w-6 text-primary" />}
+              hint={periodLabel}
+            />
+            <StatCard
+              label={`Revenue · ${periodLabel}`}
+              value={`₹${stats.revenue.toLocaleString()}`}
+              icon={<DollarSign className="h-6 w-6 text-primary" />}
+              hint={periodLabel}
+            />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Deliveries today"
+              value={deliveriesToday.length}
+              icon={<Truck className="h-6 w-6 text-emerald-600" />}
+              hint="Scheduled for pickup"
+            />
+            <StatCard
+              label="Overdue orders"
+              value={overdueOrders.length}
+              icon={<AlertTriangle className="h-6 w-6 text-rose-500" />}
+              hint="Requires attention"
+            />
+          </>
+        )}
       </div>
 
       {/* Activity Grid (4 panels) */}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Logo from "../assets/logo.svg";
 import {
@@ -24,24 +25,33 @@ import {
   Map,
   TrendingDown,
   ClipboardCheck,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const navigation = [
+interface NavItem {
+  name: string;
+  href: string;
+  icon: any;
+  adminOnly?: boolean;
+}
+
+const navigation: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "Orders", href: "/orders", icon: Package },
   { name: "Measurements", href: "/measurements", icon: PencilRuler },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Products", href: "/products", icon: ShoppingBag },
-  { name: "Payments", href: "/payments", icon: BadgeIndianRupee },
-  { name: "Reports", href: "/reports", icon: FileChartPie },
+  { name: "Payments", href: "/payments", icon: BadgeIndianRupee, adminOnly: true },
+  { name: "Reports", href: "/reports", icon: FileChartPie, adminOnly: true },
   { name: "Intake / Receive", href: "/receive", icon: PlusCircle },
   { name: "Reshelve Floor", href: "/reshelve", icon: MapPin },
   { name: "Scan Lookup", href: "/scan", icon: QrCode },
   { name: "Stock Audit", href: "/stock-count", icon: ClipboardCheck },
-  { name: "Locations Layout", href: "/locations", icon: Map },
-  { name: "Deadstock", href: "/deadstock", icon: TrendingDown },
+  { name: "Locations Layout", href: "/locations", icon: Map, adminOnly: true },
+  { name: "Deadstock", href: "/deadstock", icon: TrendingDown, adminOnly: true },
+  { name: "Team & Staff", href: "/team", icon: UserCheck, adminOnly: true },
 ];
 
 const COLLAPSED_KEY = "spe.sidebar.collapsed";
@@ -62,8 +72,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   });
 
-  const { signOut } = useAuth();
+  const { signOut, user, profile, isAdmin } = useAuth();
   const location = useLocation();
+
+  // Filter navigation for Staff vs Admin
+  const visibleNavItems = navigation.filter((item) => !item.adminOnly || isAdmin);
 
   // Persist collapsed preference.
   useEffect(() => {
@@ -91,7 +104,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const SidebarNavItems = ({ onNavigate }: { onNavigate?: () => void }) => (
     <ul className="flex flex-1 flex-col gap-y-1">
-      {navigation.map((item) => {
+      {visibleNavItems.map((item) => {
         const isActive = isActiveRoute(location.pathname, item.href);
         const link = (
           <Link
@@ -170,8 +183,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <SidebarNavItems onNavigate={() => setSidebarOpen(false)} />
             </nav>
 
-            <div className="border-t p-4">
-              <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
+            <div className="border-t p-4 space-y-3">
+              {/* User Role Info */}
+              <div className="px-1 text-xs">
+                <p className="font-semibold text-foreground truncate">{profile?.full_name || user?.email}</p>
+                <Badge
+                  className={`text-[9px] px-1.5 py-0 mt-1 uppercase font-bold border ${
+                    isAdmin
+                      ? "bg-purple-50 text-purple-700 border-purple-200"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+                  }`}
+                >
+                  {isAdmin ? "👑 Owner Admin" : "👔 Staff"}
+                </Badge>
+              </div>
+
+              <Button variant="ghost" className="w-full justify-start text-xs h-9" onClick={signOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign out
               </Button>
@@ -193,7 +220,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-expanded={!collapsed}
             className={cn(
-              "absolute -right-3 top-20 z-50 flex h-7 w-7 items-center justify-center rounded-full border bg-card shadow-md transition hover:bg-muted",
+              "absolute -right-3 top-20 z-50 flex h-7 w-7 items-center justify-center rounded-full border bg-card shadow-md transition hover:bg-muted cursor-pointer",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             )}
           >
@@ -214,7 +241,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <nav aria-label="Primary" className={cn("flex flex-1 flex-col", collapsed ? "px-2" : "px-4")}>
             <SidebarNavItems />
 
-            <div className="mt-auto pb-4 pt-2">
+            <div className="mt-auto pb-4 pt-2 border-t space-y-2">
+              {!collapsed && (
+                <div className="px-3 py-1.5 text-xs">
+                  <p className="font-semibold text-foreground truncate">{profile?.full_name || user?.email}</p>
+                  <Badge
+                    className={`text-[9px] px-1.5 py-0 mt-0.5 uppercase font-bold border ${
+                      isAdmin
+                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                        : "bg-blue-50 text-blue-700 border-blue-200"
+                    }`}
+                  >
+                    {isAdmin ? "👑 Owner Admin" : "👔 Staff"}
+                  </Badge>
+                </div>
+              )}
+
               {collapsed ? (
                 <Tooltip delayDuration={150}>
                   <TooltipTrigger asChild>
@@ -225,7 +267,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <TooltipContent side="right">Sign out</TooltipContent>
                 </Tooltip>
               ) : (
-                <Button variant="ghost" className="w-full justify-start" onClick={signOut}>
+                <Button variant="ghost" className="w-full justify-start text-xs h-9" onClick={signOut}>
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
                 </Button>

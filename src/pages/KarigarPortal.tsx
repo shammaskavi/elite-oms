@@ -108,7 +108,7 @@ export default function KarigarPortal() {
             });
 
             if (error) {
-                console.error(error);
+                console.error("Error loading vendor work:", error);
                 setWork([]);
             } else {
                 setWork(data || []);
@@ -119,36 +119,46 @@ export default function KarigarPortal() {
     }, [token]);
 
     const getStageStyles = (stage: string) => {
-        const s = stage.toLowerCase();
+        const s = stage?.toLowerCase() || "";
         if (s.includes("packed") || s.includes("deliver")) return "border-emerald-500 bg-emerald-50 text-emerald-700";
         if (s.includes("embroidery") || s.includes("dyeing")) return "border-blue-500 bg-blue-50 text-blue-700";
         if (s.includes("cut")) return "border-purple-500 bg-purple-50 text-purple-700";
+        if (s.includes("dispatch")) return "border-orange-500 bg-orange-50 text-orange-700";
         return "border-amber-500 bg-amber-50 text-amber-700";
     };
 
     // Toggle Sort by Field
     const handleSortToggle = (field: SortField) => {
         if (sortField === field) {
-            // Toggle direction
+            // Toggle direction on every click
             setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
         } else {
+            // Switch field with sensible default direction
             setSortField(field);
-            // Default directions: newest first for order_date, earliest first for delivery_date
             setSortDir(field === "order_date" ? "desc" : "asc");
         }
     };
 
-    // Filtered and Sorted Work Items
+    // Multi-token intelligent search & robust deterministic sorting
     const filteredAndSortedWork = useMemo(() => {
+        const searchWords = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+
         return work
             .filter((item) => {
-                if (!searchQuery.trim()) return true;
-                const q = searchQuery.toLowerCase();
-                const matchName = item.customer_name?.toLowerCase().includes(q);
-                const matchItem = item.item_name?.toLowerCase().includes(q);
-                const matchInv = item.invoice_number?.toLowerCase().includes(q);
-                const matchStage = item.stage_name?.toLowerCase().includes(q);
-                return matchName || matchItem || matchInv || matchStage;
+                if (searchWords.length === 0) return true;
+
+                // Build a combined searchable text index for this task
+                const searchableText = [
+                    item.customer_name || "",
+                    item.item_name || "",
+                    item.invoice_number || "",
+                    `#${item.invoice_number || ""}`,
+                    `inv-${item.invoice_number || ""}`,
+                    item.stage_name || "",
+                ].join(" ").toLowerCase();
+
+                // Every typed word must match somewhere in this item
+                return searchWords.every((word) => searchableText.includes(word));
             })
             .sort((a, b) => {
                 if (sortField === "order_date") {
@@ -157,14 +167,28 @@ export default function KarigarPortal() {
                     if (numA !== numB) {
                         return sortDir === "desc" ? numB - numA : numA - numB;
                     }
-                    const cmp = (a.invoice_number || "").localeCompare(b.invoice_number || "");
-                    return sortDir === "desc" ? -cmp : cmp;
+                    // Secondary tie-breaker: customer name
+                    const custCmp = (a.customer_name || "").localeCompare(b.customer_name || "");
+                    if (custCmp !== 0) return sortDir === "desc" ? -custCmp : custCmp;
+                    // Tertiary tie-breaker: item name
+                    return (a.item_name || "").localeCompare(b.item_name || "");
                 }
 
                 if (sortField === "delivery_date") {
                     const dateA = a.delivery_date ? new Date(a.delivery_date).getTime() : (sortDir === "asc" ? Infinity : -Infinity);
                     const dateB = b.delivery_date ? new Date(b.delivery_date).getTime() : (sortDir === "asc" ? Infinity : -Infinity);
-                    return sortDir === "asc" ? dateA - dateB : dateB - dateA;
+
+                    if (dateA !== dateB) {
+                        return sortDir === "asc" ? dateA - dateB : dateB - dateA;
+                    }
+
+                    // Tie-breaker when delivery dates are identical: sort by invoice number
+                    const numA = parseInvoiceNum(a.invoice_number);
+                    const numB = parseInvoiceNum(b.invoice_number);
+                    if (numA !== numB) {
+                        return sortDir === "asc" ? numB - numA : numA - numB;
+                    }
+                    return (a.item_name || "").localeCompare(b.item_name || "");
                 }
 
                 return 0;
@@ -190,7 +214,8 @@ export default function KarigarPortal() {
                             {vendorName}
                         </h1>
                         <p className="text-xs text-slate-500 font-medium">
-                            {work.length} {work.length === 1 ? "task" : "tasks"} assigned
+                            {filteredAndSortedWork.length} of {work.length} {work.length === 1 ? "task" : "tasks"}
+                            {searchQuery ? " matching" : " assigned"}
                         </p>
                     </div>
                     <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
@@ -212,28 +237,35 @@ export default function KarigarPortal() {
                     {searchQuery && (
                         <button
                             onClick={() => setSearchQuery("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
                         >
                             <X className="h-4 w-4" />
                         </button>
                     )}
                 </div>
 
-                {/* Column Sort Header (Toggles ASC / DESC like table headers) */}
+                {/* Column Sort Header (Toggles ASC / DESC on every click) */}
                 <div className="bg-white rounded-xl px-3 py-2 border border-slate-200/80 shadow-xs flex items-center justify-between text-xs text-slate-500 font-medium">
-                    <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Sort By:</span>
+                    <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Sort:</span>
 
                     <div className="flex items-center gap-2">
                         {/* Order Date / # Toggle */}
                         <button
+                            type="button"
                             onClick={() => handleSortToggle("order_date")}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all font-semibold ${
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
                                 sortField === "order_date"
                                     ? "bg-slate-900 text-white shadow-xs"
                                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                             }`}
                         >
-                            <span>Order Date</span>
+                            <span>
+                                {sortField === "order_date"
+                                    ? sortDir === "desc"
+                                        ? "Order: Newest"
+                                        : "Order: Oldest"
+                                    : "Order Date"}
+                            </span>
                             {sortField === "order_date" ? (
                                 sortDir === "desc" ? (
                                     <ArrowDown className="h-3.5 w-3.5" />
@@ -247,14 +279,21 @@ export default function KarigarPortal() {
 
                         {/* Delivery Date Toggle */}
                         <button
+                            type="button"
                             onClick={() => handleSortToggle("delivery_date")}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all font-semibold ${
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
                                 sortField === "delivery_date"
                                     ? "bg-slate-900 text-white shadow-xs"
                                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                             }`}
                         >
-                            <span>Delivery Date</span>
+                            <span>
+                                {sortField === "delivery_date"
+                                    ? sortDir === "asc"
+                                        ? "Delivery: Earliest"
+                                        : "Delivery: Latest"
+                                    : "Delivery Date"}
+                            </span>
                             {sortField === "delivery_date" ? (
                                 sortDir === "asc" ? (
                                     <ArrowUp className="h-3.5 w-3.5" />
@@ -273,14 +312,14 @@ export default function KarigarPortal() {
                     {filteredAndSortedWork.length === 0 ? (
                         <div className="bg-white rounded-xl p-8 text-center border border-slate-200/80 shadow-xs space-y-2">
                             <Sparkles className="h-8 w-8 text-slate-300 mx-auto" />
-                            <p className="text-sm font-semibold text-slate-700">No tasks found</p>
+                            <p className="text-sm font-semibold text-slate-700">No matching tasks found</p>
                             <p className="text-xs text-slate-400">
-                                {searchQuery ? "Try changing your search keywords" : "You're all caught up ✨"}
+                                {searchQuery ? `No tasks match "${searchQuery}"` : "You're all caught up ✨"}
                             </p>
                             {searchQuery && (
                                 <button
                                     onClick={() => setSearchQuery("")}
-                                    className="text-xs text-blue-600 font-medium hover:underline mt-2 inline-block"
+                                    className="text-xs text-blue-600 font-semibold hover:underline mt-2 inline-block cursor-pointer"
                                 >
                                     Clear search
                                 </button>
@@ -288,12 +327,12 @@ export default function KarigarPortal() {
                         </div>
                     ) : (
                         filteredAndSortedWork.map((item) => {
-                            const isDone = item.stage_name.toLowerCase().includes("packed") || item.stage_name.toLowerCase().includes("deliver");
+                            const isDone = item.stage_name?.toLowerCase().includes("packed") || item.stage_name?.toLowerCase().includes("deliver");
                             const deliveryStatus = getDeliveryStatus(item.delivery_date, isDone);
 
                             return (
                                 <div
-                                    key={item.order_id}
+                                    key={`${item.order_id}-${item.item_name}-${item.stage_name}`}
                                     onClick={() => navigate(`/karigar/order/${item.order_id}?token=${token}`)}
                                     className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-xs hover:border-slate-300 active:scale-[0.99] transition-all cursor-pointer flex items-start gap-3"
                                 >
