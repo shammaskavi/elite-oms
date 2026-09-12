@@ -377,7 +377,7 @@ export default function VendorDetail() {
 
   const shareViaWhatsApp = () => {
     if (!portalUrl || !vendor) return;
-    const text = `Hello ${vendor.name},\n\nHere is your live Karigar Work Portal link for StageFlow Boutique:\n🔗 ${portalUrl}\n\nYou currently have ${stats.activeCount} active garment(s) in progress.\n\nThank you!`;
+    const text = `Hello ${vendor.name},\n\nHere is your live Karigar Work Portal link for Saree Palace Elite:\n🔗 ${portalUrl}\n\nYou currently have ${stats.activeCount} active garment(s) in progress.\n\nThank you!`;
     const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(waUrl, "_blank");
   };

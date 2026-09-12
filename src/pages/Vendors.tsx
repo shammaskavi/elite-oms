@@ -56,7 +56,7 @@ export default function Vendors() {
     try {
       const saved = sessionStorage.getItem("vendorsUIState");
       if (saved) return JSON.parse(saved).searchQuery || "";
-    } catch {}
+    } catch { }
     return "";
   });
 
@@ -64,7 +64,7 @@ export default function Vendors() {
     try {
       const saved = sessionStorage.getItem("vendorsUIState");
       if (saved) return JSON.parse(saved).selectedStageFilter || "all";
-    } catch {}
+    } catch { }
     return "all";
   });
 
@@ -72,7 +72,7 @@ export default function Vendors() {
     try {
       const saved = sessionStorage.getItem("vendorsUIState");
       if (saved) return JSON.parse(saved).statusFilter || "active";
-    } catch {}
+    } catch { }
     return "active";
   });
 
@@ -434,7 +434,7 @@ export default function Vendors() {
     }
     const stats = vendorWorkloadStats[v.id] || { activeCount: 0 };
     const portalUrl = `${window.location.origin}/karigar/${v.access_token}`;
-    const text = `Hello ${v.name},\n\nHere is your live Karigar Work Portal link for StageFlow Boutique:\n🔗 ${portalUrl}\n\nYou currently have ${stats.activeCount} active garment(s) in progress.\n\nThank you!`;
+    const text = `Hello ${v.name},\n\nHere is your live Karigar Work Portal link for Saree Palce Elite:\n🔗 ${portalUrl}\n\nYou currently have ${stats.activeCount} active garment(s) in progress.\n\nThank you!`;
     const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(waUrl, "_blank");
   };
@@ -552,27 +552,24 @@ export default function Vendors() {
             <button
               type="button"
               onClick={() => setStatusFilter("active")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                statusFilter === "active" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${statusFilter === "active" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               Active
             </button>
             <button
               type="button"
               onClick={() => setStatusFilter("all")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                statusFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${statusFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               All
             </button>
             <button
               type="button"
               onClick={() => setStatusFilter("inactive")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                statusFilter === "inactive" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${statusFilter === "inactive" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               Inactive
             </button>
@@ -616,9 +613,8 @@ export default function Vendors() {
             return (
               <Card
                 key={v.id}
-                className={`border transition-all duration-200 hover:shadow-md ${
-                  isInactive ? "opacity-60 bg-muted/30" : "bg-card hover:border-primary/40"
-                }`}
+                className={`border transition-all duration-200 hover:shadow-md ${isInactive ? "opacity-60 bg-muted/30" : "bg-card hover:border-primary/40"
+                  }`}
               >
                 <CardHeader className="p-5 pb-3">
                   <div className="flex items-start justify-between gap-2">
