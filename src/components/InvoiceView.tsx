@@ -28,6 +28,7 @@ import {
   Loader2,
   AlertTriangle,
   Pencil,
+  ExternalLink,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
@@ -658,17 +659,64 @@ Saree Palace Elite
 
             {/* Customer */}
             <div className="border rounded-lg p-4 bg-muted/50">
-              <h3 className="font-semibold mb-2">Customer Details</h3>
-              <p className="text-lg font-medium">
-                {invoice.customers?.name || "N/A"}
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Customer Details</h3>
+                {invoice.customer_id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const navState = location.state as any;
+                      const returnTo = navState?.returnTo || `${location.pathname}${location.search}`;
+                      navigate(`/customers/${invoice.customer_id}`, {
+                        state: {
+                          returnTo,
+                          openInvoiceId: invoice.id,
+                          ordersView: navState?.ordersView,
+                          anchorDate: navState?.anchorDate,
+                        },
+                      });
+                    }}
+                    className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1 hover:underline transition-colors"
+                  >
+                    View Profile
+                    <ExternalLink className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              <div
+                className={invoice.customer_id ? "cursor-pointer group inline-block" : ""}
+                onClick={() => {
+                  if (!invoice.customer_id) return;
+                  const navState = location.state as any;
+                  const returnTo = navState?.returnTo || `${location.pathname}${location.search}`;
+                  navigate(`/customers/${invoice.customer_id}`, {
+                    state: {
+                      returnTo,
+                      openInvoiceId: invoice.id,
+                      ordersView: navState?.ordersView,
+                      anchorDate: navState?.anchorDate,
+                    },
+                  });
+                }}
+              >
+                <p className="text-lg font-bold group-hover:text-primary transition-colors flex items-center gap-1.5">
+                  {invoice.customers?.name || "N/A"}
+                  {invoice.customer_id && (
+                    <ExternalLink className="h-4 w-4 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
+                  )}
+                </p>
+              </div>
               <p className="text-sm mt-1">📞 {invoice.customers?.phone || "N/A"}</p>
               <p className="text-sm mt-1">📍 {invoice.customers?.address || "N/A"}</p>
-              <p className="text-sm mt-1">🗓️ {new Date(invoice.raw_payload.delivery_date).toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: '2-digit',
-              }) || "N/A"}</p>
+              {invoice.raw_payload?.delivery_date && (
+                <p className="text-sm mt-1">
+                  🗓️ {new Date(invoice.raw_payload.delivery_date).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: '2-digit',
+                  })}
+                </p>
+              )}
             </div>
 
             {/* Items (restored) */}
@@ -682,15 +730,15 @@ Saree Palace Elite
                       <th className="text-left p-3">Item</th>
                       <th className="text-right p-3">Products</th>
                       <th className="text-right p-3">Qty</th>
-                      <th className="text-right p-3">Price</th>
+                      <th className="text-right p-3">Unit Price</th>
                       <th className="text-right p-3">Total</th>
-                      <th className="text-left p-3">Production</th>
+                      <th className="text-left p-3">Stage</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(invoice.raw_payload?.items || []).map((item: any, i: number) => {
                       const linkedOrder =
-                        typeof item.item_index === "number"
+                        item.item_index !== undefined && item.item_index !== null
                           ? orderByItemIndex.get(item.item_index)
                           : orderByItemName.get(normalize(item.name));
 
@@ -699,13 +747,16 @@ Saree Palace Elite
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!linkedOrder?.id) return;
+                            const navState = location.state as any;
                             const returnTo =
-                              (location.state as any)?.returnTo || location.pathname;
+                              navState?.returnTo || `${location.pathname}${location.search}`;
 
                             navigate(`/orders/${linkedOrder.id}`, {
                               state: {
                                 returnTo,
                                 openInvoiceId: invoice.id,
+                                ordersView: navState?.ordersView,
+                                anchorDate: navState?.anchorDate,
                               },
                             });
                           }}

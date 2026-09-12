@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { allocatePaymentFIFO } from "@/lib/allocatePaymentFIFO";
-import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
+import { derivePaymentStatus, derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 import { deriveInvoiceState } from "@/lib/deriveInvoiceState";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +35,13 @@ function safeParsePayload(raw: any) {
 export default function CustomerDetail() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
+    const navState = location.state as any;
+    const returnTo = navState?.returnTo;
+    const openInvoiceId = navState?.openInvoiceId;
+    const ordersView = navState?.ordersView;
+    const anchorDate = navState?.anchorDate;
+
     const { toast } = useToast();
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
     const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
@@ -98,6 +105,7 @@ export default function CustomerDetail() {
                 date,
                 amount,
                 method,
+                invoice_id,
                 invoices!inner (
                     id,
                     invoice_number,
@@ -156,36 +164,37 @@ export default function CustomerDetail() {
     }, 0);
 
 
-    const [invoicesWithStatus, setInvoicesWithStatus] = useState<any[]>([]);
-    useEffect(() => {
-        if (!invoices) return;
+    const paymentsByInvoice: Record<string, any[]> = useMemo(() => {
+        return (invoicePayments || []).reduce((acc: any, p: any) => {
+            const invId = p.invoice_id || p.invoices?.id;
+            if (invId) {
+                (acc[invId] ||= []).push(p);
+            }
+            return acc;
+        }, {});
+    }, [invoicePayments]);
 
-        const loadStatuses = async () => {
-            const enriched = await Promise.all(
-                invoices.map(async inv => {
-                    const payment = await derivePaymentStatus(inv);
-                    const state = deriveInvoiceState(inv, payment);
-                    return {
-                        ...inv,
-                        __payment: payment,
-                        __state: state,
-                    };
-                })
-            );
+    const invoicesWithStatus = useMemo(() => {
+        if (!invoices) return [];
+        return invoices.map(inv => {
+            const paymentsForThisInv = paymentsByInvoice[inv.id] || [];
+            const payment = derivePaymentStatusFromData(inv, paymentsForThisInv);
+            const state = deriveInvoiceState(inv, payment);
+            return {
+                ...inv,
+                __payment: payment,
+                __state: state,
+            };
+        });
+    }, [invoices, paymentsByInvoice]);
 
-            setInvoicesWithStatus(enriched);
-        };
-
-        loadStatuses();
-    }, [invoices]);
-
-    const totalPaid = invoicesWithStatus.reduce((sum, inv) => sum + inv.__payment.paid, 0);
+    const totalPaid = invoicesWithStatus.reduce((sum, inv) => sum + (inv.__payment?.paid ?? 0), 0);
     const outstandingBalance = invoicesWithStatus.reduce(
         (sum, inv) => sum + (inv.__state?.collectibleDue ?? 0),
         0
     );
     const hasUnpaidInvoices = invoicesWithStatus.some(
-        inv => inv.__state?.collectibleDue > 0
+        inv => (inv.__state?.collectibleDue ?? 0) > 0
     );
 
 
@@ -439,7 +448,20 @@ export default function CustomerDetail() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 w-full">
-                    <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="shrink-0">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                            if (returnTo) {
+                                navigate(returnTo, {
+                                    state: { openInvoiceId, ordersView, anchorDate },
+                                });
+                            } else {
+                                navigate(-1);
+                            }
+                        }}
+                        className="shrink-0"
+                    >
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
                     <div className="flex-1 min-w-0">
@@ -765,7 +787,10 @@ export default function CustomerDetail() {
                                                 <TableCell>{getOrderStatusBadge(order.order_status)}</TableCell>
                                                 <TableCell className="text-right">₹{(parseFloat(String(order.total_amount || 0)) || 0).toFixed(2)}</TableCell>
                                                 <TableCell>
-                                                    <Link to={`/orders/${order.id}`}>
+                                                    <Link
+                                                        to={`/orders/${order.id}`}
+                                                        state={{ returnTo: `${location.pathname}${location.search}` }}
+                                                    >
                                                         <Button variant="ghost" size="sm">View</Button>
                                                     </Link>
                                                 </TableCell>

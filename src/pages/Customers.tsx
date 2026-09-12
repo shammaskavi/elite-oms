@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -52,28 +52,56 @@ export default function Customers() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [open, setOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState<any>(null);
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState("all");
+
+  // Sync tab filter & search query directly with URL params
+  const filterType = searchParams.get("tab") || "all";
+  const searchQuery = searchParams.get("q") || "";
+
   const [formData, setFormData] = useState(INITIAL_FORM);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Restore the last-known scroll/search/filter state if the user came back
-  // from a customer detail page.
-  useEffect(() => {
-    const state = location.state as any;
-    if (!state) return;
+  const setFilterType = useCallback((tab: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (tab === "all") next.delete("tab");
+        else next.set("tab", tab);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
 
-    if (state.searchQuery !== undefined) setSearchQuery(state.searchQuery);
-    if (state.filterType) setFilterType(state.filterType);
-    if (state.scrollY !== undefined) {
-      requestAnimationFrame(() => window.scrollTo(0, state.scrollY));
+  const setSearchQuery = useCallback((q: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (!q) next.delete("q");
+        else next.set("q", q);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
+  // Restore scroll position when navigating back from Customer Detail
+  useEffect(() => {
+    const savedScrollY = sessionStorage.getItem("customers_scroll_y");
+    if (savedScrollY !== null) {
+      const scrollY = parseInt(savedScrollY, 10);
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          window.scrollTo({ top: scrollY, behavior: "instant" as any });
+        }, 30);
+      });
+      sessionStorage.removeItem("customers_scroll_y");
     }
-    navigate(location.pathname, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const queryClient = useQueryClient();
@@ -417,7 +445,8 @@ export default function Customers() {
                 <TableRow
                   key={customer.id}
                   className="cursor-pointer"
-                  onClick={() =>
+                  onClick={() => {
+                    sessionStorage.setItem("customers_scroll_y", window.scrollY.toString());
                     navigate(`/customers/${customer.id}`, {
                       state: {
                         from: "customers",
@@ -425,8 +454,8 @@ export default function Customers() {
                         searchQuery,
                         filterType,
                       },
-                    })
-                  }
+                    });
+                  }}
                 >
                   <TableCell className="font-medium">{customer.name}</TableCell>
                   <TableCell>{customer.phone || "—"}</TableCell>
