@@ -3,12 +3,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { 
-    CheckCircle2, 
-    Circle, 
-    Clock, 
-    Package, 
-    Search, 
+import {
+    CheckCircle2,
+    Circle,
+    Clock,
+    Package,
+    Search,
     ArrowUp,
     ArrowDown,
     ArrowUpDown,
@@ -89,33 +89,60 @@ function getDeliveryStatus(deliveryDateStr: string, isDone: boolean) {
 }
 
 export default function KarigarPortal() {
-    const { token } = useParams();
+    const params = useParams();
+    const rawToken = params["*"] || params.token || "";
+    const token = rawToken ? decodeURIComponent(rawToken) : "";
     const navigate = useNavigate();
     const [work, setWork] = useState<WorkItem[]>([]);
+    const [vendorInfo, setVendorInfo] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
-    
+
     // Sort state: default by order_date descending (newest order first)
     const [sortField, setSortField] = useState<SortField>("order_date");
     const [sortDir, setSortDir] = useState<SortDirection>("desc");
 
-    const vendorName = work[0]?.vendor_name || "Karigar";
+    const vendorName = vendorInfo?.name || work[0]?.vendor_name || "Karigar";
 
     useEffect(() => {
-        async function loadWork() {
-            const { data, error } = await supabase.rpc("get_vendor_work", {
-                p_token: token,
-            });
-
-            if (error) {
-                console.error("Error loading vendor work:", error);
-                setWork([]);
-            } else {
-                setWork(data || []);
-            }
-            setLoading(false);
+        if (vendorName && vendorName !== "Karigar") {
+            document.title = `${vendorName} · Karigar Work Portal`;
         }
-        if (token) loadWork();
+    }, [vendorName]);
+
+    useEffect(() => {
+        async function loadData() {
+            setLoading(true);
+            try {
+                // 1. Fetch vendor profile by token (guarantees artisan name even if 0 tasks assigned)
+                if (token) {
+                    const { data: vData } = await (supabase as any)
+                        .from("vendors")
+                        .select("name, portal_enabled, active")
+                        .eq("access_token", token)
+                        .maybeSingle();
+                    if (vData) setVendorInfo(vData);
+                }
+
+                // 2. Fetch live assigned work
+                const { data, error } = await supabase.rpc("get_vendor_work", {
+                    p_token: token,
+                });
+
+                if (error) {
+                    console.error("Error loading vendor work:", error);
+                    setWork([]);
+                } else {
+                    setWork(data || []);
+                }
+            } catch (err) {
+                console.error("Failed to load portal work:", err);
+                setWork([]);
+            } finally {
+                setLoading(false);
+            }
+        }
+        if (token) loadData();
     }, [token]);
 
     const getStageStyles = (stage: string) => {
@@ -253,11 +280,10 @@ export default function KarigarPortal() {
                         <button
                             type="button"
                             onClick={() => handleSortToggle("order_date")}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
-                                sortField === "order_date"
-                                    ? "bg-slate-900 text-white shadow-xs"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            }`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${sortField === "order_date"
+                                ? "bg-slate-900 text-white shadow-xs"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                }`}
                         >
                             <span>
                                 {sortField === "order_date"
@@ -281,11 +307,10 @@ export default function KarigarPortal() {
                         <button
                             type="button"
                             onClick={() => handleSortToggle("delivery_date")}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
-                                sortField === "delivery_date"
-                                    ? "bg-slate-900 text-white shadow-xs"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            }`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${sortField === "delivery_date"
+                                ? "bg-slate-900 text-white shadow-xs"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                }`}
                         >
                             <span>
                                 {sortField === "delivery_date"

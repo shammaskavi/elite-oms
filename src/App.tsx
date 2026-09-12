@@ -37,6 +37,8 @@ const LocationsAdmin = lazy(() => import("./pages/LocationsAdmin"));
 const DeadstockReport = lazy(() => import("./pages/DeadstockReport"));
 const StockAudit = lazy(() => import("./pages/StockAudit"));
 const TeamAdmin = lazy(() => import("./pages/TeamAdmin"));
+const Vendors = lazy(() => import("./pages/Vendors"));
+const VendorDetail = lazy(() => import("./pages/VendorDetail"));
 
 /**
  * Global QueryClient with sensible defaults:
@@ -96,8 +98,8 @@ const App = () => (
                 {/* Public / Token Routes */}
                 <Route path="/track/:token" element={<PublicInvoiceTracking />} />
                 <Route path="/m/:token" element={<PublicMeasurementForm />} />
-                <Route path="/karigar/:token" element={<KarigarPortal />} />
                 <Route path="/karigar/order/:id" element={<KarigarOrderDetail />} />
+                <Route path="/karigar/*" element={<KarigarPortal />} />
                 <Route path="/auth" element={<Auth />} />
 
                 {/* Core Staff & Operations Routes */}
@@ -122,6 +124,8 @@ const App = () => (
                 <Route path="/deadstock" element={protectedPage(DeadstockReport, true)} />
                 <Route path="/locations" element={protectedPage(LocationsAdmin, true)} />
                 <Route path="/team" element={protectedPage(TeamAdmin, true)} />
+                <Route path="/vendors" element={protectedPage(Vendors)} />
+                <Route path="/vendors/:id" element={protectedPage(VendorDetail)} />
 
                 {/* Catch-all */}
                 <Route path="*" element={<NotFound />} />

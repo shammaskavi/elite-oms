@@ -26,6 +26,7 @@ import {
   TrendingDown,
   ClipboardCheck,
   UserCheck,
+  Scissors,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,7 @@ const navigation: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "Orders", href: "/orders", icon: Package },
+  { name: "Karigars & Vendors", href: "/vendors", icon: Scissors },
   { name: "Measurements", href: "/measurements", icon: PencilRuler },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Products", href: "/products", icon: ShoppingBag },
