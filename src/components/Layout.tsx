@@ -27,6 +27,10 @@ import {
   ClipboardCheck,
   UserCheck,
   Scissors,
+  Sparkles,
+  Clock,
+  MessageSquare,
+  Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +47,8 @@ const navigation: NavItem[] = [
   { name: "Orders", href: "/orders", icon: Package },
   { name: "Karigars & Vendors", href: "/vendors", icon: Scissors },
   { name: "Measurements", href: "/measurements", icon: PencilRuler },
-  { name: "Customers", href: "/customers", icon: Users },
+  { name: "Customers 360", href: "/customers", icon: Users },
+  { name: "Clienteling CRM", href: "/crm", icon: Sparkles },
   { name: "Products", href: "/products", icon: ShoppingBag },
   { name: "Payments", href: "/payments", icon: BadgeIndianRupee, adminOnly: true },
   { name: "Reports", href: "/reports", icon: FileChartPie, adminOnly: true },

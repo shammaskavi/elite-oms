@@ -33,9 +33,13 @@ import {
     MessageSquare,
     Send,
     Copy,
+    Ruler,
+    Sparkles,
+    Plus,
 } from "lucide-react";
 import { ActivityLog } from "./ActivityLog";
 import { buildStageNotificationMessage, openWhatsApp, ensureInvoiceTrackingToken } from "@/lib/whatsapp";
+import OrderMeasurementModal from "@/components/orders/OrderMeasurementModal";
 
 export function OrderTimeline({
     order,
@@ -56,6 +60,9 @@ export function OrderTimeline({
     const [waModalOpen, setWaModalOpen] = useState(false);
     const [waMessage, setWaMessage] = useState("");
     const [waStageName, setWaStageName] = useState("");
+
+    const [measurementModalOpen, setMeasurementModalOpen] = useState(false);
+    const attachedMeasurement = order.metadata?.product_measurements?.[productNumber];
 
     const [editingNotes, setEditingNotes] = useState(false);
     const [productNotes, setProductNotes] = useState(order.metadata?.product_notes?.[productNumber] || "");
@@ -297,6 +304,33 @@ export function OrderTimeline({
                     </div>
 
                     <div className="flex items-center gap-1.5 sm:gap-2 self-start sm:self-auto flex-wrap">
+                        {/* 📐 Garment Measurements Trigger */}
+                        {attachedMeasurement ? (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs text-purple-900 border-purple-300 bg-purple-50/70 hover:bg-purple-100 font-medium"
+                                title="View or edit attached cutting measurements"
+                                onClick={() => setMeasurementModalOpen(true)}
+                            >
+                                <Ruler className="h-3.5 w-3.5 sm:mr-1 text-purple-700" />
+                                <span className="hidden sm:inline">📐 {attachedMeasurement.template_name || "Specs"}</span>
+                                <span className="sm:hidden">📐 Specs</span>
+                            </Button>
+                        ) : (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs text-slate-600 border-dashed hover:border-purple-300 hover:text-purple-900 hover:bg-purple-50/50"
+                                title="Attach customer measurements to this garment"
+                                onClick={() => setMeasurementModalOpen(true)}
+                            >
+                                <Ruler className="h-3.5 w-3.5 sm:mr-1 text-slate-500" />
+                                <span className="hidden sm:inline">+ Measurements</span>
+                                <span className="sm:hidden">+ 📐</span>
+                            </Button>
+                        )}
+
                         {currentStageName && (
                             <Button
                                 size="sm"
@@ -367,6 +401,71 @@ export function OrderTimeline({
             {/* 2. COLLAPSIBLE CONTENT */}
             <Collapsible open={isExpanded}>
                 <CollapsibleContent className="border-t bg-muted/20 p-4 space-y-6 animate-in fade-in slide-in-from-top-1">
+                    {/* Attached Measurements Card Section */}
+                    {attachedMeasurement ? (
+                        <div className="space-y-2.5 p-3.5 bg-purple-50/50 rounded-xl border border-purple-200/80 shadow-2xs">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1 bg-purple-200 text-purple-900 rounded-md">
+                                        <Ruler className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-purple-950 uppercase tracking-wider flex items-center gap-1.5">
+                                            Garment Cutting Specs ({attachedMeasurement.template_name || "Garment"})
+                                        </h4>
+                                        <p className="text-[11px] text-purple-700">
+                                            Profile: {attachedMeasurement.profile_name || "Standard Profile"} • Visible in Karigar Workshop Portal
+                                        </p>
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs text-purple-900 hover:bg-purple-100 font-semibold"
+                                    onClick={() => setMeasurementModalOpen(true)}
+                                >
+                                    <Edit2 className="h-3 w-3 mr-1" /> Edit / Re-attach
+                                </Button>
+                            </div>
+
+                            {/* Value Grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 pt-1">
+                                {Object.entries(attachedMeasurement.values || {}).map(([key, val]) => (
+                                    <div key={key} className="p-2 bg-white rounded-lg border border-purple-100 shadow-2xs text-left">
+                                        <span className="text-[10px] uppercase text-slate-400 block font-medium truncate">
+                                            {key.replace(/_/g, " ")}
+                                        </span>
+                                        <span className="font-bold text-slate-900 text-xs sm:text-sm">
+                                            {String(val)}"
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {attachedMeasurement.notes && (
+                                <div className="mt-2 text-xs text-slate-700 bg-white p-2 rounded-lg border border-purple-100">
+                                    <span className="font-semibold text-purple-900">Cutting Notes:</span> {attachedMeasurement.notes}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-xs">
+                            <div className="flex items-center gap-2 text-slate-600">
+                                <Ruler className="h-4 w-4 text-slate-400 shrink-0" />
+                                <span>No body measurements attached to this garment piece yet.</span>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs text-purple-900 border-purple-200 bg-white hover:bg-purple-50 font-semibold shrink-0"
+                                onClick={() => setMeasurementModalOpen(true)}
+                            >
+                                <Plus className="h-3.5 w-3.5 mr-1 text-purple-700" /> Attach Measurements
+                            </Button>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Notes Section */}
                         <div className="space-y-3">
@@ -429,6 +528,23 @@ export function OrderTimeline({
                     </div>
                 </CollapsibleContent>
             </Collapsible>
+
+            {/* Order Item Measurements Modal */}
+            <OrderMeasurementModal
+                open={measurementModalOpen}
+                onOpenChange={setMeasurementModalOpen}
+                orderId={order.id}
+                orderMetadata={order.metadata}
+                productNumber={productNumber}
+                productName={localProductName || `Item ${productNumber}`}
+                customerId={invoice?.customer_id || invoice?.customers?.id || order.metadata?.customer_id}
+                customerName={invoice?.customers?.name || order.metadata?.customer_name}
+                currentMeasurement={attachedMeasurement}
+                onSaveSuccess={() => {
+                    queryClient.invalidateQueries({ queryKey: ["order", order.id] });
+                    queryClient.invalidateQueries({ queryKey: ["invoice-orders"] });
+                }}
+            />
 
             {/* WhatsApp Stage Notification Modal */}
             <Dialog open={waModalOpen} onOpenChange={setWaModalOpen}>

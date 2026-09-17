@@ -1,13 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Notebook } from "lucide-react";
+import { ArrowLeft, Notebook, Ruler, Copy, Check, Scissors } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { useState } from "react";
 
 export default function KarigarOrderDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const token = searchParams.get("token");
+    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
     // 🔹 Data Fetching (Keep existing logic as it works perfectly)
     const { data: vendor } = useQuery({
@@ -99,6 +103,19 @@ export default function KarigarOrderDetail() {
 
     const numProducts = parseInt(currentOrder.metadata?.num_products || "1");
 
+    const handleCopyMeasurements = (productNumber: number, productName: string, meas: any) => {
+        if (!meas?.values) return;
+        const lines = Object.entries(meas.values)
+            .map(([k, v]) => `• ${k.replace(/_/g, " ")}: ${v}"`)
+            .join("\n");
+        const fullText = `📐 ${productName} (${meas.template_name || "Garment"})\nCustomer: ${invoice?.customers?.name || "Client"}\n\n${lines}${meas.notes ? `\n\nNotes: ${meas.notes}` : ""}`;
+
+        navigator.clipboard.writeText(fullText);
+        setCopiedIndex(productNumber);
+        toast.success(`Copied cutting specs for ${productName}`);
+        setTimeout(() => setCopiedIndex(null), 2000);
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 pb-10">
             {/* 📍 Header: Sticky & Compact */}
@@ -137,28 +154,98 @@ export default function KarigarOrderDetail() {
                             currentOrder.notes ||
                             null;
 
+                        const attachedMeasurement = currentOrder.metadata?.product_measurements?.[productNumber];
+
                         return (
                             <div
                                 key={productNumber}
-                                className="bg-white rounded-xl shadow-sm border border-slate-100 p-4"
+                                className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3.5"
                             >
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Notebook className="h-4 w-4 text-slate-400" />
-                                    <h2 className="text-xs font-semibold uppercase text-slate-500 tracking-wide">
-                                        Item {productNumber}
-                                    </h2>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Notebook className="h-4 w-4 text-slate-400" />
+                                        <h2 className="text-xs font-semibold uppercase text-slate-500 tracking-wide">
+                                            Item {productNumber}
+                                        </h2>
+                                    </div>
+
+                                    {attachedMeasurement && (
+                                        <Badge className="bg-purple-100 text-purple-900 hover:bg-purple-100 border border-purple-200 text-[10px] font-bold gap-1">
+                                            <Ruler className="h-3 w-3 text-purple-700" />
+                                            {attachedMeasurement.template_name || "Specs"}
+                                        </Badge>
+                                    )}
                                 </div>
 
-                                <p className="text-lg font-semibold text-slate-900 leading-snug">
+                                <p className="text-lg font-bold text-slate-900 leading-snug">
                                     {productName}
                                 </p>
 
+                                {/* 📐 Attached Measurements for Karigar */}
+                                {attachedMeasurement && attachedMeasurement.values && Object.keys(attachedMeasurement.values).length > 0 ? (
+                                    <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-200/90 space-y-2.5">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-1.5">
+                                                <Scissors className="h-3.5 w-3.5 text-purple-700" />
+                                                <span className="text-xs font-bold text-purple-950 uppercase tracking-wider">
+                                                    Garment Cutting Dimensions
+                                                </span>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCopyMeasurements(productNumber, productName, attachedMeasurement)}
+                                                className="text-[11px] font-semibold text-purple-800 bg-white hover:bg-purple-100 px-2 py-0.5 rounded border border-purple-200 flex items-center gap-1 transition-colors"
+                                            >
+                                                {copiedIndex === productNumber ? (
+                                                    <>
+                                                        <Check className="h-3 w-3 text-emerald-600" /> Copied
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Copy className="h-3 w-3 text-purple-600" /> Copy Specs
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+
+                                        {/* Grid of Measurements */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {Object.entries(attachedMeasurement.values).map(([key, val]) => (
+                                                <div
+                                                    key={key}
+                                                    className="p-2 bg-white rounded-lg border border-purple-100/90 text-left shadow-2xs"
+                                                >
+                                                    <span className="text-[10px] uppercase text-slate-400 block font-semibold truncate">
+                                                        {key.replace(/_/g, " ")}
+                                                    </span>
+                                                    <span className="font-extrabold text-slate-900 text-sm">
+                                                        {String(val)}"
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {attachedMeasurement.notes && (
+                                            <div className="text-xs bg-white p-2.5 rounded-lg border border-purple-100 text-slate-700 leading-relaxed">
+                                                <span className="font-bold text-purple-900">Artisan Note: </span>
+                                                {attachedMeasurement.notes}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="p-2.5 bg-slate-50 rounded-lg border border-dashed border-slate-200 text-slate-500 text-xs flex items-center gap-2">
+                                        <Ruler className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                        <span>No body measurements attached for this piece.</span>
+                                    </div>
+                                )}
+
                                 {productNotes && (
-                                    <div className="mt-3">
-                                        <p className="text-[10px] uppercase text-slate-400 mb-1 font-semibold">
-                                            Notes
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] uppercase text-slate-400 font-semibold">
+                                            Work Instructions & Notes
                                         </p>
-                                        <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-700 border">
+                                        <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-700 border border-slate-200 whitespace-pre-wrap leading-relaxed">
                                             {productNotes}
                                         </div>
                                     </div>

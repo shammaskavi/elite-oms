@@ -40,6 +40,13 @@ const TeamAdmin = lazy(() => import("./pages/TeamAdmin"));
 const Vendors = lazy(() => import("./pages/Vendors"));
 const VendorDetail = lazy(() => import("./pages/VendorDetail"));
 
+// SPE Clienteling CRM Routes
+const CrmDashboard = lazy(() => import("./pages/crm/CrmDashboard"));
+const CrmTasks = lazy(() => import("./pages/crm/CrmTasks"));
+const CrmWhatsAppInbox = lazy(() => import("./pages/crm/CrmWhatsAppInbox"));
+const CrmLeads = lazy(() => import("./pages/crm/CrmLeads"));
+const CrmSegments = lazy(() => import("./pages/crm/CrmSegments"));
+
 /**
  * Global QueryClient with sensible defaults:
  * - 60s staleTime: avoid refetching everything on every focus
@@ -109,6 +116,14 @@ const App = () => (
                 <Route path="/orders/:id" element={protectedPage(OrderDetailNew)} />
                 <Route path="/customers" element={protectedPage(Customers)} />
                 <Route path="/customers/:id" element={protectedPage(CustomerDetail)} />
+
+                {/* SPE Clienteling CRM Routes */}
+                <Route path="/crm" element={protectedPage(CrmDashboard)} />
+                <Route path="/crm/tasks" element={protectedPage(CrmTasks)} />
+                <Route path="/crm/inbox" element={protectedPage(CrmWhatsAppInbox)} />
+                <Route path="/crm/leads" element={protectedPage(CrmLeads)} />
+                <Route path="/crm/segments" element={protectedPage(CrmSegments)} />
+
                 <Route path="/measurements" element={protectedPage(Measurements)} />
                 <Route path="/measurements/new" element={protectedPage(CreateMeasurement)} />
                 <Route path="/products" element={protectedPage(Products)} />
