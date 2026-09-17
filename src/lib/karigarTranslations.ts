@@ -273,7 +273,48 @@ const GARMENT_WORD_MAP: Array<[RegExp, string]> = [
   [/\bCutting\b/gi, "કટિંગ"],
   [/\bDyeing\b/gi, "ડાઇંગ / રંગકામ"],
 
-  // Fabrics
+  // Fabrics & Weaves
+  [/\bOff\s*White\b/gi, "ઓફવ્હાઇટ"],
+  [/\bOffwhite\b/gi, "ઓફવ્હાઇટ"],
+  [/\bSilkenza\b/gi, "સિલ્કેન્ઝા"],
+  [/\bVintage\b/gi, "વિન્ટેજ"],
+  [/\bRangkaat\b/gi, "રંગકાટ"],
+  [/\bRangkat\b/gi, "રંગકાટ"],
+  [/\bMethi\b/gi, "મેથી"],
+  [/\bNeck\b/gi, "નેક (ગળું)"],
+  [/\bPearl\b/gi, "પર્લ (મોતી)"],
+  [/\bYolk\b/gi, "યોક"],
+  [/\bYoke\b/gi, "યોક"],
+  [/\bZardozi\b/gi, "જરદોશી"],
+  [/\bAari\b/gi, "આરી વર્ક"],
+  [/\bCutdana\b/gi, "કટદાણા"],
+  [/\bKundan\b/gi, "કુંદન"],
+  [/\bChikankari\b/gi, "ચિકનકારી"],
+  [/\bPaithani\b/gi, "પૈઠણી"],
+  [/\bKanjivaram\b/gi, "કાંજીવરમ"],
+  [/\bTussar\b/gi, "ટસર સિલ્ક"],
+  [/\bMunga\b/gi, "મૂંગા સિલ્ક"],
+  [/\bRaw\s*Silk\b/gi, "રો સિલ્ક"],
+  [/\bKota\s*Doria\b/gi, "કોટા ડોરિયા"],
+  [/\bKota\b/gi, "કોટા"],
+  [/\bPrinted\b/gi, "પ્રિન્ટેડ"],
+  [/\bPrint\b/gi, "પ્રિન્ટ"],
+  [/\bFloral\b/gi, "ફ્લોરલ"],
+  [/\bBorder\b/gi, "બોર્ડર"],
+  [/\bPallu\b/gi, "પલ્લું"],
+  [/\bPleats\b/gi, "પ્લીટ્સ (પાટલી)"],
+  [/\bFlared\b/gi, "ઘેરવાળું"],
+  [/\bSleeveless\b/gi, "સ્લીવલેસ (બાય વગરનું)"],
+  [/\bFull\s*Sleeves?\b/gi, "આખી બાય (ફુલ સ્લીવ)"],
+  [/\bHalf\s*Sleeves?\b/gi, "અડધી બાય (હાફ સ્લીવ)"],
+  [/\bV[- ]Neck\b/gi, "વી નેક (V ગળું)"],
+  [/\bRound\s*Neck\b/gi, "ગોળ ગળું"],
+  [/\bSquare\s*Neck\b/gi, "ચોરસ ગળું"],
+  [/\bCollar\b/gi, "કોલર"],
+  [/\bDeep\s*Neck\b/gi, "ડીપ ગળું"],
+  [/\bBackless\b/gi, "બેકલેસ"],
+  [/\bPlain\b/gi, "પ્લેન / સાદું"],
+  [/\bContrast\b/gi, "કોન્ટ્રાસ્ટ"],
   [/\bSilk\b/gi, "સિલ્ક"],
   [/\bCotton\b/gi, "કોટન"],
   [/\bGeorgette\b/gi, "જ્યોર્જેટ"],
@@ -322,7 +363,7 @@ const GARMENT_WORD_MAP: Array<[RegExp, string]> = [
 ];
 
 /**
- * Smart translator for garment titles and names
+ * Smart translator for garment titles and names with full phonetic fallback
  */
 export function translateGarmentName(name: string, lang: KarigarLang): string {
   if (!name || lang === "en") return name;
@@ -331,8 +372,18 @@ export function translateGarmentName(name: string, lang: KarigarLang): string {
   for (const [regex, replacement] of GARMENT_WORD_MAP) {
     translated = translated.replace(regex, replacement);
   }
+
+  // Any remaining English words (e.g. custom product titles or inventory tags)
+  // are transliterated phonetically into Gujarati script so 100% of text is readable in Gujarati!
+  translated = translated.replace(/\b[a-zA-Z]+\b/g, (match) => {
+    const lower = match.toLowerCase();
+    if (CUSTOMER_NAME_DICT[lower]) return CUSTOMER_NAME_DICT[lower];
+    return phoneticTransliterate(match) || match;
+  });
+
   return translated;
 }
+
 
 /**
  * Translate template name / badge

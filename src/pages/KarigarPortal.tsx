@@ -121,13 +121,15 @@ export default function KarigarPortal() {
     const [sortField, setSortField] = useState<SortField>("order_date");
     const [sortDir, setSortDir] = useState<SortDirection>("desc");
 
-    const vendorName = vendorInfo?.name || work[0]?.vendor_name || (lang === "gu" ? "કારીગર" : "Karigar");
+    const rawVendorName = vendorInfo?.name || work[0]?.vendor_name || (lang === "gu" ? "કારીગર" : "Karigar");
+    const vendorName = translateCustomerName(rawVendorName, lang);
 
     useEffect(() => {
         if (vendorName) {
             document.title = `${vendorName} · ${t.portal_title}`;
         }
     }, [vendorName, lang, t.portal_title]);
+
 
     useEffect(() => {
         async function loadData() {
