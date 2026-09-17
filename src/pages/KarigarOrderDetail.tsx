@@ -5,6 +5,17 @@ import { ArrowLeft, Notebook, Ruler, Copy, Check, Scissors } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useState } from "react";
+import {
+    KarigarLang,
+    getSavedKarigarLang,
+    saveKarigarLang,
+    TRANSLATIONS,
+    translateFieldKey,
+    translateGarmentName,
+    translateTemplateName,
+    translateCustomerName,
+    formatMeasurementValue,
+} from "@/lib/karigarTranslations";
 
 export default function KarigarOrderDetail() {
     const { id } = useParams();
@@ -12,6 +23,15 @@ export default function KarigarOrderDetail() {
     const [searchParams] = useSearchParams();
     const token = searchParams.get("token");
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+    // Language state (defaults to Gujarati for karigars, toggleable)
+    const [lang, setLang] = useState<KarigarLang>(() => getSavedKarigarLang());
+    const t = TRANSLATIONS[lang];
+
+    const handleSetLang = (newLang: KarigarLang) => {
+        setLang(newLang);
+        saveKarigarLang(newLang);
+    };
 
     // 🔹 Data Fetching (Keep existing logic as it works perfectly)
     const { data: vendor } = useQuery({
@@ -57,21 +77,12 @@ export default function KarigarOrderDetail() {
         enabled: !!id,
     });
 
-    const { data: stagesList } = useQuery({
-        queryKey: ["workflow-stages"],
-        queryFn: async () => {
-            const { data, error } = await supabase.from("stages").select("*").order("order_index", { ascending: true });
-            if (error) throw error;
-            return data || [];
-        },
-    });
-
     // 🔐 Security & Loading
     if (!currentOrder) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen text-slate-400 text-sm gap-2">
                 <div className="h-6 w-6 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-                <span>Loading order details...</span>
+                <span>{t.loading}</span>
             </div>
         );
     }
@@ -86,15 +97,15 @@ export default function KarigarOrderDetail() {
                     <div className="h-12 w-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
                         ⚠️
                     </div>
-                    <h2 className="text-base font-bold text-slate-900">Task Not Assigned</h2>
+                    <h2 className="text-base font-bold text-slate-900">{t.task_not_assigned}</h2>
                     <p className="text-xs text-slate-500">
-                        This order is not currently assigned to your account.
+                        {t.task_not_assigned_desc}
                     </p>
                     <button
                         onClick={() => navigate(`/karigar/${token}`)}
-                        className="w-full mt-2 py-2 px-4 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors"
+                        className="w-full mt-2 py-2 px-4 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
                     >
-                        Return to Tasks
+                        {t.return_to_tasks}
                     </button>
                 </div>
             </div>
@@ -103,37 +114,72 @@ export default function KarigarOrderDetail() {
 
     const numProducts = parseInt(currentOrder.metadata?.num_products || "1");
 
+    const rawCustomerName = invoice?.customers?.name || "";
+    const customerDisplayName = rawCustomerName
+        ? translateCustomerName(rawCustomerName, lang)
+        : (lang === "gu" ? "ગ્રાહક" : "Customer");
+
     const handleCopyMeasurements = (productNumber: number, productName: string, meas: any) => {
         if (!meas?.values) return;
         const lines = Object.entries(meas.values)
-            .map(([k, v]) => `• ${k.replace(/_/g, " ")}: ${v}"`)
+            .map(([k, v]) => `• ${translateFieldKey(k, lang)}: ${formatMeasurementValue(v, k, lang)}`)
             .join("\n");
-        const fullText = `📐 ${productName} (${meas.template_name || "Garment"})\nCustomer: ${invoice?.customers?.name || "Client"}\n\n${lines}${meas.notes ? `\n\nNotes: ${meas.notes}` : ""}`;
+        const templ = translateTemplateName(meas.template_name || (lang === "gu" ? "કપડાં" : "Garment"), lang);
+        const fullText = `📐 ${productName} (${templ})\n${t.customer}: ${customerDisplayName}\n\n${lines}${meas.notes ? `\n\n${t.artisan_note} ${meas.notes}` : ""}`;
 
         navigator.clipboard.writeText(fullText);
         setCopiedIndex(productNumber);
-        toast.success(`Copied cutting specs for ${productName}`);
+        toast.success(lang === "gu" ? `${productName} ના માપ કોપી થઈ ગયા` : `Copied cutting specs for ${productName}`);
         setTimeout(() => setCopiedIndex(null), 2000);
     };
 
     return (
         <div className="min-h-screen bg-slate-50 pb-10">
-            {/* 📍 Header: Sticky & Compact */}
+            {/* 📍 Header: Sticky & Compact with Segmented Language Switcher */}
             <div className="bg-white border-b sticky top-0 z-20 px-4 py-3 shadow-sm">
-                <div className="max-w-md mx-auto flex items-center gap-3">
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="p-2 -ml-2 hover:bg-slate-100 rounded-full transition-colors"
-                    >
-                        <ArrowLeft className="h-5 w-5 text-slate-600" />
-                    </button>
-                    <div className="min-w-0">
-                        <h1 className="text-sm font-bold text-slate-400 uppercase tracking-wider leading-none">
-                            Invoice {invoice?.invoice_number}
-                        </h1>
-                        <p className="text-lg font-bold text-slate-900 truncate">
-                            {invoice?.customers?.name || "No Customer"}
-                        </p>
+                <div className="max-w-md mx-auto flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <button
+                            onClick={() => navigate(-1)}
+                            className="p-2 -ml-2 hover:bg-slate-100 rounded-full transition-colors cursor-pointer shrink-0"
+                        >
+                            <ArrowLeft className="h-5 w-5 text-slate-600" />
+                        </button>
+                        <div className="min-w-0">
+                            <h1 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-none">
+                                {t.invoice} #{invoice?.invoice_number}
+                            </h1>
+                            <p className="text-base font-bold text-slate-900 truncate mt-0.5" title={rawCustomerName}>
+                                {customerDisplayName}
+                            </p>
+                        </div>
+                    </div>
+
+
+                    {/* Segmented Dual Language Switcher */}
+                    <div className="flex items-center p-1 bg-slate-100 rounded-full border border-slate-200 shrink-0 shadow-2xs">
+                        <button
+                            type="button"
+                            onClick={() => handleSetLang("gu")}
+                            className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                                lang === "gu"
+                                    ? "bg-purple-900 text-white shadow-xs"
+                                    : "text-slate-600 hover:text-slate-900"
+                            }`}
+                        >
+                            🌐 ગુજરાતી
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleSetLang("en")}
+                            className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                                lang === "en"
+                                    ? "bg-purple-900 text-white shadow-xs"
+                                    : "text-slate-600 hover:text-slate-900"
+                            }`}
+                        >
+                            English
+                        </button>
                     </div>
                 </div>
             </div>
@@ -144,10 +190,13 @@ export default function KarigarOrderDetail() {
                     {Array.from({ length: numProducts }, (_, i) => {
                         const productNumber = i + 1;
 
-                        const productName =
+                        const rawProductName =
                             currentOrder.metadata?.product_names?.[productNumber] ||
                             currentOrder.metadata?.item_name ||
-                            `Item ${productNumber}`;
+                            `${t.item} ${productNumber}`;
+
+                        // Translate garment item name
+                        const productName = translateGarmentName(rawProductName, lang);
 
                         const productNotes =
                             currentOrder.metadata?.product_notes?.[productNumber] ||
@@ -155,6 +204,9 @@ export default function KarigarOrderDetail() {
                             null;
 
                         const attachedMeasurement = currentOrder.metadata?.product_measurements?.[productNumber];
+                        const templateName = attachedMeasurement?.template_name
+                            ? translateTemplateName(attachedMeasurement.template_name, lang)
+                            : (lang === "gu" ? "માપ વિગત" : "Specs");
 
                         return (
                             <div
@@ -165,14 +217,14 @@ export default function KarigarOrderDetail() {
                                     <div className="flex items-center gap-2">
                                         <Notebook className="h-4 w-4 text-slate-400" />
                                         <h2 className="text-xs font-semibold uppercase text-slate-500 tracking-wide">
-                                            Item {productNumber}
+                                            {t.item} {productNumber}
                                         </h2>
                                     </div>
 
                                     {attachedMeasurement && (
                                         <Badge className="bg-purple-100 text-purple-900 hover:bg-purple-100 border border-purple-200 text-[10px] font-bold gap-1">
                                             <Ruler className="h-3 w-3 text-purple-700" />
-                                            {attachedMeasurement.template_name || "Specs"}
+                                            {templateName}
                                         </Badge>
                                     )}
                                 </div>
@@ -188,22 +240,22 @@ export default function KarigarOrderDetail() {
                                             <div className="flex items-center gap-1.5">
                                                 <Scissors className="h-3.5 w-3.5 text-purple-700" />
                                                 <span className="text-xs font-bold text-purple-950 uppercase tracking-wider">
-                                                    Garment Cutting Dimensions
+                                                    {t.cutting_specs}
                                                 </span>
                                             </div>
 
                                             <button
                                                 type="button"
                                                 onClick={() => handleCopyMeasurements(productNumber, productName, attachedMeasurement)}
-                                                className="text-[11px] font-semibold text-purple-800 bg-white hover:bg-purple-100 px-2 py-0.5 rounded border border-purple-200 flex items-center gap-1 transition-colors"
+                                                className="text-[11px] font-semibold text-purple-800 bg-white hover:bg-purple-100 px-2 py-0.5 rounded border border-purple-200 flex items-center gap-1 transition-colors cursor-pointer"
                                             >
                                                 {copiedIndex === productNumber ? (
                                                     <>
-                                                        <Check className="h-3 w-3 text-emerald-600" /> Copied
+                                                        <Check className="h-3 w-3 text-emerald-600" /> {t.copied}
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <Copy className="h-3 w-3 text-purple-600" /> Copy Specs
+                                                        <Copy className="h-3 w-3 text-purple-600" /> {t.copy_specs}
                                                     </>
                                                 )}
                                             </button>
@@ -216,11 +268,11 @@ export default function KarigarOrderDetail() {
                                                     key={key}
                                                     className="p-2 bg-white rounded-lg border border-purple-100/90 text-left shadow-2xs"
                                                 >
-                                                    <span className="text-[10px] uppercase text-slate-400 block font-semibold truncate">
-                                                        {key.replace(/_/g, " ")}
+                                                    <span className="text-[10px] uppercase text-slate-500 block font-semibold truncate" title={translateFieldKey(key, lang)}>
+                                                        {translateFieldKey(key, lang)}
                                                     </span>
                                                     <span className="font-extrabold text-slate-900 text-sm">
-                                                        {String(val)}"
+                                                        {formatMeasurementValue(val, key, lang)}
                                                     </span>
                                                 </div>
                                             ))}
@@ -228,7 +280,7 @@ export default function KarigarOrderDetail() {
 
                                         {attachedMeasurement.notes && (
                                             <div className="text-xs bg-white p-2.5 rounded-lg border border-purple-100 text-slate-700 leading-relaxed">
-                                                <span className="font-bold text-purple-900">Artisan Note: </span>
+                                                <span className="font-bold text-purple-900">{t.artisan_note} </span>
                                                 {attachedMeasurement.notes}
                                             </div>
                                         )}
@@ -236,14 +288,14 @@ export default function KarigarOrderDetail() {
                                 ) : (
                                     <div className="p-2.5 bg-slate-50 rounded-lg border border-dashed border-slate-200 text-slate-500 text-xs flex items-center gap-2">
                                         <Ruler className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                        <span>No body measurements attached for this piece.</span>
+                                        <span>{t.no_measurements}</span>
                                     </div>
                                 )}
 
                                 {productNotes && (
                                     <div className="space-y-1">
                                         <p className="text-[10px] uppercase text-slate-400 font-semibold">
-                                            Work Instructions & Notes
+                                            {t.work_notes}
                                         </p>
                                         <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-700 border border-slate-200 whitespace-pre-wrap leading-relaxed">
                                             {productNotes}

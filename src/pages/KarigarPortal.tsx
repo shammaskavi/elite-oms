@@ -13,8 +13,17 @@ import {
     ArrowDown,
     ArrowUpDown,
     Sparkles,
-    X
+    X,
 } from "lucide-react";
+import {
+    KarigarLang,
+    getSavedKarigarLang,
+    saveKarigarLang,
+    TRANSLATIONS,
+    translateStageName,
+    translateGarmentName,
+    translateCustomerName,
+} from "@/lib/karigarTranslations";
 
 type WorkItem = {
     vendor_name: string;
@@ -37,12 +46,13 @@ function parseInvoiceNum(inv: string): number {
     return parseInt(match.join(""), 10) || 0;
 }
 
-function getDeliveryStatus(deliveryDateStr: string, isDone: boolean) {
+function getDeliveryStatus(deliveryDateStr: string, isDone: boolean, lang: KarigarLang) {
+    const t = TRANSLATIONS[lang];
     if (!deliveryDateStr) {
-        return { label: "No Date", color: "text-slate-400 bg-slate-100 border-slate-200", isOverdue: false };
+        return { label: t.no_date, color: "text-slate-400 bg-slate-100 border-slate-200", isOverdue: false };
     }
     if (isDone) {
-        return { label: "Completed", color: "text-emerald-700 bg-emerald-50 border-emerald-200", isOverdue: false };
+        return { label: t.completed, color: "text-emerald-700 bg-emerald-50 border-emerald-200", isOverdue: false };
     }
 
     const today = new Date();
@@ -55,34 +65,34 @@ function getDeliveryStatus(deliveryDateStr: string, isDone: boolean) {
 
     if (diffDays < 0) {
         return {
-            label: `Overdue (${Math.abs(diffDays)}d)`,
+            label: t.overdue.replace("{days}", String(Math.abs(diffDays))),
             color: "text-rose-700 bg-rose-50 border-rose-300 font-semibold",
             isOverdue: true,
         };
     }
     if (diffDays === 0) {
         return {
-            label: "Due Today",
+            label: t.due_today,
             color: "text-amber-800 bg-amber-100 border-amber-300 font-semibold",
             isOverdue: false,
         };
     }
     if (diffDays === 1) {
         return {
-            label: "Due Tomorrow",
+            label: t.due_tomorrow,
             color: "text-amber-700 bg-amber-50 border-amber-200 font-medium",
             isOverdue: false,
         };
     }
     if (diffDays <= 3) {
         return {
-            label: `Due in ${diffDays}d`,
+            label: t.due_in.replace("{days}", String(diffDays)),
             color: "text-orange-700 bg-orange-50 border-orange-200 font-medium",
             isOverdue: false,
         };
     }
     return {
-        label: new Date(deliveryDateStr).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+        label: new Date(deliveryDateStr).toLocaleDateString(lang === "gu" ? "gu-IN" : "en-IN", { day: "2-digit", month: "short" }),
         color: "text-slate-600 bg-slate-50 border-slate-200",
         isOverdue: false,
     };
@@ -98,17 +108,26 @@ export default function KarigarPortal() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
 
+    // Language state (defaults to Gujarati for karigars, toggleable)
+    const [lang, setLang] = useState<KarigarLang>(() => getSavedKarigarLang());
+    const t = TRANSLATIONS[lang];
+
+    const handleSetLang = (newLang: KarigarLang) => {
+        setLang(newLang);
+        saveKarigarLang(newLang);
+    };
+
     // Sort state: default by order_date descending (newest order first)
     const [sortField, setSortField] = useState<SortField>("order_date");
     const [sortDir, setSortDir] = useState<SortDirection>("desc");
 
-    const vendorName = vendorInfo?.name || work[0]?.vendor_name || "Karigar";
+    const vendorName = vendorInfo?.name || work[0]?.vendor_name || (lang === "gu" ? "કારીગર" : "Karigar");
 
     useEffect(() => {
-        if (vendorName && vendorName !== "Karigar") {
-            document.title = `${vendorName} · Karigar Work Portal`;
+        if (vendorName) {
+            document.title = `${vendorName} · ${t.portal_title}`;
         }
-    }, [vendorName]);
+    }, [vendorName, lang, t.portal_title]);
 
     useEffect(() => {
         async function loadData() {
@@ -157,10 +176,8 @@ export default function KarigarPortal() {
     // Toggle Sort by Field
     const handleSortToggle = (field: SortField) => {
         if (sortField === field) {
-            // Toggle direction on every click
             setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
         } else {
-            // Switch field with sensible default direction
             setSortField(field);
             setSortDir(field === "order_date" ? "desc" : "asc");
         }
@@ -174,17 +191,20 @@ export default function KarigarPortal() {
             .filter((item) => {
                 if (searchWords.length === 0) return true;
 
-                // Build a combined searchable text index for this task
+                const translatedName = translateGarmentName(item.item_name || "", "gu");
+                const translatedStage = translateStageName(item.stage_name || "", "gu");
+
                 const searchableText = [
                     item.customer_name || "",
                     item.item_name || "",
+                    translatedName,
                     item.invoice_number || "",
                     `#${item.invoice_number || ""}`,
                     `inv-${item.invoice_number || ""}`,
                     item.stage_name || "",
+                    translatedStage,
                 ].join(" ").toLowerCase();
 
-                // Every typed word must match somewhere in this item
                 return searchWords.every((word) => searchableText.includes(word));
             })
             .sort((a, b) => {
@@ -194,10 +214,8 @@ export default function KarigarPortal() {
                     if (numA !== numB) {
                         return sortDir === "desc" ? numB - numA : numA - numB;
                     }
-                    // Secondary tie-breaker: customer name
                     const custCmp = (a.customer_name || "").localeCompare(b.customer_name || "");
                     if (custCmp !== 0) return sortDir === "desc" ? -custCmp : custCmp;
-                    // Tertiary tie-breaker: item name
                     return (a.item_name || "").localeCompare(b.item_name || "");
                 }
 
@@ -209,7 +227,6 @@ export default function KarigarPortal() {
                         return sortDir === "asc" ? dateA - dateB : dateB - dateA;
                     }
 
-                    // Tie-breaker when delivery dates are identical: sort by invoice number
                     const numA = parseInvoiceNum(a.invoice_number);
                     const numB = parseInvoiceNum(b.invoice_number);
                     if (numA !== numB) {
@@ -226,27 +243,49 @@ export default function KarigarPortal() {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen text-slate-400 text-sm gap-2">
                 <Package className="h-8 w-8 animate-bounce text-slate-300" />
-                <span>Loading assigned tasks...</span>
+                <span>{t.loading}</span>
             </div>
         );
     }
 
     return (
         <div className="min-h-screen bg-slate-50/50 pb-16">
-            {/* Header */}
-            <div className="px-4 py-3.5 border-b sticky top-0 bg-white/95 backdrop-blur-md z-20 shadow-xs">
+            {/* Header with Segmented Gujarati/English Language Switcher */}
+            <div className="px-4 py-3 border-b sticky top-0 bg-white/95 backdrop-blur-md z-20 shadow-xs">
                 <div className="flex items-center justify-between gap-2 max-w-2xl mx-auto">
-                    <div>
-                        <h1 className="text-base font-bold text-slate-900 leading-tight">
+                    <div className="min-w-0">
+                        <h1 className="text-base font-bold text-slate-900 leading-tight truncate">
                             {vendorName}
                         </h1>
                         <p className="text-xs text-slate-500 font-medium">
-                            {filteredAndSortedWork.length} of {work.length} {work.length === 1 ? "task" : "tasks"}
-                            {searchQuery ? " matching" : " assigned"}
+                            {filteredAndSortedWork.length} / {work.length} {t.assigned_tasks}
                         </p>
                     </div>
-                    <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
-                        <Package className="h-4 w-4" />
+
+                    {/* Segmented Dual Language Switcher */}
+                    <div className="flex items-center p-1 bg-slate-100 rounded-full border border-slate-200 shrink-0 shadow-2xs">
+                        <button
+                            type="button"
+                            onClick={() => handleSetLang("gu")}
+                            className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                                lang === "gu"
+                                    ? "bg-purple-900 text-white shadow-xs"
+                                    : "text-slate-600 hover:text-slate-900"
+                            }`}
+                        >
+                            🌐 ગુજરાતી
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleSetLang("en")}
+                            className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                                lang === "en"
+                                    ? "bg-purple-900 text-white shadow-xs"
+                                    : "text-slate-600 hover:text-slate-900"
+                            }`}
+                        >
+                            English
+                        </button>
                     </div>
                 </div>
             </div>
@@ -256,7 +295,7 @@ export default function KarigarPortal() {
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                        placeholder="Search customer, item, #INV..."
+                        placeholder={t.search_placeholder}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9 pr-8 h-9.5 text-sm rounded-xl bg-white border-slate-200/80 shadow-xs focus:bg-white"
@@ -264,7 +303,7 @@ export default function KarigarPortal() {
                     {searchQuery && (
                         <button
                             onClick={() => setSearchQuery("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
                         >
                             <X className="h-4 w-4" />
                         </button>
@@ -273,24 +312,27 @@ export default function KarigarPortal() {
 
                 {/* Column Sort Header (Toggles ASC / DESC on every click) */}
                 <div className="bg-white rounded-xl px-3 py-2 border border-slate-200/80 shadow-xs flex items-center justify-between text-xs text-slate-500 font-medium">
-                    <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Sort:</span>
+                    <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">
+                        {t.sort_by}
+                    </span>
 
                     <div className="flex items-center gap-2">
-                        {/* Order Date / # Toggle */}
+                        {/* Order Date Toggle */}
                         <button
                             type="button"
                             onClick={() => handleSortToggle("order_date")}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${sortField === "order_date"
-                                ? "bg-slate-900 text-white shadow-xs"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                }`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
+                                sortField === "order_date"
+                                    ? "bg-slate-900 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
                         >
                             <span>
                                 {sortField === "order_date"
                                     ? sortDir === "desc"
-                                        ? "Order: Newest"
-                                        : "Order: Oldest"
-                                    : "Order Date"}
+                                    ? `${t.sort_order_date} ↓`
+                                    : `${t.sort_order_date} ↑`
+                                    : t.sort_order_date}
                             </span>
                             {sortField === "order_date" ? (
                                 sortDir === "desc" ? (
@@ -307,17 +349,18 @@ export default function KarigarPortal() {
                         <button
                             type="button"
                             onClick={() => handleSortToggle("delivery_date")}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${sortField === "delivery_date"
-                                ? "bg-slate-900 text-white shadow-xs"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                }`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
+                                sortField === "delivery_date"
+                                    ? "bg-slate-900 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
                         >
                             <span>
                                 {sortField === "delivery_date"
                                     ? sortDir === "asc"
-                                        ? "Delivery: Earliest"
-                                        : "Delivery: Latest"
-                                    : "Delivery Date"}
+                                    ? `${t.sort_delivery_date} ↑`
+                                    : `${t.sort_delivery_date} ↓`
+                                    : t.sort_delivery_date}
                             </span>
                             {sortField === "delivery_date" ? (
                                 sortDir === "asc" ? (
@@ -337,23 +380,27 @@ export default function KarigarPortal() {
                     {filteredAndSortedWork.length === 0 ? (
                         <div className="bg-white rounded-xl p-8 text-center border border-slate-200/80 shadow-xs space-y-2">
                             <Sparkles className="h-8 w-8 text-slate-300 mx-auto" />
-                            <p className="text-sm font-semibold text-slate-700">No matching tasks found</p>
+                            <p className="text-sm font-semibold text-slate-700">
+                                {searchQuery ? t.no_results_title : t.no_tasks_title}
+                            </p>
                             <p className="text-xs text-slate-400">
-                                {searchQuery ? `No tasks match "${searchQuery}"` : "You're all caught up ✨"}
+                                {searchQuery ? t.no_results_desc : t.no_tasks_desc}
                             </p>
                             {searchQuery && (
                                 <button
                                     onClick={() => setSearchQuery("")}
                                     className="text-xs text-blue-600 font-semibold hover:underline mt-2 inline-block cursor-pointer"
                                 >
-                                    Clear search
+                                    {t.clear_search}
                                 </button>
                             )}
                         </div>
                     ) : (
                         filteredAndSortedWork.map((item) => {
                             const isDone = item.stage_name?.toLowerCase().includes("packed") || item.stage_name?.toLowerCase().includes("deliver");
-                            const deliveryStatus = getDeliveryStatus(item.delivery_date, isDone);
+                            const deliveryStatus = getDeliveryStatus(item.delivery_date, isDone, lang);
+                            const translatedStage = translateStageName(item.stage_name, lang);
+                            const translatedItemName = translateGarmentName(item.item_name, lang);
 
                             return (
                                 <div
@@ -376,16 +423,17 @@ export default function KarigarPortal() {
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-start justify-between gap-2">
                                             <h2 className={`text-[15px] font-semibold leading-snug break-words ${isDone ? "text-slate-400 line-through" : "text-slate-900"}`}>
-                                                {item.item_name}
+                                                {translatedItemName}
                                             </h2>
                                             <Badge className={`text-[10px] px-2 py-0.5 h-5 uppercase tracking-wide font-bold border rounded-md shrink-0 ${getStageStyles(item.stage_name)}`}>
-                                                {item.stage_name}
+                                                {translatedStage}
                                             </Badge>
                                         </div>
 
                                         <p className={`text-xs mt-1 font-medium ${isDone ? "text-slate-400" : "text-slate-600"}`}>
-                                            {item.customer_name}
+                                            {translateCustomerName(item.customer_name, lang)}
                                         </p>
+
 
                                         {/* Metadata Footer */}
                                         <div className="flex items-center flex-wrap gap-2 mt-2.5 text-[11px]">
