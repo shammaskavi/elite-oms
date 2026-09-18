@@ -1,13 +1,26 @@
 import React, { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import GenerateMeasurementLinkModal from "@/components/measurements/GenerateMeasurementLinkModal";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Plus, Search, Link as LinkIcon } from "lucide-react";
+import { TableSkeleton } from "@/components/skeletons";
+import { StatusBadge } from "@/components/StatusBadge";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
 export default function Measurements() {
     useDocumentTitle("Measurements");
-    const [measurements, setMeasurements] = useState<any[]>([]);
+    const queryClient = useQueryClient();
     const [selectedMeasurement, setSelectedMeasurement] = useState<any | null>(null);
     const [search, setSearch] = useState("");
     const [filterTemplate, setFilterTemplate] = useState("");
@@ -16,97 +29,100 @@ export default function Measurements() {
 
     const [isEditing, setIsEditing] = useState(false);
     const [editedValues, setEditedValues] = useState<Record<string, any>>({});
-    const [templateFields, setTemplateFields] = useState<any[]>([]);
 
-    useEffect(() => {
-        const fetchProfiles = async () => {
-            const { data } = await supabase
+    const { data: measurements = [], isLoading } = useQuery({
+        queryKey: ["customer-measurements"],
+        queryFn: async () => {
+            const { data, error } = await supabase
                 .from("customer_measurements")
                 .select(`
-          id,
-          name,
-          template_id,
-          created_at,
-          source,
-          status,
-          values,
-          customers(name),
-          measurement_templates(name)
-        `)
+                    id,
+                    name,
+                    template_id,
+                    created_at,
+                    source,
+                    status,
+                    values,
+                    customers(name),
+                    measurement_templates(name)
+                `)
                 .order("created_at", { ascending: false });
 
-            setMeasurements(data || []);
-        };
+            if (error) throw error;
+            return data || [];
+        },
+    });
 
-        fetchProfiles();
-    }, []);
+    const { data: templateFields = [] } = useQuery({
+        queryKey: ["measurement-template-fields", selectedMeasurement?.template_id],
+        queryFn: async () => {
+            if (!selectedMeasurement?.template_id) return [];
+            const { data, error } = await supabase
+                .from("measurement_fields")
+                .select("*")
+                .eq("template_id", selectedMeasurement.template_id);
+
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: !!selectedMeasurement?.template_id,
+    });
 
     useEffect(() => {
         if (selectedMeasurement) {
             setEditedValues(selectedMeasurement.values || {});
             setIsEditing(false);
-
-            const fetchFields = async () => {
-                const { data } = await supabase
-                    .from("measurement_fields")
-                    .select("*")
-                    .eq("template_id", selectedMeasurement.template_id);
-
-                setTemplateFields(data || []);
-            };
-
-            fetchFields();
         }
     }, [selectedMeasurement]);
 
-    const handleVerify = async (id: string) => {
-        const { error } = await supabase
-            .from("customer_measurements")
-            .update({ status: "verified" })
-            .eq("id", id);
-
-        if (error) {
+    const verifyMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase
+                .from("customer_measurements")
+                .update({ status: "verified" })
+                .eq("id", id);
+            if (error) throw error;
+        },
+        onSuccess: (_, id) => {
+            queryClient.invalidateQueries({ queryKey: ["customer-measurements"] });
+            setSelectedMeasurement((prev: any) =>
+                prev?.id === id ? { ...prev, status: "verified" } : prev
+            );
+        },
+        onError: (error) => {
             console.error(error);
             alert("Error verifying measurement");
-            return;
-        }
+        },
+    });
 
-        setMeasurements((prev) =>
-            prev.map((m) =>
-                m.id === id ? { ...m, status: "verified" } : m
-            )
-        );
-
-        setSelectedMeasurement((prev: any) =>
-            prev ? { ...prev, status: "verified" } : prev
-        );
-    };
-
-    const handleSave = async () => {
-        if (!selectedMeasurement) return;
-
-        const { error } = await supabase
-            .from("customer_measurements")
-            .update({ values: editedValues })
-            .eq("id", selectedMeasurement.id);
-
-        if (error) {
+    const saveMutation = useMutation({
+        mutationFn: async ({ id, values }: { id: string; values: Record<string, any> }) => {
+            const { error } = await supabase
+                .from("customer_measurements")
+                .update({ values })
+                .eq("id", id);
+            if (error) throw error;
+        },
+        onSuccess: (_, { id, values }) => {
+            queryClient.invalidateQueries({ queryKey: ["customer-measurements"] });
+            setSelectedMeasurement((prev: any) =>
+                prev?.id === id ? { ...prev, values } : prev
+            );
+            setIsEditing(false);
+        },
+        onError: (error) => {
             console.error(error);
             alert("Error saving changes");
-            return;
-        }
+        },
+    });
 
-        setMeasurements((prev) =>
-            prev.map((m) =>
-                m.id === selectedMeasurement.id ? { ...m, values: editedValues } : m
-            )
-        );
+    const handleVerify = (id: string) => {
+        verifyMutation.mutate(id);
+    };
 
-        setSelectedMeasurement((prev: any) =>
-            prev ? { ...prev, values: editedValues } : prev
-        );
-
-        setIsEditing(false);
+    const handleSave = () => {
+        if (!selectedMeasurement) return;
+        saveMutation.mutate({ id: selectedMeasurement.id, values: editedValues });
     };
 
     const handleCancelEdit = () => {
@@ -170,7 +186,7 @@ export default function Measurements() {
     });
 
     return (
-        <div className="p-8">
+        <div className="space-y-6">
             <style>
                 {`
             @media print {
@@ -193,107 +209,114 @@ export default function Measurements() {
             </style>
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-semibold">Measurements</h1>
-                    <p className="text-sm text-gray-500">
-                        Manage and reuse customer measurements
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground">Measurements</h1>
+                    <p className="text-sm text-muted-foreground">
+                        Manage, verify, and reuse bespoke customer measurements
                     </p>
                 </div>
 
-                <div className="flex gap-2">
-                    <button
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
                         onClick={() => setOpenGenerateLink(true)}
-                        className="border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50"
+                        className="gap-1.5"
                     >
-                        Generate Link
-                    </button>
+                        <LinkIcon className="w-4 h-4" /> Generate Link
+                    </Button>
 
                     <Button
                         onClick={() => navigate("/measurements/new")}
+                        className="gap-1.5"
                     >
-                        + Add Measurement
+                        <Plus className="w-4 h-4" /> Add Measurement
                     </Button>
                 </div>
             </div>
 
-            {/* Search & Filter */}
-            <div className="flex items-center gap-3 mb-6">
-                <input
-                    type="text"
-                    placeholder="Search measurements..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="border border-gray-200 rounded-md px-3 py-2 w-full"
-                />
+            {/* Search & Filter Toolbar */}
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+                <div className="relative flex-1 w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search measurements by customer..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-9"
+                    />
+                </div>
 
-                <select
-                    value={filterTemplate}
-                    onChange={(e) => setFilterTemplate(e.target.value)}
-                    className="border border-gray-200 rounded-md px-3 py-2"
-                >
-                    <option value="">All Templates</option>
-                    {[...new Set(measurements.map((m) => m.measurement_templates?.name))].map(
-                        (t) => (
-                            <option key={t} value={t}>
-                                {t}
-                            </option>
-                        )
-                    )}
-                </select>
+                <div className="w-full sm:w-[220px]">
+                    <Select value={filterTemplate || "all"} onValueChange={(val) => setFilterTemplate(val === "all" ? "" : val)}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="All Templates" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Templates</SelectItem>
+                            {Array.from(new Set(measurements.map((m: any) => m.measurement_templates?.name).filter(Boolean))).map(
+                                (t: any) => (
+                                    <SelectItem key={t} value={t}>
+                                        {t}
+                                    </SelectItem>
+                                )
+                            )}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             {/* Table-style list */}
-            <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
-                <div className="grid grid-cols-4 px-4 py-3 text-xs font-semibold text-gray-500 border-b">
-                    <span>Customer</span>
-                    <span>Template</span>
-                    <span>Date</span>
-                    <span>Status</span>
-                </div>
-
-                {filteredMeasurements.map((m) => (
-                    <div
-                        key={m.id}
-                        onClick={() => setSelectedMeasurement(m)}
-                        className="grid grid-cols-4 px-4 py-4 text-sm border-b cursor-pointer hover:bg-gray-50"
-                    >
-                        <div>
-                            <p className="font-medium text-gray-900">
-                                {m.customers?.name}
-                            </p>
-                            {m.name && (
-                                <p className="text-xs text-gray-500">{m.name}</p>
-                            )}
-                        </div>
-
-                        <div className="text-gray-600">
-                            {m.measurement_templates?.name}
-                        </div>
-
-                        <div className="text-gray-500">
-                            {new Date(m.created_at).toLocaleDateString()}
-                        </div>
-
-                        <div>
-                            <span
-                                className={`text-xs px-2 py-1 rounded ${m.status === "verified"
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-yellow-100 text-yellow-700"
-                                    }`}
-                            >
-                                {m.status}
-                            </span>
-                        </div>
-                    </div>
-                ))}
-
-                {filteredMeasurements.length === 0 && (
+            <Card className="overflow-hidden p-0 shadow-sm">
+                {isLoading ? (
+                    <TableSkeleton
+                        columns={["Customer", "Template", "Date", "Status"]}
+                        rows={6}
+                    />
+                ) : filteredMeasurements.length === 0 ? (
                     <div className="text-center text-gray-500 py-10">
                         No measurements found
                     </div>
+                ) : (
+                    <>
+                        <div className="grid grid-cols-4 px-4 py-3 text-xs font-semibold text-gray-500 border-b bg-muted/20">
+                            <span>Customer</span>
+                            <span>Template</span>
+                            <span>Date</span>
+                            <span>Status</span>
+                        </div>
+
+                        {filteredMeasurements.map((m) => (
+                            <div
+                                key={m.id}
+                                onClick={() => setSelectedMeasurement(m)}
+                                className="grid grid-cols-4 px-4 py-4 text-sm border-b cursor-pointer hover:bg-gray-50 items-center transition-colors"
+                            >
+                                <div>
+                                    <p className="font-medium text-gray-900">
+                                        {m.customers?.name}
+                                    </p>
+                                    {m.name && (
+                                        <p className="text-xs text-gray-500">{m.name}</p>
+                                    )}
+                                </div>
+
+                                <div className="text-gray-600">
+                                    {m.measurement_templates?.name}
+                                </div>
+
+                                <div className="text-gray-500 text-xs">
+                                    {new Date(m.created_at).toLocaleDateString()}
+                                </div>
+
+                                <div>
+                                    <StatusBadge status={m.status} />
+                                </div>
+                            </div>
+                        ))}
+                    </>
                 )}
-            </div>
+            </Card>
 
             {selectedMeasurement && (
                 <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">

@@ -10,7 +10,7 @@ import {
     TableHeader,
     TableHead,
 } from "@/components/ui/table";
-import { Pulsar } from "ldrs/react";
+import { TableSkeleton } from "@/components/skeletons";
 
 // --- Helpers ---
 
@@ -62,12 +62,14 @@ export default function OrdersInvoiceTable({
     invoiceSortKey,
     invoiceSortDirection,
     onChangeSort,
+    isLoading = false,
 }: {
     groupedInvoices: any[];
     onOrderClick: (id: number) => void;
     invoiceSortKey: "invoice" | "delivery" | "amount";
     invoiceSortDirection: "asc" | "desc";
     onChangeSort: (key: "invoice" | "delivery" | "amount") => void;
+    isLoading?: boolean;
 }) {
     const renderSortIcon = (key: "invoice" | "delivery" | "amount") => {
         if (key !== invoiceSortKey) return null;
@@ -79,13 +81,25 @@ export default function OrdersInvoiceTable({
         );
     };
 
+    if (isLoading) {
+        return (
+            <Card className="overflow-hidden shadow-sm">
+                <TableSkeleton
+                    columns={["Invoice #", "Customer", "Order Item", "Stage", "Vendor", "Delivery", "Total"]}
+                    rows={8}
+                />
+            </Card>
+        );
+    }
+
     if (!groupedInvoices.length) {
-        return <Card className="p-8 text-center text-muted-foreground">
-
-            <h1 className="mb-10">Loading Orders</h1>
-            <Pulsar size="200" speed="5" color="pink" />
-
-        </Card>;
+        return (
+            <Card className="p-12 text-center text-muted-foreground border-dashed">
+                <ShoppingBag className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
+                <h3 className="font-semibold text-foreground text-base">No orders found</h3>
+                <p className="text-sm text-muted-foreground mt-1">No orders match your search or active filters.</p>
+            </Card>
+        );
     }
 
 

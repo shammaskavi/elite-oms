@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,69 +30,13 @@ import {
   Barcode
 } from "lucide-react";
 import { PrinterSetupDialog } from "@/components/PrinterSetupDialog";
-import { buildShelfLabelJob, ShelfLabel } from "@/lib/tspl";
+import { buildLocationShelfLabelJob, ShelfLabel } from "@/lib/tspl";
 import { loadPrinterSettings, sendTsplJob, PrintAgentOfflineError } from "@/lib/labelPrint";
-
-// Code 39 character map for location barcodes
-const CODE39_MAP: Record<string, string> = {
-  '0': '101001101101', '1': '110100101011', '2': '101100101011', '3': '110110010101',
-  '4': '101001101011', '5': '110100110101', '6': '101100110101', '7': '101001011011',
-  '8': '110100101101', '9': '101100101101', 'A': '110101001011', 'B': '101101001011',
-  'C': '110110100101', 'D': '101011001011', 'E': '110101100101', 'F': '101101100101',
-  'G': '101010011011', 'H': '110101001101', 'I': '101101001101', 'J': '101011001101',
-  'K': '110101010011', 'L': '101101010011', 'M': '110110101001', 'N': '101011010011',
-  'O': '110101101001', 'P': '101101101001', 'Q': '101010110011', 'R': '110101011001',
-  'S': '101101011001', 'T': '101011011001', 'U': '110010101011', 'V': '100110101011',
-  'W': '110011010101', 'X': '100101101011', 'Y': '110010110101', 'Z': '100110110101',
-  '-': '100101011011', '.': '110010101101', ' ': '100110101101', '*': '100101101101',
-  '$': '100100100101', '/': '100100101001', '+': '100101001001', '%': '101001001001'
-};
-
-function generateCode39Svg(code: string): React.ReactNode {
-  const cleanCode = (code || "").trim().toUpperCase().replace(/[^0-9A-Z\-.\s\$/+*%]/g, "");
-  const normalized = `*${cleanCode}*`;
-  let bitString = "";
-  for (let i = 0; i < normalized.length; i++) {
-    const char = normalized[i];
-    const bits = CODE39_MAP[char] || CODE39_MAP["*"];
-    bitString += bits + "0";
-  }
-
-  const width = bitString.length * 1;
-  const height = 22;
-
-  return (
-    <svg 
-      width="100%" 
-      height="22" 
-      viewBox={`0 0 ${width} ${height}`} 
-      className="w-full h-[22px] mt-0.5 select-none"
-      shapeRendering="crispEdges"
-    >
-      {bitString.split("").map((bit, idx) => {
-        if (bit === "1") {
-          return (
-            <rect 
-              key={idx} 
-              x={idx * 1} 
-              y="0" 
-              width="1" 
-              height={height} 
-              fill="black" 
-              shapeRendering="crispEdges"
-            />
-          );
-        }
-        return null;
-      })}
-    </svg>
-  );
-}
+import { BarcodeSvg } from "@/components/BarcodeSvg";
 
 export default function LocationsAdmin() {
-  const [locations, setLocations] = useState<any[]>([]);
-  const [role, setRole] = useState<string | null>(null);
-  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { user, isAdmin, role } = useAuth();
   
   // Form fields
   const [code, setCode] = useState("");
@@ -106,28 +51,21 @@ export default function LocationsAdmin() {
   
   const navigate = useNavigate();
 
-  const loadLocations = async () => {
-    const { data } = await supabase
-      .from("locations")
-      .select("*")
-      .order("label", { ascending: true });
-    if (data) setLocations(data);
+  const { data: locations = [], isLoading } = useQuery({
+    queryKey: ["locations"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("locations")
+        .select("*")
+        .order("label", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const loadLocations = () => {
+    queryClient.invalidateQueries({ queryKey: ["locations"] });
   };
-
-  useEffect(() => {
-    loadLocations();
-
-    const getRole = async () => {
-      if (!user) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (data) setRole(data.role);
-    };
-    getRole();
-  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -299,7 +237,7 @@ export default function LocationsAdmin() {
   };
 
   return (
-    <div className="container max-w-4xl py-6 space-y-6">
+    <div className="space-y-6">
       
       {/* Location Barcode printer CSS - prints a single 38mm x 25mm shelf tag */}
       <style>
@@ -347,8 +285,8 @@ export default function LocationsAdmin() {
           <div className="text-[8px] font-black uppercase truncate mt-0.5">
             {printTarget.label}
           </div>
-          <div className="w-full flex justify-center py-0.5">
-            {generateCode39Svg(printTarget.barcode)}
+          <div className="w-full flex justify-center py-0.5 text-black">
+            <BarcodeSvg code={printTarget.barcode} height={20} />
           </div>
           <div className="text-[5.5px] font-bold">
             {printTarget.barcode} ({printTarget.code})
@@ -356,13 +294,10 @@ export default function LocationsAdmin() {
         </div>
       )}
 
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Showroom Shelf layout</h1>
-          <p className="text-sm text-muted-foreground">Manage nested showroom zones, storage racks, and shelf layouts</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Showroom Shelf Layout</h1>
+          <p className="text-sm text-muted-foreground">Manage showroom zones, storage racks, and print shelf location barcodes</p>
         </div>
       </div>
 

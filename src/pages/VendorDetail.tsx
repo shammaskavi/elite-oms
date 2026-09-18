@@ -108,7 +108,6 @@ export default function VendorDetail() {
             id,
             invoice_number,
             date,
-            raw_payload,
             customers (
               id,
               name,
@@ -131,6 +130,7 @@ export default function VendorDetail() {
       return data || [];
     },
     enabled: !!id,
+    staleTime: 60 * 1000,
   });
 
   // Split into Active Queue (strictly currently sitting with this artisan) vs Completed History
@@ -401,7 +401,7 @@ export default function VendorDetail() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       {/* Top Breadcrumb / Back Button */}
       <div className="flex items-center gap-3">
         <Button

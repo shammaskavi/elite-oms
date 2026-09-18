@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,15 +10,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { 
-  ArrowLeft, 
-  Barcode, 
-  Search, 
-  Calendar, 
-  Tag, 
-  Check, 
-  Plus, 
-  Loader2, 
+import {
+  ArrowLeft,
+  Barcode,
+  Search,
+  Calendar,
+  Tag,
+  Check,
+  Plus,
+  Loader2,
   Printer,
   Volume2,
   Zap,
@@ -26,111 +27,64 @@ import {
 import { PrinterSetupDialog } from "@/components/PrinterSetupDialog";
 import { buildGarmentLabelJob, GarmentLabel } from "@/lib/tspl";
 import { loadPrinterSettings, sendTsplJob, PrintAgentOfflineError } from "@/lib/labelPrint";
-
-// Code 39 Barcode character mapping for native SVG drawing
-const CODE39_MAP: Record<string, string> = {
-  '0': '101001101101', '1': '110100101011', '2': '101100101011', '3': '110110010101',
-  '4': '101001101011', '5': '110100110101', '6': '101100110101', '7': '101001011011',
-  '8': '110100101101', '9': '101100101101', 'A': '110101001011', 'B': '101101001011',
-  'C': '110110100101', 'D': '101011001011', 'E': '110101100101', 'F': '101101100101',
-  'G': '101010011011', 'H': '110101001101', 'I': '101101001101', 'J': '101011001101',
-  'K': '110101010011', 'L': '101101010011', 'M': '110110101001', 'N': '101011010011',
-  'O': '110101101001', 'P': '101101101001', 'Q': '101010110011', 'R': '110101011001',
-  'S': '101101011001', 'T': '101011011001', 'U': '110010101011', 'V': '100110101011',
-  'W': '110011010101', 'X': '100101101011', 'Y': '110010110101', 'Z': '100110110101',
-  '-': '100101011011', '.': '110010101101', ' ': '100110101101', '*': '100101101101',
-  '$': '100100100101', '/': '100100101001', '+': '100101001001', '%': '101001001001'
-};
-
-function generateCode39Svg(code: string): React.ReactNode {
-  const cleanCode = (code || "").trim().toUpperCase().replace(/[^0-9A-Z\-.\s\$/+*%]/g, "");
-  const normalized = `*${cleanCode}*`;
-  let bitString = "";
-  for (let i = 0; i < normalized.length; i++) {
-    const char = normalized[i];
-    const bits = CODE39_MAP[char] || CODE39_MAP["*"];
-    bitString += bits + "0";
-  }
-
-  const width = bitString.length * 1;
-  const height = 22;
-
-  return (
-    <svg 
-      width="100%" 
-      height="22" 
-      viewBox={`0 0 ${width} ${height}`} 
-      className="w-full h-[22px] mt-0.5 select-none"
-      shapeRendering="crispEdges"
-    >
-      {bitString.split("").map((bit, idx) => {
-        if (bit === "1") {
-          return (
-            <rect 
-              key={idx} 
-              x={idx * 1} 
-              y="0" 
-              width="1" 
-              height={height} 
-              fill="black" 
-              shapeRendering="crispEdges"
-            />
-          );
-        }
-        return null;
-      })}
-    </svg>
-  );
-}
+import { BarcodeSvg } from "@/components/BarcodeSvg";
 
 export default function Receive() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
-  
+
   const [comboboxOpen, setComboboxOpen] = useState(false);
   const [locComboboxOpen, setLocComboboxOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [locationSearch, setLocationSearch] = useState("");
-  
+
   const [quantity, setQuantity] = useState("1");
   const [costPrice, setCostPrice] = useState("");
   const [mrp, setMrp] = useState("");
   const [dateReceived, setDateReceived] = useState(new Date().toISOString().split("T")[0]);
   const [notes, setNotes] = useState("");
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [receivedUnits, setReceivedUnits] = useState<any[]>([]);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
   const [sendingToPrinter, setSendingToPrinter] = useState(false);
-  
+
   const navigate = useNavigate();
 
-  // Load variant products and locations
-  useEffect(() => {
-    const loadData = async () => {
-      const { data: prodData } = await supabase
+  // Load variant products and locations using React Query for instant cache
+  const { data: products = [] } = useQuery({
+    queryKey: ["products"],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from("products")
         .select("*")
         .order("name", { ascending: true });
-      if (prodData) setProducts(prodData);
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
-      const { data: locData } = await supabase
+  const { data: locations = [] } = useQuery({
+    queryKey: ["locations"],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from("locations")
         .select("*")
         .eq("is_active", true)
         .order("label", { ascending: true });
-      if (locData) {
-        setLocations(locData);
-        // Default select INTAKE location if exists
-        const intake = locData.find(l => l.code === "INTAKE");
-        if (intake) setSelectedLocation(intake);
-      }
-    };
-    loadData();
-  }, []);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Default select INTAKE location if not already selected
+  useEffect(() => {
+    if (!selectedLocation && locations.length > 0) {
+      const intake = locations.find((l: any) => l.code === "INTAKE");
+      if (intake) setSelectedLocation(intake);
+    }
+  }, [locations, selectedLocation]);
 
   // Update cost and MRP from product variant automatically
   useEffect(() => {
@@ -184,15 +138,15 @@ export default function Receive() {
     const baseCode = selectedProduct.sku || selectedProduct.company_barcode || `SPE-${selectedProduct.id.slice(0, 8).toUpperCase()}`;
 
     try {
-      const source = (selectedProduct.supplier_name || "").toLowerCase().match(/(workshop|karigar|in-house)/) 
-        ? "in_house" 
+      const source = (selectedProduct.supplier_name || "").toLowerCase().match(/(workshop|karigar|in-house)/)
+        ? "in_house"
         : "supplier";
 
       // 1. Generate unit codes & query existing to prevent clashes
       for (let i = 1; i <= qty; i++) {
         // If qty is 1 and no existing stock, reuse raw barcode, else suffix
         let generatedCode = baseCode;
-        
+
         // Check variant stock to calculate index offset if suffix is required
         const currentStockCount = selectedProduct.stock || 0;
         if (qty > 1 || currentStockCount > 0) {
@@ -230,7 +184,7 @@ export default function Receive() {
               .insert({ ...unit, unit_code: alternateCode })
               .select()
               .maybeSingle();
-            
+
             if (altError) throw altError;
             if (altData) createdRows.push(altData);
           } else {
@@ -257,7 +211,7 @@ export default function Receive() {
       }
 
       toast.success(`Successfully registered ${createdRows.length} units!`);
-      
+
       // Update local product variant cache reference
       setSelectedProduct(prev => ({
         ...prev,
@@ -315,7 +269,7 @@ export default function Receive() {
   };
 
   return (
-    <div className="container max-w-4xl py-6 space-y-6">
+    <div className="space-y-6">
       <PrinterSetupDialog open={printerSetupOpen} onOpenChange={setPrinterSetupOpen} />
 
       {/* Dynamic Printing CSS for 38mm x 25mm thermal label tags */}
@@ -376,7 +330,7 @@ export default function Receive() {
                 {selectedProduct?.category || "SPE"}
               </span>
             </div>
-            
+
             {/* Row 2: Description Detail */}
             <div className="text-[5.5px] truncate mt-0.5 font-sans uppercase">
               {selectedProduct?.name || "Boutique Collection"}
@@ -399,8 +353,8 @@ export default function Receive() {
             </div>
 
             {/* Row 6: Barcode Render */}
-            <div className="w-full flex justify-center py-0.5">
-              {generateCode39Svg(unit.unit_code)}
+            <div className="w-full flex justify-center py-0.5 text-black">
+              <BarcodeSvg code={unit.unit_code} height={20} />
             </div>
 
             {/* Row 7: Barcode Text / Vendor Code */}
@@ -412,18 +366,15 @@ export default function Receive() {
         ))}
       </div>
 
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Stock Intake & Intake</h1>
-          <p className="text-sm text-muted-foreground">Receive supplier delivery batches and generate printed labels</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Stock Intake & Receiving</h1>
+          <p className="text-sm text-muted-foreground">Receive supplier delivery batches, assign showroom storage racks, and print barcode tags</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
+
         {/* Intake configuration Form */}
         <Card className="md:col-span-2 shadow">
           <CardHeader>
@@ -432,9 +383,9 @@ export default function Receive() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleRegisterIntake} className="space-y-4">
-              
+
               <div className="grid grid-cols-2 gap-4">
-                
+
                 {/* Product Variant Selector */}
                 <div className="col-span-2 space-y-1">
                   <Label className="text-xs font-semibold">Select Catalog Variant *</Label>
@@ -456,16 +407,16 @@ export default function Receive() {
                     </PopoverTrigger>
                     <PopoverContent className="w-[450px] p-0" align="start">
                       <Command>
-                        <CommandInput 
-                          placeholder="Search product variant by name or SKU..." 
+                        <CommandInput
+                          placeholder="Search product variant by name or SKU..."
                           value={productSearch}
                           onValueChange={setProductSearch}
                         />
                         <CommandEmpty>No matching product variant found.</CommandEmpty>
                         <CommandGroup>
                           <CommandList className="max-h-[220px]">
-                            {products.filter(p => 
-                              p.name?.toLowerCase().includes(productSearch.toLowerCase()) || 
+                            {products.filter(p =>
+                              p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
                               p.sku?.toLowerCase().includes(productSearch.toLowerCase())
                             ).map((prod) => (
                               <CommandItem
@@ -508,16 +459,16 @@ export default function Receive() {
                     </PopoverTrigger>
                     <PopoverContent className="w-[300px] p-0" align="start">
                       <Command>
-                        <CommandInput 
-                          placeholder="Search shelf locations..." 
+                        <CommandInput
+                          placeholder="Search shelf locations..."
                           value={locationSearch}
                           onValueChange={setLocationSearch}
                         />
                         <CommandEmpty>No matching locations.</CommandEmpty>
                         <CommandGroup>
                           <CommandList className="max-h-[180px]">
-                            {locations.filter(l => 
-                              l.label?.toLowerCase().includes(locationSearch.toLowerCase()) || 
+                            {locations.filter(l =>
+                              l.label?.toLowerCase().includes(locationSearch.toLowerCase()) ||
                               l.code?.toLowerCase().includes(locationSearch.toLowerCase())
                             ).map((loc) => (
                               <CommandItem

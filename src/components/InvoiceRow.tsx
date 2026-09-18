@@ -6,6 +6,8 @@ import { format } from "date-fns";
 import { Button } from "./ui/button";
 import { Eye, Trash2 } from "lucide-react";
 
+import { StatusBadge } from "./StatusBadge";
+
 export function InvoiceRow({
     invoice,
     onRowClick,
@@ -90,18 +92,13 @@ export function InvoiceRow({
             </TableCell>
 
             <TableCell>
-                {
-                    isSettled ? (
-                        <Badge variant="success">Settled</Badge>
-                    ) : isDraft ? (
-                        <Badge variant="secondary">Draft</Badge>
-                    ) : isPaid ? (
-                        <Badge variant="success">Paid</Badge>
-                    ) : isPartial ? (
-                        <Badge variant="info">Partial</Badge>
-                    ) : (
-                        <Badge variant="warning">Unpaid</Badge>
-                    )}
+                {isSettled ? (
+                    <StatusBadge type="payment" status="paid" label="Settled" />
+                ) : isDraft ? (
+                    <StatusBadge type="payment" status="draft" label="Draft" />
+                ) : (
+                    <StatusBadge type="payment" status={rawStatus || "unpaid"} />
+                )}
             </TableCell>
 
             <TableCell onClick={(e) => e.stopPropagation()}>

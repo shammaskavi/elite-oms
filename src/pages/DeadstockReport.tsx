@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -26,47 +27,39 @@ import {
   DollarSign, 
   Archive, 
   RefreshCw,
-  Search,
+  Search, 
   MapPin
 } from "lucide-react";
 
 export default function DeadstockReport() {
-  const [deadstockUnits, setDeadstockUnits] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [bucketFilter, setBucketFilter] = useState("all");
-  const [categories, setCategories] = useState<string[]>([]);
   
   const navigate = useNavigate();
 
-  const loadDeadstockData = async () => {
-    setIsLoading(true);
-    try {
-      // Fetch all sellable units via deadstock view
+  const { data: deadstockUnits = [], isLoading, refetch } = useQuery({
+    queryKey: ["deadstock-units"],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("v_stock_units_deadstock")
         .select("*");
 
-      if (error) throw error;
-
-      if (data) {
-        setDeadstockUnits(data);
-        
-        // Extract unique categories
-        const cats = Array.from(new Set(data.map((u: any) => u.product_category).filter(Boolean))) as string[];
-        setCategories(cats);
+      if (error) {
+        toast.error("Failed to load deadstock data");
+        throw error;
       }
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Failed to load deadstock data");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    loadDeadstockData();
-  }, []);
+      return data || [];
+    },
+  });
+
+  const categories = useMemo(() => {
+    return Array.from(new Set(deadstockUnits.map((u: any) => u.product_category).filter(Boolean))) as string[];
+  }, [deadstockUnits]);
+
+  const loadDeadstockData = () => {
+    refetch();
+  };
 
   // Filter logic
   const filteredUnits = deadstockUnits.filter((unit) => {
@@ -150,20 +143,15 @@ export default function DeadstockReport() {
   };
 
   return (
-    <div className="container max-w-6xl py-6 space-y-6">
+    <div className="space-y-6">
       
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Deadstock & Aging Report</h1>
-            <p className="text-sm text-muted-foreground">Monitor slow-moving showroom units and export clearance pull lists</p>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Deadstock & Aging Report</h1>
+          <p className="text-sm text-muted-foreground">Monitor slow-moving showroom inventory and export clearance pull lists</p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Button variant="outline" onClick={loadDeadstockData} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading && "animate-spin"}`} />
             Refresh

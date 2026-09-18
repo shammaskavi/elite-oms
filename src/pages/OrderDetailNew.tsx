@@ -203,9 +203,9 @@ export default function OrderDetailNew() {
         enabled: !!id,
     });
 
-    // --- NEW: fetch canonical workflow stages from DB (ordered by order_index) ---
+    // --- Fetch canonical workflow stages from DB (ordered by order_index) ---
     const { data: stagesList } = useQuery({
-        queryKey: ["workflow-stages"],
+        queryKey: ["stages"],
         queryFn: async () => {
             const { data, error } = await (supabase as any)
                 .from("stages")
@@ -214,6 +214,7 @@ export default function OrderDetailNew() {
             if (error) throw error;
             return data || [];
         },
+        staleTime: 60 * 1000,
     });
 
     // Real-time subscriptions (same as before)
@@ -400,7 +401,7 @@ export default function OrderDetailNew() {
     const mainOrder = orders?.[0];
 
     return (
-        <div className="space-y-6 p-3 sm:p-6">
+        <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <Button
                     variant="ghost"

@@ -137,21 +137,16 @@ export default function CrmDashboard() {
   }, [customerSearchQuery, realCustomers]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <CrmSubNav />
 
       {/* ================= Header with Quick Search ================= */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Clienteling & Relationship Desk
-            </h1>
-            <Badge className="bg-purple-100 text-purple-900 border-purple-300 text-[10px] font-bold uppercase">
-              SPE CRM
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Clienteling & Relationship Desk
+          </h1>
+          <p className="text-sm text-muted-foreground">
             Daily relationship tasks, clienteling follow-ups, and upcoming boutique celebrations
           </p>
         </div>
@@ -196,48 +191,48 @@ export default function CrmDashboard() {
         {/* Overdue Follow-ups */}
         <Card className={`shadow-2xs ${stats.overdueTasksCount > 0 ? "border-red-200 bg-red-50/20" : ""}`}>
           <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3.5 px-4">
-            <CardTitle className="text-xs font-semibold text-slate-700">Overdue Follow-ups</CardTitle>
+            <CardTitle className="text-xs font-semibold text-foreground">Overdue Follow-ups</CardTitle>
             <AlertCircle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent className="px-4 pb-3.5">
             <div className="text-2xl font-bold text-red-600">{stats.overdueTasksCount}</div>
-            <p className="text-[11px] text-slate-500 mt-0.5">Require immediate outreach</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Require immediate outreach</p>
           </CardContent>
         </Card>
 
         {/* Due Today Follow-ups */}
         <Card className="shadow-2xs">
           <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3.5 px-4">
-            <CardTitle className="text-xs font-semibold text-slate-700">Due Today</CardTitle>
+            <CardTitle className="text-xs font-semibold text-foreground">Due Today</CardTitle>
             <Clock className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent className="px-4 pb-3.5">
             <div className="text-2xl font-bold text-amber-600">{stats.dueTodayTasksCount}</div>
-            <p className="text-[11px] text-slate-500 mt-0.5">Scheduled for today</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Scheduled for today</p>
           </CardContent>
         </Card>
 
         {/* Unanswered WhatsApp */}
         <Card className={`shadow-2xs ${stats.unansweredConvosCount > 0 ? "border-emerald-200 bg-emerald-50/20" : ""}`}>
           <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3.5 px-4">
-            <CardTitle className="text-xs font-semibold text-slate-700">Unanswered WhatsApp</CardTitle>
+            <CardTitle className="text-xs font-semibold text-foreground">Unanswered WhatsApp</CardTitle>
             <MessageSquare className="h-4 w-4 text-emerald-600" />
           </CardHeader>
           <CardContent className="px-4 pb-3.5">
             <div className="text-2xl font-bold text-emerald-700">{stats.unansweredConvosCount}</div>
-            <p className="text-[11px] text-slate-500 mt-0.5">Waiting for boutique response</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Waiting for boutique response</p>
           </CardContent>
         </Card>
 
         {/* Active Prospects / Leads */}
         <Card className="shadow-2xs">
           <CardHeader className="flex flex-row items-center justify-between pb-1 pt-3.5 px-4">
-            <CardTitle className="text-xs font-semibold text-slate-700">Active Leads</CardTitle>
+            <CardTitle className="text-xs font-semibold text-foreground">Active Leads</CardTitle>
             <Users className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent className="px-4 pb-3.5">
             <div className="text-2xl font-bold text-purple-700">{stats.activeLeadsCount}</div>
-            <p className="text-[11px] text-slate-500 mt-0.5">Inquiry & trial pipeline</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Inquiry & trial pipeline</p>
           </CardContent>
         </Card>
       </div>

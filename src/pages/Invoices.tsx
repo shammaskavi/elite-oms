@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { InvoiceView } from "@/components/InvoiceView";
 import { derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 import { pdf } from "@react-pdf/renderer";
@@ -288,22 +289,30 @@ export default function Invoices() {
   //   navigate(location.pathname, { replace: true });
   // }, [location.state, invoices]);
 
-  const { data: customers } = useQuery({
+  const { data: customers = [] } = useQuery({
     queryKey: ["customers"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).from("customers").select("*");
+      const { data, error } = await (supabase as any)
+        .from("customers")
+        .select("id, name, phone, email, address")
+        .order("name", { ascending: true });
       if (error) throw error;
-      return data;
+      return data || [];
     },
+    staleTime: 60 * 1000,
   });
 
-  const { data: products } = useQuery({
+  const { data: products = [] } = useQuery({
     queryKey: ["products"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).from("products").select("*");
+      const { data, error } = await (supabase as any)
+        .from("products")
+        .select("id, name, sku, price, purchase_price, category")
+        .order("name", { ascending: true });
       if (error) throw error;
-      return data;
+      return data || [];
     },
+    staleTime: 60 * 1000,
   });
 
   const generateAndStoreInvoicePDF = async (invoice: any) => {
@@ -1650,9 +1659,17 @@ export default function Invoices() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
-              </TableRow>
+              Array.from({ length: 6 }).map((_, rowIdx) => (
+                <TableRow key={rowIdx} className="hover:bg-transparent">
+                  <TableCell className="py-3.5"><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell className="py-3.5"><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell className="py-3.5"><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell className="py-3.5"><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell className="py-3.5"><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell className="py-3.5"><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+                  <TableCell className="py-3.5"><Skeleton className="h-8 w-20 rounded-md" /></TableCell>
+                </TableRow>
+              ))
             ) : filteredInvoices?.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8">No invoices found</TableCell>

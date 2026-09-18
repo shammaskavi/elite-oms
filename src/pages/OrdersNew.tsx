@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Package, TrendingUp, CheckCircle2, AlertCircle, Search, LayoutGrid, List, Table2, AlertTriangle, CalendarDays, SlidersHorizontal } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { startOfWeek, addDays } from "date-fns";
 import {
   DropdownMenu,
@@ -1204,8 +1205,9 @@ export default function OrdersNew() {
 
                   <div className="space-y-3 max-h-[600px] overflow-y-auto">
                     {isLoading ? (
-                      <div className="text-sm text-muted-foreground text-center py-4">
-                        Loading...
+                      <div className="space-y-2 p-1">
+                        <Skeleton className="h-20 w-full rounded-lg" />
+                        <Skeleton className="h-20 w-full rounded-lg" />
                       </div>
                     ) : stageOrders.length === 0 ? (
                       <div className="text-sm text-muted-foreground text-center py-4">
@@ -1380,6 +1382,7 @@ export default function OrdersNew() {
           invoiceSortKey={invoiceSortKey}
           invoiceSortDirection={invoiceSortDirection}
           onChangeSort={handleInvoiceSortChange}
+          isLoading={isLoading}
           onOrderClick={(orderId) => {
             sessionStorage.setItem(
               "ordersUIState",

@@ -75,8 +75,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { LoadingState, EmptyState, ErrorState } from "@/components/states";
+import { TableSkeleton } from "@/components/skeletons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -93,63 +93,7 @@ import { cn } from "@/lib/utils";
 import { PrinterSetupDialog } from "@/components/PrinterSetupDialog";
 import { buildGarmentLabelJob, findUnscannableCodes, GarmentLabel } from "@/lib/tspl";
 import { loadPrinterSettings, sendTsplJob, PrintAgentOfflineError } from "@/lib/labelPrint";
-
-// Code 39 Barcode character mapping for native SVG drawing
-const CODE39_MAP: Record<string, string> = {
-  '0': '101001101101', '1': '110100101011', '2': '101100101011', '3': '110110010101',
-  '4': '101001101011', '5': '110100110101', '6': '101100110101', '7': '101001011011',
-  '8': '110100101101', '9': '101100101101', 'A': '110101001011', 'B': '101101001011',
-  'C': '110110100101', 'D': '101011001011', 'E': '110101100101', 'F': '101101100101',
-  'G': '101010011011', 'H': '110101001101', 'I': '101101001101', 'J': '101011001101',
-  'K': '110101010011', 'L': '101101010011', 'M': '110110101001', 'N': '101011010011',
-  'O': '110101101001', 'P': '101101101001', 'Q': '101010110011', 'R': '110101011001',
-  'S': '101101011001', 'T': '101011011001', 'U': '110010101011', 'V': '100110101011',
-  'W': '110011010101', 'X': '100101101011', 'Y': '110010110101', 'Z': '100110110101',
-  '-': '100101011011', '.': '110010101101', ' ': '100110101101', '*': '100101101101',
-  '$': '100100100101', '/': '100100101001', '+': '100101001001', '%': '101001001001'
-};
-
-function generateCode39Svg(code: string): React.ReactNode {
-  const cleanCode = (code || "").trim().toUpperCase().replace(/[^0-9A-Z\-.\s\$/+*%]/g, "");
-  const normalized = `*${cleanCode}*`;
-  let bitString = "";
-  for (let i = 0; i < normalized.length; i++) {
-    const char = normalized[i];
-    const bits = CODE39_MAP[char] || CODE39_MAP["*"];
-    bitString += bits + "0";
-  }
-
-  // Use 1px integer pixel width per module to guarantee razor-sharp 203dpi hardware alignment
-  const width = bitString.length * 1;
-  const height = 24;
-
-  return (
-    <svg
-      width="100%"
-      height="24"
-      viewBox={`0 0 ${width} ${height}`}
-      className="w-full h-6 mt-0.5 select-none"
-      shapeRendering="crispEdges"
-    >
-      {bitString.split("").map((bit, idx) => {
-        if (bit === "1") {
-          return (
-            <rect
-              key={idx}
-              x={idx * 1}
-              y="0"
-              width="1"
-              height={height}
-              fill="black"
-              shapeRendering="crispEdges"
-            />
-          );
-        }
-        return null;
-      })}
-    </svg>
-  );
-}
+import { BarcodeSvg } from "@/components/BarcodeSvg";
 
 // Basic CSV string parser matching RFC 4180
 function parseCSV(text: string): string[][] {
@@ -1074,7 +1018,7 @@ export default function Products() {
                 </div>
               )}
               <div className="w-full flex justify-center py-1 select-none">
-                {generateCode39Svg(p.sku || p.company_barcode || 'SPE-000')}
+                <BarcodeSvg code={p.sku || p.company_barcode || 'SPE-000'} height={24} />
               </div>
               <div className="text-[9px] font-mono tracking-wider font-bold mb-1">
                 {p.sku || p.company_barcode}
@@ -1114,7 +1058,7 @@ export default function Products() {
                   MRP: ₹{(pair.left.mrp || pair.left.price || 0).toLocaleString("en-IN")}
                 </div>
                 <div className="w-full flex justify-center py-0.5">
-                  {generateCode39Svg(pair.left.sku || pair.left.company_barcode || 'SPE-000')}
+                  <BarcodeSvg code={pair.left.sku || pair.left.company_barcode || 'SPE-000'} height={20} />
                 </div>
                 <div className="flex justify-between text-[5px] font-mono mt-0.5">
                   <span>{pair.left.sku || pair.left.company_barcode}</span>
@@ -1151,7 +1095,7 @@ export default function Products() {
                   MRP: ₹{(pair.right.mrp || pair.right.price || 0).toLocaleString("en-IN")}
                 </div>
                 <div className="w-full flex justify-center py-0.5">
-                  {generateCode39Svg(pair.right.sku || pair.right.company_barcode || 'SPE-000')}
+                  <BarcodeSvg code={pair.right.sku || pair.right.company_barcode || 'SPE-000'} height={20} />
                 </div>
                 <div className="flex justify-between text-[5px] font-mono mt-0.5">
                   <span>{pair.right.sku || pair.right.company_barcode}</span>
@@ -1617,7 +1561,10 @@ export default function Products() {
         )}
 
         {isLoading ? (
-          <LoadingState message="Loading boutique products..." />
+          <TableSkeleton
+            columns={["", "Garment Name", "SKU / Barcode", "Specs (Color/Size)", "Cost Price", "MRP", "Stock Level", "Category", "Actions"]}
+            rows={8}
+          />
         ) : isError ? (
           <ErrorState onRetry={() => refetch()} />
         ) : !products || products.length === 0 ? (
@@ -1886,8 +1833,8 @@ export default function Products() {
                 {/* Printable barcode preview */}
                 <div className="border rounded-xl p-3 bg-white flex flex-col items-center justify-center">
                   <span className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground mb-1 select-none">Printable Barcode Graphic</span>
-                  <div className="w-full max-w-[200px]">
-                    {generateCode39Svg(selectedProductDetails.sku || selectedProductDetails.company_barcode || 'SPE-000')}
+                  <div className="w-full max-w-[200px] text-black">
+                    <BarcodeSvg code={selectedProductDetails.sku || selectedProductDetails.company_barcode || 'SPE-000'} height={24} />
                   </div>
                   <span className="text-[10px] font-mono mt-1 font-bold">{selectedProductDetails.sku || selectedProductDetails.company_barcode}</span>
                 </div>

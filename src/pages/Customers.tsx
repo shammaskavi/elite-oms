@@ -35,6 +35,7 @@ import { Plus, Pencil, Trash2, Search, Users as UsersIcon } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { LoadingState, EmptyState, ErrorState } from "@/components/states";
+import { TableSkeleton } from "@/components/skeletons";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { customerSchema } from "@/lib/validators";
 
@@ -407,7 +408,7 @@ export default function Customers() {
 
       <Card>
         {isLoading ? (
-          <LoadingState message="Loading customers…" />
+          <TableSkeleton columns={["Name", "Phone", "Email", "Address", "Actions"]} rows={6} />
         ) : isError ? (
           <ErrorState onRetry={() => refetch()} />
         ) : filteredCustomers.length === 0 ? (

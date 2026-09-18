@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -125,7 +127,7 @@ export default function Vendors() {
     },
   });
 
-  // 3. Fetch all orders with their stages to calculate live workload & overdue counts per vendor
+  // 3. Fetch active orders with their stages to calculate live workload & overdue counts per vendor
   const { data: allOrders = [] } = useQuery({
     queryKey: ["vendors-all-orders-workload"],
     queryFn: async () => {
@@ -140,8 +142,7 @@ export default function Vendors() {
           invoices (
             id,
             invoice_number,
-            date,
-            raw_payload
+            date
           ),
           order_stages (
             id,
@@ -153,11 +154,14 @@ export default function Vendors() {
             created_at
           )
         `)
+        .neq("order_status", "delivered")
+        .neq("order_status", "cancelled")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
+    staleTime: 60 * 1000,
   });
 
   // Restore scroll position when navigating back from VendorDetail
@@ -440,17 +444,12 @@ export default function Vendors() {
   };
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Karigars & Workshop Vendors</h1>
-            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
-              Workshop Hub
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Karigars & Workshop Vendors</h1>
+          <p className="text-sm text-muted-foreground">
             Manage artisans, job-work units, live workloads, and magic portal links
           </p>
         </div>
@@ -547,41 +546,39 @@ export default function Vendors() {
             </SelectContent>
           </Select>
 
-          {/* Status Filter */}
-          <div className="flex rounded-lg border bg-muted p-0.5">
-            <button
-              type="button"
-              onClick={() => setStatusFilter("active")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${statusFilter === "active" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-            >
-              Active
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter("all")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${statusFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter("inactive")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${statusFilter === "inactive" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-            >
-              Inactive
-            </button>
-          </div>
+          {/* Status Filter Tabs */}
+          <Tabs value={statusFilter} onValueChange={(val: any) => setStatusFilter(val)}>
+            <TabsList>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="inactive">Inactive</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
       </div>
 
       {/* Vendors Grid */}
       {vendorsLoading ? (
-        <div className="py-16 text-center text-muted-foreground">
-          <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
-          Loading workshop artisans & vendors...
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1.5">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-3.5 w-20" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                <Skeleton className="h-10 w-full rounded" />
+                <Skeleton className="h-10 w-full rounded" />
+              </div>
+              <div className="flex justify-between pt-2 border-t">
+                <Skeleton className="h-8 w-24 rounded" />
+                <Skeleton className="h-8 w-24 rounded" />
+              </div>
+            </Card>
+          ))}
         </div>
       ) : filteredVendors.length === 0 ? (
         <Card className="border-dashed p-12 text-center">

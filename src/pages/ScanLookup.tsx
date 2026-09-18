@@ -28,27 +28,14 @@ export default function ScanLookup() {
   const [isScanningCamera, setIsScanningCamera] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const { user } = useAuth();
-  const [role, setRole] = useState<string | null>(null);
+  const { user, role } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   // Focus input on load
   useEffect(() => {
     inputRef.current?.focus();
-    
-    // Get user role
-    const getRole = async () => {
-      if (!user) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (data) setRole(data.role);
-    };
-    getRole();
-  }, [user]);
+  }, []);
 
   const executeScanLookup = async (code: string) => {
     if (!code) return;
@@ -159,14 +146,11 @@ export default function ScanLookup() {
   };
 
   return (
-    <div className="container max-w-4xl py-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tag Scanner & Lookup</h1>
-          <p className="text-sm text-muted-foreground">Scan any barcode tag to check physical location and status</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Tag Scanner & Lookup</h1>
+          <p className="text-sm text-muted-foreground">Scan any barcode tag to check real-time showroom location and garment history</p>
         </div>
       </div>
 

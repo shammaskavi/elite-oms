@@ -47,7 +47,7 @@ const navigation: NavItem[] = [
   { name: "Orders", href: "/orders", icon: Package },
   { name: "Karigars & Vendors", href: "/vendors", icon: Scissors },
   { name: "Measurements", href: "/measurements", icon: PencilRuler },
-  { name: "Customers 360", href: "/customers", icon: Users },
+  { name: "Customers", href: "/customers", icon: Users },
   { name: "Clienteling CRM", href: "/crm", icon: Sparkles },
   { name: "Products", href: "/products", icon: ShoppingBag },
   { name: "Payments", href: "/payments", icon: BadgeIndianRupee, adminOnly: true },
@@ -195,11 +195,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="px-1 text-xs">
                 <p className="font-semibold text-foreground truncate">{profile?.full_name || user?.email}</p>
                 <Badge
-                  className={`text-[9px] px-1.5 py-0 mt-1 uppercase font-bold border ${
-                    isAdmin
-                      ? "bg-purple-50 text-purple-700 border-purple-200"
-                      : "bg-blue-50 text-blue-700 border-blue-200"
-                  }`}
+                  className={`text-[9px] px-1.5 py-0 mt-1 uppercase font-bold border ${isAdmin
+                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                    : "bg-blue-50 text-blue-700 border-blue-200"
+                    }`}
                 >
                   {isAdmin ? "👑 Owner Admin" : "👔 Staff"}
                 </Badge>
@@ -253,11 +252,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <div className="px-3 py-1.5 text-xs">
                   <p className="font-semibold text-foreground truncate">{profile?.full_name || user?.email}</p>
                   <Badge
-                    className={`text-[9px] px-1.5 py-0 mt-0.5 uppercase font-bold border ${
-                      isAdmin
-                        ? "bg-purple-50 text-purple-700 border-purple-200"
-                        : "bg-blue-50 text-blue-700 border-blue-200"
-                    }`}
+                    className={`text-[9px] px-1.5 py-0 mt-0.5 uppercase font-bold border ${isAdmin
+                      ? "bg-purple-50 text-purple-700 border-purple-200"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+                      }`}
                   >
                     {isAdmin ? "👑 Owner Admin" : "👔 Staff"}
                   </Badge>

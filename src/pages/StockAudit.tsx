@@ -375,14 +375,10 @@ export default function StockAudit() {
   };
 
   return (
-    <div className="container max-w-5xl py-6 space-y-6">
-      
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Shelf Audit / Stock Count</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Showroom Stock Audit</h1>
           <p className="text-sm text-muted-foreground">Scan shelves and verify physical garment coordinates to correct location drift</p>
         </div>
       </div>

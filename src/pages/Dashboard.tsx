@@ -25,6 +25,7 @@ import {
 import { InvoiceView } from "@/components/InvoiceView";
 import { derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 import { EmptyState, LoadingState } from "@/components/states";
+import { MetricCardSkeleton } from "@/components/skeletons";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/lib/auth";
 
@@ -144,12 +145,15 @@ export default function Dashboard() {
             status,
             payment_status,
             settled,
-            raw_payload,
             created_at,
             customers (
               name,
               phone,
               address
+            ),
+            invoice_payments (
+              amount,
+              date
             )
           `)
           .order("created_at", { ascending: false })
@@ -196,30 +200,13 @@ export default function Dashboard() {
           ordersDataRes?.data?.reduce((sum: number, order: any) => sum + Number(order.total_amount), 0) || 0,
       };
 
-      // Enrich Invoices with Payments
+      // Enrich Invoices with Payments (directly from joined relation)
       const invoicesData = invoicesRes?.data || [];
-      const invoiceIds = invoicesData.map((i: any) => i.id);
-
-      const { data: invoicePayments } = invoiceIds.length
-        ? await (supabase as any)
-            .from("invoice_payments")
-            .select("invoice_id, amount, date")
-            .in("invoice_id", invoiceIds)
-        : { data: [] };
-
-      const paymentsByInvoice: Record<string, any[]> =
-        typeof (Object as any).groupBy === "function"
-          ? (Object as any).groupBy(invoicePayments || [], (p: any) => p.invoice_id)
-          : (invoicePayments || []).reduce((acc: any, p: any) => {
-              (acc[p.invoice_id] ||= []).push(p);
-              return acc;
-            }, {});
-
       const enrichedInvoices = invoicesData.map((inv: any) => ({
         ...inv,
         __payment: derivePaymentStatusFromData(
           inv,
-          paymentsByInvoice[inv.id] || []
+          inv.invoice_payments || []
         ),
       }));
 
@@ -414,51 +401,55 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Cards (Role-Aware: Financials for Admin, Operations for Staff) */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Total orders"
-          value={stats.totalOrders}
-          icon={<Package className="h-6 w-6 text-primary" />}
-          hint={periodLabel}
-        />
-        <StatCard
-          label={`Pending · ${periodLabel}`}
-          value={stats.pendingOrders}
-          icon={<TrendingDown className="h-6 w-6 text-primary" />}
-          hint="Active orders"
-        />
-        {isAdmin ? (
-          <>
-            <StatCard
-              label="Cash inflow"
-              value={`₹${stats.cashInflow.toLocaleString()}`}
-              icon={<HandCoins className="h-6 w-6 text-primary" />}
-              hint={periodLabel}
-            />
-            <StatCard
-              label={`Revenue · ${periodLabel}`}
-              value={`₹${stats.revenue.toLocaleString()}`}
-              icon={<DollarSign className="h-6 w-6 text-primary" />}
-              hint={periodLabel}
-            />
-          </>
-        ) : (
-          <>
-            <StatCard
-              label="Deliveries today"
-              value={deliveriesToday.length}
-              icon={<Truck className="h-6 w-6 text-emerald-600" />}
-              hint="Scheduled for pickup"
-            />
-            <StatCard
-              label="Overdue orders"
-              value={overdueOrders.length}
-              icon={<AlertTriangle className="h-6 w-6 text-rose-500" />}
-              hint="Requires attention"
-            />
-          </>
-        )}
-      </div>
+      {isLoading ? (
+        <MetricCardSkeleton count={4} />
+      ) : (
+        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Total orders"
+            value={stats.totalOrders}
+            icon={<Package className="h-6 w-6 text-primary" />}
+            hint={periodLabel}
+          />
+          <StatCard
+            label={`Pending · ${periodLabel}`}
+            value={stats.pendingOrders}
+            icon={<TrendingDown className="h-6 w-6 text-primary" />}
+            hint="Active orders"
+          />
+          {isAdmin ? (
+            <>
+              <StatCard
+                label="Cash inflow"
+                value={`₹${stats.cashInflow.toLocaleString()}`}
+                icon={<HandCoins className="h-6 w-6 text-primary" />}
+                hint={periodLabel}
+              />
+              <StatCard
+                label={`Revenue · ${periodLabel}`}
+                value={`₹${stats.revenue.toLocaleString()}`}
+                icon={<DollarSign className="h-6 w-6 text-primary" />}
+                hint={periodLabel}
+              />
+            </>
+          ) : (
+            <>
+              <StatCard
+                label="Deliveries today"
+                value={deliveriesToday.length}
+                icon={<Truck className="h-6 w-6 text-emerald-600" />}
+                hint="Scheduled for pickup"
+              />
+              <StatCard
+                label="Overdue orders"
+                value={overdueOrders.length}
+                icon={<AlertTriangle className="h-6 w-6 text-rose-500" />}
+                hint="Requires attention"
+              />
+            </>
+          )}
+        </div>
+      )}
 
       {/* Activity Grid (4 panels) */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">

@@ -165,17 +165,17 @@ export default function CrmWhatsAppInbox() {
   }, [conversations, searchQuery, filterTab]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Consolidated CRM Sub Navigation */}
       <CrmSubNav />
 
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             WhatsApp Clienteling Inbox
           </h1>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Official Meta WhatsApp Business Cloud API shared multi-staff communication console
           </p>
         </div>
@@ -191,22 +191,22 @@ export default function CrmWhatsAppInbox() {
         {/* ================= Left 4-5 Cols: Conversations List ================= */}
         <Card className="lg:col-span-5 flex flex-col border shadow-xs overflow-hidden">
           {/* Search & Filters */}
-          <div className="p-3 border-b space-y-2.5 bg-slate-50/70">
+          <div className="p-3 border-b space-y-2.5 bg-muted/30">
             <div className="relative">
-              <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-2.5" />
               <Input
                 placeholder="Search chats by name or phone…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 text-xs h-8.5 bg-white"
+                className="pl-8 text-xs h-8.5 bg-card"
               />
             </div>
 
-            <div className="flex rounded-lg border bg-white p-0.5 text-xs font-medium">
+            <div className="flex rounded-lg border bg-muted p-0.5 text-xs font-medium">
               <button
                 type="button"
                 className={`flex-1 py-1 text-center rounded-md transition-colors cursor-pointer ${
-                  filterTab === "all" ? "bg-slate-900 text-white font-semibold" : "text-slate-600"
+                  filterTab === "all" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
                 }`}
                 onClick={() => setFilterTab("all")}
               >
@@ -215,7 +215,7 @@ export default function CrmWhatsAppInbox() {
               <button
                 type="button"
                 className={`flex-1 py-1 text-center rounded-md transition-colors cursor-pointer ${
-                  filterTab === "waiting_staff" ? "bg-emerald-700 text-white font-semibold" : "text-slate-600"
+                  filterTab === "waiting_staff" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
                 }`}
                 onClick={() => setFilterTab("waiting_staff")}
               >
@@ -224,7 +224,7 @@ export default function CrmWhatsAppInbox() {
               <button
                 type="button"
                 className={`flex-1 py-1 text-center rounded-md transition-colors cursor-pointer ${
-                  filterTab === "unread" ? "bg-emerald-700 text-white font-semibold" : "text-slate-600"
+                  filterTab === "unread" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
                 }`}
                 onClick={() => setFilterTab("unread")}
               >

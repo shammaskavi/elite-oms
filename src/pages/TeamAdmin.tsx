@@ -187,13 +187,13 @@ export default function TeamAdmin() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Team & Staff Access</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Team & Staff Access</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage user accounts, roles, permissions, and instant kill-switch access.
+            Manage user accounts, roles, permissions, and staff login access.
           </p>
         </div>
 

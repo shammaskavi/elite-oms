@@ -13,7 +13,7 @@ export function CrmSubNav() {
   const location = useLocation();
 
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-200/80 mb-6 scrollbar-none">
+    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-border mb-6 scrollbar-none">
       {CRM_TABS.map((tab) => {
         const isActive =
           tab.href === "/crm"
@@ -26,11 +26,11 @@ export function CrmSubNav() {
             to={tab.href}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
               isActive
-                ? "bg-purple-900 text-white shadow-xs"
-                : "bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
-            <tab.icon className={`h-3.5 w-3.5 ${isActive ? "text-purple-200" : "text-slate-500"}`} />
+            <tab.icon className={`h-3.5 w-3.5 ${isActive ? "text-primary-foreground/90" : "text-muted-foreground"}`} />
             <span>{tab.name}</span>
           </Link>
         );

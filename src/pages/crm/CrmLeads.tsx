@@ -162,27 +162,27 @@ export default function CrmLeads() {
   }, [allLeads, selectedStage, searchQuery]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <CrmSubNav />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Boutique Prospects & Sales Pipeline
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground">
             Track inquiries from Instagram, walk-ins, and referrals through to customer conversion
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {/* View mode toggle: Kanban vs Grid */}
-          <div className="flex rounded-lg border bg-slate-100 p-0.5 text-xs font-medium">
+          <div className="flex rounded-lg border bg-muted p-0.5 text-xs font-medium">
             <button
               type="button"
               className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
-                viewMode === "kanban" ? "bg-white text-slate-900 shadow-2xs font-semibold" : "text-slate-600"
+                viewMode === "kanban" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
               }`}
               onClick={() => setViewMode("kanban")}
             >
@@ -191,7 +191,7 @@ export default function CrmLeads() {
             <button
               type="button"
               className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
-                viewMode === "grid" ? "bg-white text-slate-900 shadow-2xs font-semibold" : "text-slate-600"
+                viewMode === "grid" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
               }`}
               onClick={() => setViewMode("grid")}
             >
@@ -328,7 +328,7 @@ export default function CrmLeads() {
             <button
               type="button"
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                selectedStage === "all" ? "bg-slate-900 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                selectedStage === "all" ? "bg-primary text-primary-foreground font-semibold shadow-xs" : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               }`}
               onClick={() => setSelectedStage("all")}
             >
@@ -339,7 +339,7 @@ export default function CrmLeads() {
                 type="button"
                 key={st.key}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                  selectedStage === st.key ? "bg-slate-900 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  selectedStage === st.key ? "bg-primary text-primary-foreground font-semibold shadow-xs" : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                 }`}
                 onClick={() => setSelectedStage(st.key)}
               >
@@ -349,7 +349,7 @@ export default function CrmLeads() {
           </div>
 
           <div className="relative w-full md:w-64">
-            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-2.5" />
             <Input
               placeholder="Search leads by name or phone…"
               value={searchQuery}

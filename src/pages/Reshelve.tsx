@@ -205,16 +205,11 @@ export default function Reshelve() {
   };
 
   return (
-    <div className="container max-w-4xl py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Showroom Reshelving</h1>
-            <p className="text-sm text-muted-foreground">Scan a shelf location, then scan items to place them</p>
-          </div>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Showroom Reshelving</h1>
+          <p className="text-sm text-muted-foreground">Scan a shelf location, then scan items to move their physical coordinates</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => playSound("success")} className="gap-2 text-xs">
           <Volume2 className="w-4 h-4" /> Sound Test

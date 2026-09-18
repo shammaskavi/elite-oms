@@ -137,16 +137,16 @@ export default function CrmTasks() {
   }, [allTasks, filterTab, selectedStaff, searchQuery]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <CrmSubNav />
 
       {/* ================= Header ================= */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Follow-up Tasks & Reminders
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground">
             Manage team clienteling assignments, occasion follow-ups, and payment reminders
           </p>
         </div>
@@ -214,29 +214,29 @@ export default function CrmTasks() {
 
                 <div className="space-y-1.5">
                   <Label className="text-xs">Priority</Label>
-                  <Select value={priority} onValueChange={(val: TaskPriority) => setPriority(val)}>
+                  <Select value={priority} onValueChange={(val) => setPriority(val as TaskPriority)}>
                     <SelectTrigger className="text-xs h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="urgent" className="text-xs text-red-700 font-semibold">🚨 Urgent (Today)</SelectItem>
-                      <SelectItem value="high" className="text-xs text-orange-700 font-semibold">🔥 High (Tomorrow)</SelectItem>
-                      <SelectItem value="normal" className="text-xs">Normal</SelectItem>
-                      <SelectItem value="low" className="text-xs">Low</SelectItem>
+                      <SelectItem value="urgent" className="text-xs text-red-600 font-semibold">🔴 Urgent</SelectItem>
+                      <SelectItem value="high" className="text-xs text-amber-600 font-semibold">🟠 High</SelectItem>
+                      <SelectItem value="medium" className="text-xs">🟡 Medium</SelectItem>
+                      <SelectItem value="low" className="text-xs">⚪ Low</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs">Due Timeline</Label>
+                <Label className="text-xs">Due Timing</Label>
                 <Select value={dueDays} onValueChange={setDueDays}>
                   <SelectTrigger className="text-xs h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0" className="text-xs">Due Today</SelectItem>
-                    <SelectItem value="1" className="text-xs">Due Tomorrow</SelectItem>
+                    <SelectItem value="0" className="text-xs font-semibold text-red-600">Today</SelectItem>
+                    <SelectItem value="1" className="text-xs font-medium">Tomorrow</SelectItem>
                     <SelectItem value="3" className="text-xs">In 3 Days</SelectItem>
                     <SelectItem value="7" className="text-xs">In 1 Week</SelectItem>
                   </SelectContent>
@@ -269,7 +269,7 @@ export default function CrmTasks() {
             <button
               type="button"
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                filterTab === "pending" ? "bg-slate-900 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                filterTab === "pending" ? "bg-primary text-primary-foreground font-semibold shadow-xs" : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               }`}
               onClick={() => setFilterTab("pending")}
             >
@@ -278,7 +278,7 @@ export default function CrmTasks() {
             <button
               type="button"
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                filterTab === "due_today" ? "bg-amber-600 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                filterTab === "due_today" ? "bg-amber-600 text-white font-semibold shadow-xs" : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               }`}
               onClick={() => setFilterTab("due_today")}
             >
@@ -287,7 +287,7 @@ export default function CrmTasks() {
             <button
               type="button"
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                filterTab === "overdue" ? "bg-red-600 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                filterTab === "overdue" ? "bg-destructive text-destructive-foreground font-semibold shadow-xs" : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               }`}
               onClick={() => setFilterTab("overdue")}
             >
@@ -296,7 +296,7 @@ export default function CrmTasks() {
             <button
               type="button"
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                filterTab === "completed" ? "bg-emerald-700 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                filterTab === "completed" ? "bg-emerald-600 text-white font-semibold shadow-xs" : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               }`}
               onClick={() => setFilterTab("completed")}
             >
@@ -305,7 +305,7 @@ export default function CrmTasks() {
             <button
               type="button"
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                filterTab === "all" ? "bg-slate-900 text-white font-semibold" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                filterTab === "all" ? "bg-primary text-primary-foreground font-semibold shadow-xs" : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               }`}
               onClick={() => setFilterTab("all")}
             >

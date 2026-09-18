@@ -126,15 +126,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isSubscribed = true;
 
     // Fast resolution: check local stored session first
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       if (!isSubscribed) return;
       setSession(initialSession);
       const initialUser = initialSession?.user ?? null;
       setUser(initialUser);
-      setLoading(false);
 
       if (initialUser) {
-        fetchProfile(initialUser.id, initialUser.email);
+        try {
+          await fetchProfile(initialUser.id, initialUser.email);
+        } catch {
+          // ignore error, fallback is handled inside fetchProfile
+        }
+      }
+      if (isSubscribed) {
+        setLoading(false);
       }
     }).catch(() => {
       if (isSubscribed) setLoading(false);
@@ -143,22 +149,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen to subsequent auth events (sign in, sign out, token refresh)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, currentSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       if (!isSubscribed) return;
       setSession(currentSession);
       const currentUser = currentSession?.user ?? null;
       setUser(currentUser);
-      setLoading(false);
 
       if (currentUser) {
         // Fire asynchronously outside the auth dispatch lock
-        setTimeout(() => {
+        setTimeout(async () => {
           if (isSubscribed) {
-            fetchProfile(currentUser.id, currentUser.email);
+            await fetchProfile(currentUser.id, currentUser.email);
+            setLoading(false);
           }
         }, 0);
       } else {
         setProfile(null);
+        setLoading(false);
       }
     });
 

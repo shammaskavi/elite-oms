@@ -229,16 +229,15 @@ There is a total of INR ${ownerInsights?.outstanding_due?.toLocaleString() || 0}
     const RISK_COLORS: Record<string, string> = { Delayed: BRAND.danger, "Due Soon": BRAND.warning, "On Track": BRAND.success };
 
     return (
-        <div className="p-6 space-y-12 max-w-7xl mx-auto bg-slate-50/50 min-h-screen pb-20">
+        <div className="space-y-6">
 
             {/* --- GLOBAL HEADER --- */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b pb-8">
-                <div className="space-y-1">
-                    <h1 className="text-4xl font-black tracking-tighter text-slate-900 uppercase">Reports Library</h1>
-                    <div className="flex items-center gap-3 text-slate-500 font-medium text-sm">
-                        <CalendarDays className="w-4 h-4 text-pink-500" />
-                        Analyzing period: <span className="text-pink-600 font-bold underline decoration-pink-200 uppercase">{period.replace('_', ' ')}</span>
-                    </div>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground">Executive Financial Reports</h1>
+                    <p className="text-sm text-muted-foreground">
+                        Financial health indicators, risk distributions, and executive PDF exports
+                    </p>
                 </div>
 
                 <div className="flex items-center gap-3">

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Search, ChevronRight, ChevronLeft, Receipt } from "lucide-react";
 import { LoadingState, EmptyState, ErrorState } from "@/components/states";
+import { TableSkeleton } from "@/components/skeletons";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
 function formatDate(date: string) {
@@ -133,7 +134,10 @@ export default function Payments() {
 
             <Card className="overflow-hidden p-0">
                 {isLoading ? (
-                    <LoadingState message="Loading payments…" />
+                    <TableSkeleton
+                        columns={["Date", "Customer", "Invoice", "Amount", "Method", "Reference", "Notes"]}
+                        rows={8}
+                    />
                 ) : isError ? (
                     <ErrorState onRetry={() => refetch()} />
                 ) : paginatedPayments.length === 0 ? (

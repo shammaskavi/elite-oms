@@ -480,37 +480,37 @@ export default function CrmSegments() {
       {/* Header with Sub-Module Switcher */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Crown className="h-6 w-6 text-amber-600" />
+          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Crown className="h-7 w-7 text-amber-500" />
             Segments & Custom Campaigns Hub
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground">
             Unified dynamic customer cohorts, custom Meta WhatsApp template studio, and 1-click broadcast desk
           </p>
         </div>
 
         {/* Tab Selector Pills */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-semibold">
+        <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border text-xs font-medium">
           <button
             type="button"
             onClick={() => setActiveMainTab("cohorts")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all cursor-pointer ${
               activeMainTab === "cohorts"
-                ? "bg-white text-purple-950 shadow-xs font-bold"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-background text-foreground shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <Users className="h-3.5 w-3.5 text-purple-700" />
+            <Users className="h-3.5 w-3.5 text-primary" />
             <span>1. Dynamic Cohorts</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveMainTab("campaigns")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all cursor-pointer ${
               activeMainTab === "campaigns"
-                ? "bg-white text-purple-950 shadow-xs font-bold"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-background text-foreground shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Megaphone className="h-3.5 w-3.5 text-emerald-600" />
@@ -521,10 +521,10 @@ export default function CrmSegments() {
           <button
             type="button"
             onClick={() => setActiveMainTab("template_studio")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all cursor-pointer ${
               activeMainTab === "template_studio"
-                ? "bg-white text-purple-950 shadow-xs font-bold"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-background text-foreground shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Palette className="h-3.5 w-3.5 text-blue-600" />
