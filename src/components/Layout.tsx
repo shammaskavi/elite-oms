@@ -31,6 +31,7 @@ import {
   Clock,
   MessageSquare,
   Crown,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Quick POS", href: "/pos", icon: Zap },
   { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "Orders", href: "/orders", icon: Package },
   { name: "Karigars & Vendors", href: "/vendors", icon: Scissors },

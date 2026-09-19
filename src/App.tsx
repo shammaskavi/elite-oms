@@ -17,6 +17,8 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Products = lazy(() => import("./pages/Products"));
 const Customers = lazy(() => import("./pages/Customers"));
 const Invoices = lazy(() => import("./pages/Invoices"));
+const InvoiceDetailMobile = lazy(() => import("./pages/InvoiceDetailMobile"));
+const QuickPosBilling = lazy(() => import("./pages/QuickPosBilling"));
 const OrdersNew = lazy(() => import("./pages/OrdersNew"));
 const OrderDetailNew = lazy(() => import("./pages/OrderDetailNew"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -112,6 +114,11 @@ const App = () => (
                 {/* Core Staff & Operations Routes */}
                 <Route path="/" element={protectedPage(Dashboard)} />
                 <Route path="/invoices" element={protectedPage(Invoices)} />
+                <Route path="/invoices/view/:id" element={protectedPage(InvoiceDetailMobile)} />
+                <Route path="/invoices/:id/view" element={protectedPage(InvoiceDetailMobile)} />
+                <Route path="/invoices/:id/mobile" element={protectedPage(InvoiceDetailMobile)} />
+                <Route path="/pos" element={protectedPage(QuickPosBilling)} />
+                <Route path="/quick-invoice" element={protectedPage(QuickPosBilling)} />
                 <Route path="/orders" element={protectedPage(OrdersNew)} />
                 <Route path="/orders/:id" element={protectedPage(OrderDetailNew)} />
                 <Route path="/customers" element={protectedPage(Customers)} />

@@ -616,9 +616,22 @@ Saree Palace Elite
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl">
-              {isDraft ? "Draft Invoice" : "Invoice Details"}
-            </DialogTitle>
+            <div className="flex items-center justify-between pr-8">
+              <DialogTitle className="text-2xl">
+                {isDraft ? "Draft Invoice" : "Invoice Details"}
+              </DialogTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5 text-primary border-primary/30 hover:bg-primary/5"
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate(`/invoices/view/${invoice.id}`);
+                }}
+              >
+                📱 Mobile View
+              </Button>
+            </div>
           </DialogHeader>
 
           <div className="space-y-6">

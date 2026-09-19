@@ -48,11 +48,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Search, Eye, UserPlus, ChevronDown, ChevronUp, Check, ChevronsUpDown, Camera } from "lucide-react";
+import { Plus, Trash2, Search, Eye, UserPlus, ChevronDown, ChevronUp, Check, ChevronsUpDown, Camera, Zap } from "lucide-react";
 import { Command } from "@/components/ui/command";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
@@ -1005,19 +1005,26 @@ export default function Invoices() {
     <div className="space-y-6 p-4 md:p-0">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <h1 className="text-3xl font-bold">Invoices</h1>
-        <Dialog open={open} onOpenChange={(o) => {
-          setOpen(o);
-          if (!o) {
-            resetForm();
-            setEditingDraftId(null);
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Invoice
+        <div className="flex items-center gap-2">
+          <Link to="/pos">
+            <Button variant="outline" className="gap-1.5 border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 font-semibold shadow-2xs">
+              <Zap className="w-4 h-4 fill-amber-500 text-amber-500" />
+              Quick POS (Mobile Mode)
             </Button>
-          </DialogTrigger>
+          </Link>
+          <Dialog open={open} onOpenChange={(o) => {
+            setOpen(o);
+            if (!o) {
+              resetForm();
+              setEditingDraftId(null);
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Create Invoice
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-6xl w-full max-h-[100vh] overflow-y-auto p-0 md:p-6">
             <DialogHeader className="p-4 pb-0 md:p-0">
               <DialogTitle>{editingDraftId ? "Edit Draft Invoice" : "Create Invoice"}</DialogTitle>
@@ -1549,6 +1556,7 @@ export default function Invoices() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
 
         {/* Add Customer Dialog */}
         <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>

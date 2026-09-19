@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { derivePaymentStatus, derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
 import { TableCell, TableRow } from "./ui/table";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Button } from "./ui/button";
-import { Eye, Trash2 } from "lucide-react";
+import { Eye, Trash2, Smartphone } from "lucide-react";
 
 import { StatusBadge } from "./StatusBadge";
 
@@ -19,6 +20,7 @@ export function InvoiceRow({
     onViewOrder?: () => void;
     onDelete: () => void;
 }) {
+    const navigate = useNavigate();
     const isDraft = invoice.status === "draft";
     const isSettled = invoice.settled === true;
 
@@ -102,11 +104,23 @@ export function InvoiceRow({
             </TableCell>
 
             <TableCell onClick={(e) => e.stopPropagation()}>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5 items-center">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                        title="Open Mobile View (Experimental)"
+                        onClick={() => navigate(`/invoices/view/${invoice.id}`)}
+                    >
+                        <Smartphone className="w-4 h-4" />
+                    </Button>
+
                     {!isDraft && invoice.orders?.[0]?.id && (
                         <Button
                             variant="ghost"
                             size="icon"
+                            className="h-8 w-8"
+                            title="View Order"
                             onClick={onViewOrder}
                         >
                             <Eye className="w-4 h-4" />
@@ -116,9 +130,11 @@ export function InvoiceRow({
                     <Button
                         variant="ghost"
                         size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        title="Delete Invoice"
                         onClick={onDelete}
                     >
-                        <Trash2 className="w-4 h-4 text-destructive" />
+                        <Trash2 className="w-4 h-4" />
                     </Button>
                 </div>
             </TableCell>
