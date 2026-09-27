@@ -13,7 +13,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Link as LinkIcon } from "lucide-react";
+import { Plus, Search, Link as LinkIcon, Copy, Check, Printer, Edit2, Ruler } from "lucide-react";
+import { toast } from "sonner";
 import { TableSkeleton } from "@/components/skeletons";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -26,11 +27,13 @@ export default function Measurements() {
     const [filterTemplate, setFilterTemplate] = useState("");
     const navigate = useNavigate();
     const [openGenerateLink, setOpenGenerateLink] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const [isEditing, setIsEditing] = useState(false);
     const [editedValues, setEditedValues] = useState<Record<string, any>>({});
 
-    const { data: measurements = [], isLoading } = useQuery({
+    // 1. Fetch from customer_measurements table
+    const { data: customerMeasurements = [], isLoading: cmLoading } = useQuery({
         queryKey: ["customer-measurements"],
         queryFn: async () => {
             const { data, error } = await supabase
@@ -53,6 +56,64 @@ export default function Measurements() {
         },
     });
 
+    // 2. Fetch order-attached measurements from orders table
+    const { data: ordersWithMeasurements = [], isLoading: ordersLoading } = useQuery({
+        queryKey: ["orders-with-product-measurements"],
+        queryFn: async () => {
+            const { data, error } = await (supabase as any)
+                .from("orders")
+                .select(`
+                    id,
+                    order_code,
+                    created_at,
+                    metadata,
+                    customers(name)
+                `)
+                .not("metadata->product_measurements", "is", null)
+                .order("created_at", { ascending: false });
+
+            if (error) throw error;
+            return data || [];
+        },
+    });
+
+    // Merge both into a unified list
+    const measurements = React.useMemo(() => {
+        const orderList: any[] = [];
+        ordersWithMeasurements.forEach((ord: any) => {
+            const pMeasurements = ord.metadata?.product_measurements || {};
+            const pNames = ord.metadata?.product_names || {};
+            Object.entries(pMeasurements).forEach(([pNumStr, mData]: [string, any]) => {
+                if (!mData || !mData.values || Object.keys(mData.values).length === 0) return;
+                const pNum = parseInt(pNumStr);
+                const pName = pNames[pNum] || mData.profile_name || mData.template_name || `Piece #${pNum}`;
+
+                orderList.push({
+                    id: `order_${ord.id}_${pNum}`,
+                    is_order_attachment: true,
+                    order_id: ord.id,
+                    product_number: pNum,
+                    raw_order_metadata: ord.metadata,
+                    name: `${pName} (Order #${ord.order_code || ord.id.slice(0, 5)})`,
+                    template_id: mData.template_id || null,
+                    measurement_templates: { name: mData.template_name || "Garment Specs" },
+                    created_at: mData.attached_at || ord.created_at,
+                    source: "order_attachment",
+                    status: "verified",
+                    values: mData.values || {},
+                    customers: ord.customers,
+                });
+            });
+        });
+
+        return [...customerMeasurements, ...orderList].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+    }, [customerMeasurements, ordersWithMeasurements]);
+
+    const isLoading = cmLoading || ordersLoading;
+
+    // Fetch fields for template (if available)
     const { data: templateFields = [] } = useQuery({
         queryKey: ["measurement-template-fields", selectedMeasurement?.template_id],
         queryFn: async () => {
@@ -96,17 +157,57 @@ export default function Measurements() {
     });
 
     const saveMutation = useMutation({
-        mutationFn: async ({ id, values }: { id: string; values: Record<string, any> }) => {
-            const { error } = await supabase
-                .from("customer_measurements")
-                .update({ values })
-                .eq("id", id);
-            if (error) throw error;
+        mutationFn: async ({
+            measurement,
+            values,
+        }: {
+            measurement: any;
+            values: Record<string, any>;
+        }) => {
+            if (measurement.is_order_attachment) {
+                // Update in orders table
+                const currentMeta = measurement.raw_order_metadata || {};
+                const pMeasurements = currentMeta.product_measurements || {};
+                const pNum = measurement.product_number;
+
+                const updatedMeasurements = {
+                    ...pMeasurements,
+                    [pNum]: {
+                        ...pMeasurements[pNum],
+                        values,
+                        attached_at: new Date().toISOString(),
+                    },
+                };
+
+                const { error } = await (supabase as any)
+                    .from("orders")
+                    .update({
+                        metadata: {
+                            ...currentMeta,
+                            product_measurements: updatedMeasurements,
+                        },
+                    })
+                    .eq("id", measurement.order_id);
+
+                if (error) throw error;
+            } else {
+                // Update in customer_measurements table
+                const { error } = await supabase
+                    .from("customer_measurements")
+                    .update({ values })
+                    .eq("id", measurement.id);
+                if (error) throw error;
+            }
         },
-        onSuccess: (_, { id, values }) => {
+        onSuccess: (_, { measurement, values }) => {
             queryClient.invalidateQueries({ queryKey: ["customer-measurements"] });
+            queryClient.invalidateQueries({ queryKey: ["orders-with-product-measurements"] });
+            if (measurement.order_id) {
+                queryClient.invalidateQueries({ queryKey: ["order", measurement.order_id] });
+                queryClient.invalidateQueries({ queryKey: ["orders"] });
+            }
             setSelectedMeasurement((prev: any) =>
-                prev?.id === id ? { ...prev, values } : prev
+                prev ? { ...prev, values } : prev
             );
             setIsEditing(false);
         },
@@ -122,7 +223,10 @@ export default function Measurements() {
 
     const handleSave = () => {
         if (!selectedMeasurement) return;
-        saveMutation.mutate({ id: selectedMeasurement.id, values: editedValues });
+        saveMutation.mutate({
+            measurement: selectedMeasurement,
+            values: editedValues,
+        });
     };
 
     const handleCancelEdit = () => {
@@ -130,16 +234,50 @@ export default function Measurements() {
         setIsEditing(false);
     };
 
+    const handleCopy = () => {
+        if (!selectedMeasurement) return;
+
+        const customerName = selectedMeasurement.customers?.name || "Customer";
+        const profileName = selectedMeasurement.name || "";
+        const templateName = selectedMeasurement.measurement_templates?.name || "Garment Measurements";
+        const values = isEditing ? editedValues : (selectedMeasurement.values || {});
+
+        let text = `📐 ${profileName ? `${profileName} • ` : ""}${templateName}\nCustomer: ${customerName}\n\n`;
+
+        const entries = Object.entries(values);
+        if (entries.length > 0) {
+            text += entries
+                .map(([key, value]) => {
+                    const fieldObj = templateFields.find((f: any) => f.field_key === key);
+                    const label = fieldObj?.label || key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                    const val = value === true ? "Yes" : value === false ? "No" : String(value ?? "");
+                    const formattedVal = val && !isNaN(Number(val)) && !val.includes('"') ? `${val}"` : val;
+                    return `• ${label}: ${formattedVal}`;
+                })
+                .join("\n");
+        } else {
+            text += "• No measurements recorded";
+        }
+
+        const notes = selectedMeasurement.notes || selectedMeasurement.raw_order_metadata?.product_notes?.[selectedMeasurement.product_number];
+        if (notes) {
+            text += `\n\n📝 Note: ${notes}`;
+        }
+
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        toast.success("Measurement specs copied to clipboard!");
+        setTimeout(() => setCopied(false), 2000);
+    };
+
     const handlePrint = () => {
         if (!selectedMeasurement) return;
 
         const values = selectedMeasurement.values || {};
-
         const customerName = selectedMeasurement.customers?.name || "Customer";
         const templateName = selectedMeasurement.measurement_templates?.name || "Measurements";
 
         let content = "";
-
         content += "ELITE SAREE PALACE\n\n";
         content += `Customer: ${customerName}\n`;
 
@@ -169,11 +307,10 @@ export default function Measurements() {
         if (!printArea) return;
 
         printArea.innerHTML = `<pre>${content}</pre>`;
-
         window.print();
     };
 
-    const filteredMeasurements = measurements.filter((m) => {
+    const filteredMeasurements = measurements.filter((m: any) => {
         const matchesSearch =
             m.customers?.name?.toLowerCase().includes(search.toLowerCase()) ||
             m.name?.toLowerCase().includes(search.toLowerCase());
@@ -184,6 +321,35 @@ export default function Measurements() {
 
         return matchesSearch && matchesTemplate;
     });
+
+    // Build the list of fields to display in the modal:
+    // If templateFields has entries, use them; otherwise, render every key present in editedValues!
+    const fieldsToRender = React.useMemo(() => {
+        if (templateFields.length > 0) {
+            return templateFields.map((f: any) => ({
+                field_key: f.field_key,
+                label: f.label || f.field_key.replace(/_/g, " "),
+                input_type: f.input_type || "text",
+                options: f.options || [],
+            }));
+        }
+
+        // Fallback: render all keys directly from values
+        return Object.keys(editedValues).map((key) => {
+            const val = editedValues[key];
+            const isBool = typeof val === "boolean" || val === "true" || val === "false";
+            const isNum = typeof val === "number" || (!isNaN(Number(val)) && val !== "");
+
+            return {
+                field_key: key,
+                label: key
+                    .replace(/_/g, " ")
+                    .replace(/\b\w/g, (c) => c.toUpperCase()),
+                input_type: isBool ? "boolean" : isNum ? "number" : "text",
+                options: [],
+            };
+        });
+    }, [templateFields, editedValues]);
 
     return (
         <div className="space-y-6">
@@ -286,7 +452,7 @@ export default function Measurements() {
                             <span>Status</span>
                         </div>
 
-                        {filteredMeasurements.map((m) => (
+                        {filteredMeasurements.map((m: any) => (
                             <div
                                 key={m.id}
                                 onClick={() => setSelectedMeasurement(m)}
@@ -294,7 +460,7 @@ export default function Measurements() {
                             >
                                 <div>
                                     <p className="font-medium text-gray-900">
-                                        {m.customers?.name}
+                                        {m.customers?.name || "Customer"}
                                     </p>
                                     {m.name && (
                                         <p className="text-xs text-gray-500">{m.name}</p>
@@ -302,7 +468,7 @@ export default function Measurements() {
                                 </div>
 
                                 <div className="text-gray-600">
-                                    {m.measurement_templates?.name}
+                                    {m.measurement_templates?.name || "Garment Specs"}
                                 </div>
 
                                 <div className="text-gray-500 text-xs">
@@ -310,7 +476,7 @@ export default function Measurements() {
                                 </div>
 
                                 <div>
-                                    <StatusBadge status={m.status} />
+                                    <StatusBadge status={m.status || "verified"} />
                                 </div>
                             </div>
                         ))}
@@ -318,131 +484,150 @@ export default function Measurements() {
                 )}
             </Card>
 
+            {/* Popup Modal */}
             {selectedMeasurement && (
-                <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-lg">
+                <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-lg">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-lg font-semibold leading-tight">
-                                {selectedMeasurement.customers?.name} {selectedMeasurement.name ? `- ${selectedMeasurement.name}` : ""}
+                                {selectedMeasurement.customers?.name || "Customer"} {selectedMeasurement.name ? `- ${selectedMeasurement.name}` : ""}
                             </h2>
                             <button
                                 onClick={() => setSelectedMeasurement(null)}
-                                className="text-gray-500"
+                                className="text-gray-500 hover:text-gray-700 text-lg p-1"
                             >
                                 ✕
                             </button>
                         </div>
 
                         <p className="text-sm text-gray-500 mb-6">
-                            {selectedMeasurement.measurement_templates?.name}
+                            {selectedMeasurement.measurement_templates?.name || "Garment Measurements"}
                         </p>
 
-                        <div className="text-xs text-gray-400 uppercase tracking-wide mb-2">
+                        <div className="text-xs text-gray-400 uppercase tracking-wide mb-3 font-semibold">
                             Measurements
                         </div>
 
-                        <div className="space-y-2">
-                            {templateFields.map((field) => {
-                                const key = field.field_key;
-                                const value = editedValues[key];
+                        {fieldsToRender.length === 0 ? (
+                            <div className="py-6 text-center text-sm text-gray-500 border rounded-lg bg-gray-50">
+                                No measurement values recorded for this item.
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {fieldsToRender.map((field: any) => {
+                                    const key = field.field_key;
+                                    const value = editedValues[key];
+                                    const formattedKey = field.label;
 
-                                const formattedKey = field.label;
+                                    const displayValue =
+                                        value === true ? "Yes" : value === false ? "No" : String(value ?? "—");
 
-                                const displayValue =
-                                    value === true ? "Yes" : value === false ? "No" : String(value ?? "");
+                                    return (
+                                        <div key={key} className="flex justify-between items-center border-b pb-2">
+                                            <span className="text-gray-600 text-sm">{formattedKey}</span>
 
-                                return (
-                                    <div key={key} className="flex justify-between items-center border-b pb-2">
-                                        <span className="text-gray-600 text-sm">{formattedKey}</span>
-
-                                        {isEditing ? (
-                                            field.input_type === "number" ? (
-                                                <input
-                                                    type="number"
-                                                    className="border rounded px-2 py-1 text-sm w-32 text-right"
-                                                    value={value ?? ""}
-                                                    onChange={(e) =>
-                                                        setEditedValues((prev) => ({
-                                                            ...prev,
-                                                            [key]: Number(e.target.value),
-                                                        }))
-                                                    }
-                                                />
-                                            ) : field.input_type === "dropdown" ? (
-                                                <select
-                                                    className="border rounded px-2 py-1 text-sm w-32 text-right"
-                                                    value={value ?? ""}
-                                                    onChange={(e) =>
-                                                        setEditedValues((prev) => ({
-                                                            ...prev,
-                                                            [key]: e.target.value,
-                                                        }))
-                                                    }
-                                                >
-                                                    <option value="">Select</option>
-                                                    {(field.options || []).map((opt: string) => (
-                                                        <option key={opt} value={opt}>
-                                                            {opt}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            ) : field.input_type === "boolean" ? (
-                                                <select
-                                                    className="border rounded px-2 py-1 text-sm w-32 text-right"
-                                                    value={String(value)}
-                                                    onChange={(e) =>
-                                                        setEditedValues((prev) => ({
-                                                            ...prev,
-                                                            [key]: e.target.value === "true",
-                                                        }))
-                                                    }
-                                                >
-                                                    <option value="true">Yes</option>
-                                                    <option value="false">No</option>
-                                                </select>
+                                            {isEditing ? (
+                                                field.input_type === "number" ? (
+                                                    <input
+                                                        type="number"
+                                                        className="border rounded px-2 py-1 text-sm w-32 text-right"
+                                                        value={value ?? ""}
+                                                        onChange={(e) =>
+                                                            setEditedValues((prev) => ({
+                                                                ...prev,
+                                                                [key]: isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value),
+                                                            }))
+                                                        }
+                                                    />
+                                                ) : field.input_type === "dropdown" ? (
+                                                    <select
+                                                        className="border rounded px-2 py-1 text-sm w-32 text-right"
+                                                        value={value ?? ""}
+                                                        onChange={(e) =>
+                                                            setEditedValues((prev) => ({
+                                                                ...prev,
+                                                                [key]: e.target.value,
+                                                            }))
+                                                        }
+                                                    >
+                                                        <option value="">Select</option>
+                                                        {(field.options || []).map((opt: string) => (
+                                                            <option key={opt} value={opt}>
+                                                                {opt}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                ) : field.input_type === "boolean" ? (
+                                                    <select
+                                                        className="border rounded px-2 py-1 text-sm w-32 text-right"
+                                                        value={String(value)}
+                                                        onChange={(e) =>
+                                                            setEditedValues((prev) => ({
+                                                                ...prev,
+                                                                [key]: e.target.value === "true",
+                                                            }))
+                                                        }
+                                                    >
+                                                        <option value="true">Yes</option>
+                                                        <option value="false">No</option>
+                                                    </select>
+                                                ) : (
+                                                    <input
+                                                        type="text"
+                                                        className="border rounded px-2 py-1 text-sm w-32 text-right"
+                                                        value={value ?? ""}
+                                                        onChange={(e) =>
+                                                            setEditedValues((prev) => ({
+                                                                ...prev,
+                                                                [key]: e.target.value,
+                                                            }))
+                                                        }
+                                                    />
+                                                )
                                             ) : (
-                                                <input
-                                                    type="text"
-                                                    className="border rounded px-2 py-1 text-sm w-32 text-right"
-                                                    value={value ?? ""}
-                                                    onChange={(e) =>
-                                                        setEditedValues((prev) => ({
-                                                            ...prev,
-                                                            [key]: e.target.value,
-                                                        }))
-                                                    }
-                                                />
-                                            )
-                                        ) : (
-                                            <span className="font-medium text-sm">{displayValue}</span>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <div className="mt-6 pt-4 border-t flex justify-between items-center">
+                                                <span className="font-medium text-sm text-gray-900">{displayValue}</span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <div className="mt-6 pt-4 border-t flex flex-wrap justify-between items-center gap-2">
                             {!isEditing ? (
                                 <>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <button
-                                            onClick={() => setIsEditing(true)}
-                                            className="border px-4 py-2 rounded text-sm"
+                                            type="button"
+                                            onClick={handleCopy}
+                                            className="px-3.5 py-1.5 rounded-md text-xs font-semibold border border-purple-200 bg-purple-50 text-purple-900 hover:bg-purple-100 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
                                         >
-                                            Edit
+                                            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-purple-700" />}
+                                            {copied ? "Copied!" : "Copy Specs"}
                                         </button>
 
                                         <button
-                                            onClick={handlePrint}
-                                            className="border px-4 py-2 rounded text-sm"
+                                            type="button"
+                                            onClick={() => setIsEditing(true)}
+                                            className="border px-3 py-1.5 rounded-md text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors cursor-pointer"
                                         >
-                                            Print
+                                            <Edit2 className="w-3.5 h-3.5 text-slate-500" /> Edit
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={handlePrint}
+                                            className="border px-3 py-1.5 rounded-md text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors cursor-pointer"
+                                        >
+                                            <Printer className="w-3.5 h-3.5 text-slate-500" /> Print
                                         </button>
                                     </div>
 
-                                    {selectedMeasurement.status !== "verified" && (
+                                    {selectedMeasurement.status !== "verified" && !selectedMeasurement.is_order_attachment && (
                                         <button
+                                            type="button"
                                             onClick={() => handleVerify(selectedMeasurement.id)}
-                                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+                                            className="bg-emerald-600 text-white px-3.5 py-1.5 rounded-md text-xs font-semibold hover:bg-emerald-700 transition-colors cursor-pointer shadow-xs"
                                         >
                                             Mark as Verified
                                         </button>
@@ -452,15 +637,16 @@ export default function Measurements() {
                                 <div className="flex gap-2 ml-auto">
                                     <button
                                         onClick={handleCancelEdit}
-                                        className="border px-4 py-2 rounded text-sm"
+                                        className="border px-4 py-2 rounded text-sm hover:bg-gray-50"
                                     >
                                         Cancel
                                     </button>
 
                                     <Button
                                         onClick={handleSave}
+                                        disabled={saveMutation.isLoading}
                                     >
-                                        Save Changes
+                                        {saveMutation.isLoading ? "Saving..." : "Save Changes"}
                                     </Button>
                                 </div>
                             )}

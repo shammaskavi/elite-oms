@@ -87,8 +87,39 @@ export default function KarigarOrderDetail() {
         );
     }
 
+    const numProducts = parseInt(currentOrder.metadata?.num_products || "1");
+
+    // Helper to find latest active/current stage for a given piece / product number
+    const getLatestStageForProduct = (pNum: number) => {
+        const pStages = (allStages || []).filter((s: any) => {
+            const stagePNum = s.metadata?.product_number ? Number(s.metadata.product_number) : 1;
+            return stagePNum === pNum;
+        });
+        if (pStages.length === 0) return null;
+        const inProgress = pStages.find((s: any) => s.status === "in_progress");
+        if (inProgress) return inProgress;
+        return pStages[pStages.length - 1];
+    };
+
+    // Filter product numbers assigned to this vendor
+    const assignedProductNumbers = Array.from({ length: numProducts }, (_, i) => i + 1).filter((productNumber) => {
+        if (!vendor) return true; // Preview mode / no vendor token
+        const latestStage = getLatestStageForProduct(productNumber);
+        if (!latestStage) {
+            // Fallback for single product order where stage metadata might not have product_number
+            if (numProducts === 1 && allStages?.some((s: any) => s.vendor_id === vendor.id || (s.vendor_name && s.vendor_name.toLowerCase() === vendor.name?.toLowerCase()))) {
+                return true;
+            }
+            return false;
+        }
+        return (
+            latestStage.vendor_id === vendor.id ||
+            (latestStage.vendor_name && vendor.name && latestStage.vendor_name.toLowerCase() === vendor.name.toLowerCase())
+        );
+    });
+
     // Check if this vendor is assigned to any stage for this order
-    const isVendorAssigned = !vendor || !allStages || allStages.length === 0 || allStages.some((s: any) => s.vendor_id === vendor.id);
+    const isVendorAssigned = !vendor || assignedProductNumbers.length > 0;
 
     if (token && vendor && allStages && allStages.length > 0 && !isVendorAssigned) {
         return (
@@ -111,8 +142,6 @@ export default function KarigarOrderDetail() {
             </div>
         );
     }
-
-    const numProducts = parseInt(currentOrder.metadata?.num_products || "1");
 
     const rawCustomerName = invoice?.customers?.name || "";
     const customerDisplayName = rawCustomerName
@@ -187,9 +216,7 @@ export default function KarigarOrderDetail() {
             <div className="p-4 max-w-md mx-auto space-y-4">
                 {/* 🧵 Work Instructions */}
                 <div className="space-y-4">
-                    {Array.from({ length: numProducts }, (_, i) => {
-                        const productNumber = i + 1;
-
+                    {assignedProductNumbers.map((productNumber) => {
                         const rawProductName =
                             currentOrder.metadata?.product_names?.[productNumber] ||
                             currentOrder.metadata?.item_name ||

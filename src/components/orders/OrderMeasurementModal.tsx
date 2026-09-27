@@ -26,6 +26,7 @@ import {
   FileSpreadsheet,
   AlertCircle,
   Copy,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -242,6 +243,54 @@ export default function OrderMeasurementModal({
     setFormValues(profile.values || {});
   };
 
+  const [modalCopied, setModalCopied] = useState(false);
+
+  const handleCopySpecs = () => {
+    let values = { ...formValues };
+    let templ = selectedTemplateName || "Garment";
+    let pName = customProfileName || productName || "Item";
+
+    if (activeTab === "saved" && selectedProfileId) {
+      const profile = customerMeasurements.find((m: any) => m.id === selectedProfileId);
+      if (profile) {
+        values = profile.values || {};
+        templ = profile.template_name || "Garment";
+        pName = profile.name || profile.template_name || pName;
+      }
+    } else if (currentMeasurement && Object.keys(values).length === 0) {
+      values = currentMeasurement.values || {};
+      templ = currentMeasurement.template_name || templ;
+      pName = currentMeasurement.profile_name || pName;
+    }
+
+    if (!values || Object.keys(values).length === 0) {
+      toast.error("No measurement values to copy");
+      return;
+    }
+
+    let text = `📐 ${pName} (${templ})\nCustomer: ${customerName || "Customer"}\n\n`;
+    text += Object.entries(values)
+      .map(([k, v]) => {
+        const label = k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        let displayVal = String(v ?? "");
+        if (displayVal && !isNaN(Number(displayVal)) && !displayVal.includes('"')) {
+          displayVal = `${displayVal}"`;
+        }
+        return `• ${label}: ${displayVal}`;
+      })
+      .join("\n");
+
+    const noteToInclude = measurementNotes.trim() || currentMeasurement?.notes;
+    if (noteToInclude) {
+      text += `\n\n📝 Note: ${noteToInclude}`;
+    }
+
+    navigator.clipboard.writeText(text);
+    setModalCopied(true);
+    toast.success("Measurement specs copied to clipboard!");
+    setTimeout(() => setModalCopied(false), 2000);
+  };
+
   // Handle Save Attachment
   const handleSave = async () => {
     setIsSaving(true);
@@ -323,6 +372,9 @@ export default function OrderMeasurementModal({
 
       toast.success(`Measurements attached to ${productName}! Visible to Karigars.`);
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders-with-product-measurements"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-measurements"] });
       queryClient.invalidateQueries({ queryKey: ["invoice-orders"] });
       queryClient.invalidateQueries({ queryKey: ["customer-orders"] });
       onSaveSuccess?.();
@@ -359,6 +411,9 @@ export default function OrderMeasurementModal({
 
       toast.success("Measurements detached from item");
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders-with-product-measurements"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-measurements"] });
       queryClient.invalidateQueries({ queryKey: ["invoice-orders"] });
       onSaveSuccess?.();
       onOpenChange(false);
@@ -441,11 +496,10 @@ export default function OrderMeasurementModal({
                         <div
                           key={m.id}
                           onClick={() => handleSelectSavedProfile(m)}
-                          className={`p-3 rounded-xl border transition-all cursor-pointer space-y-1.5 ${
-                            isSelected
-                              ? "bg-purple-50 border-purple-400 ring-2 ring-purple-200 shadow-xs"
-                              : "bg-white border-slate-200 hover:bg-slate-50"
-                          }`}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer space-y-1.5 ${isSelected
+                            ? "bg-purple-50 border-purple-400 ring-2 ring-purple-200 shadow-xs"
+                            : "bg-white border-slate-200 hover:bg-slate-50"
+                            }`}
                         >
                           <div className="flex items-center justify-between">
                             <span className="font-semibold text-xs text-slate-900 truncate">
@@ -473,9 +527,19 @@ export default function OrderMeasurementModal({
                           <Ruler className="h-3.5 w-3.5 text-slate-600" />
                           Specs Preview for Workshop:
                         </span>
-                        <Badge className="bg-purple-900 text-white text-[10px]">
-                          {selectedTemplateName}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleCopySpecs}
+                            className="text-[11px] font-semibold text-purple-800 bg-white hover:bg-purple-100 px-2 py-0.5 rounded border border-purple-200 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            {modalCopied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3 text-purple-600" />}
+                            {modalCopied ? "Copied" : "Copy Specs"}
+                          </button>
+                          <Badge className="bg-purple-900 text-white text-[10px]">
+                            {selectedTemplateName}
+                          </Badge>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-xs">
@@ -599,7 +663,18 @@ export default function OrderMeasurementModal({
         </div>
 
         <DialogFooter className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t pt-3">
-          <div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-xs text-purple-900 border-purple-200 bg-purple-50/70 hover:bg-purple-100 font-medium gap-1.5"
+              onClick={handleCopySpecs}
+            >
+              {modalCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-purple-700" />}
+              {modalCopied ? "Copied Specs!" : "Copy Specs"}
+            </Button>
+
             {currentMeasurement && (
               <Button
                 type="button"
