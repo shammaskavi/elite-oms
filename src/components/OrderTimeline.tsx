@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { queryKeys } from "@/services/api/queryKeys";
+import { ordersService } from "@/services/ordersService";
+import { vendorsService } from "@/services/vendorsService";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -214,12 +217,49 @@ export function OrderTimeline({
                 await supabase.from("orders").update({ order_status: "delivered" }).eq("id", order.id);
             }
         },
+        onMutate: async () => {
+            await queryClient.cancelQueries({ queryKey: queryKeys.orders.stages(order.id) });
+            await queryClient.cancelQueries({ queryKey: queryKeys.orders.detail(order.id) });
+
+            const prevStages = queryClient.getQueryData(queryKeys.orders.stages(order.id));
+            const prevOrder = queryClient.getQueryData(queryKeys.orders.detail(order.id));
+
+            const now = new Date().toISOString();
+            const isMovingToDelivered = selectedStage.toLowerCase() === "delivered";
+
+            queryClient.setQueryData(queryKeys.orders.stages(order.id), (old: any[] = []) => {
+                const updated = old.map((s: any) =>
+                    s.metadata?.product_number === productNumber && s.status === "in_progress"
+                        ? { ...s, status: "done", end_ts: now }
+                        : s
+                );
+                return [
+                    ...updated,
+                    {
+                        id: "temp-" + Date.now(),
+                        order_id: order.id,
+                        stage_name: selectedStage,
+                        vendor_name: selectedVendor || null,
+                        status: isMovingToDelivered ? "done" : "in_progress",
+                        start_ts: now,
+                        end_ts: isMovingToDelivered ? now : null,
+                        created_at: now,
+                        metadata: { product_number: productNumber, product_name: localProductName },
+                    },
+                ];
+            });
+
+            if (isMovingToDelivered) {
+                queryClient.setQueryData(queryKeys.orders.detail(order.id), (old: any) =>
+                    old ? { ...old, order_status: "delivered" } : old
+                );
+            }
+
+            return { prevStages, prevOrder };
+        },
         onSuccess: () => {
             const movedStage = selectedStage;
             toast.success(`Moved to ${movedStage}`);
-            queryClient.invalidateQueries({ queryKey: ["orders"] });
-            queryClient.invalidateQueries({ queryKey: ["order-stages", order.id] });
-            queryClient.invalidateQueries({ queryKey: ["order-stages-log", order.id, productNumber] });
             onStageUpdate?.();
             setOpen(false);
 
@@ -228,6 +268,23 @@ export function OrderTimeline({
             if (isMilestone) {
                 prepareWhatsAppMessage(movedStage);
             }
+        },
+        onError: (err: any, _vars, context: any) => {
+            if (context?.prevStages) {
+                queryClient.setQueryData(queryKeys.orders.stages(order.id), context.prevStages);
+            }
+            if (context?.prevOrder) {
+                queryClient.setQueryData(queryKeys.orders.detail(order.id), context.prevOrder);
+            }
+            console.error("moveToStageMutation error:", err);
+            toast.error(err?.message || "Failed to update stage");
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.stages(order.id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(order.id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.stageLog(order.id, productNumber) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.stats() });
         },
     });
 
@@ -238,10 +295,37 @@ export function OrderTimeline({
                 metadata: { ...order.metadata, product_notes: { ...current, [productNumber]: notes } }
             }).eq("id", order.id);
         },
+        onMutate: async (notes: string) => {
+            await queryClient.cancelQueries({ queryKey: queryKeys.orders.detail(order.id) });
+            const prevOrder = queryClient.getQueryData(queryKeys.orders.detail(order.id));
+
+            queryClient.setQueryData(queryKeys.orders.detail(order.id), (old: any) => {
+                if (!old) return old;
+                const currentNotes = old.metadata?.product_notes || {};
+                return {
+                    ...old,
+                    metadata: {
+                        ...old.metadata,
+                        product_notes: { ...currentNotes, [productNumber]: notes },
+                    },
+                };
+            });
+
+            return { prevOrder };
+        },
         onSuccess: () => {
             toast.success("Product notes updated");
             setEditingNotes(false);
-            queryClient.invalidateQueries({ queryKey: ["order", order.id] });
+        },
+        onError: (err: any, _vars, context: any) => {
+            if (context?.prevOrder) {
+                queryClient.setQueryData(queryKeys.orders.detail(order.id), context.prevOrder);
+            }
+            toast.error(err?.message || "Failed to update product notes");
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(order.id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
         },
     });
 
@@ -252,11 +336,38 @@ export function OrderTimeline({
                 metadata: { ...order.metadata, product_names: { ...currentNames, [productNumber]: newName } }
             }).eq("id", order.id);
         },
+        onMutate: async (newName: string) => {
+            await queryClient.cancelQueries({ queryKey: queryKeys.orders.detail(order.id) });
+            const prevOrder = queryClient.getQueryData(queryKeys.orders.detail(order.id));
+
+            queryClient.setQueryData(queryKeys.orders.detail(order.id), (old: any) => {
+                if (!old) return old;
+                const currentNames = old.metadata?.product_names || {};
+                return {
+                    ...old,
+                    metadata: {
+                        ...old.metadata,
+                        product_names: { ...currentNames, [productNumber]: newName },
+                    },
+                };
+            });
+
+            return { prevOrder };
+        },
         onSuccess: (_, newName) => {
             toast.success("Product name updated");
             setLocalProductName(newName);
-            queryClient.invalidateQueries({ queryKey: ["order", order.id] });
             setEditingProductName(false);
+        },
+        onError: (err: any, _vars, context: any) => {
+            if (context?.prevOrder) {
+                queryClient.setQueryData(queryKeys.orders.detail(order.id), context.prevOrder);
+            }
+            toast.error(err?.message || "Failed to update product name");
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(order.id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
         },
     });
 

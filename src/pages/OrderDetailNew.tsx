@@ -1,6 +1,8 @@
-// src/pages/OrderDetailNew.tsx  (or wherever you keep it)
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { queryKeys } from "@/services/api/queryKeys";
+import { ordersService } from "@/services/ordersService";
+import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -57,25 +59,22 @@ export default function OrderDetailNew() {
     const [headerWaMessage, setHeaderWaMessage] = useState("");
     const queryClient = useQueryClient();
 
+    // Enable realtime sync for this specific order
+    useRealtimeSync({ enableOrders: true, orderId: id });
+
     // --- get current order by id ---
     const { data: currentOrder } = useQuery({
-        queryKey: ["order", id],
-        queryFn: async () => {
-            const { data, error } = await (supabase as any)
-                .from("orders")
-                .select("*")
-                .eq("id", id)
-                .single();
-
-            if (error) throw error;
-            return data;
+        queryKey: queryKeys.orders.detail(id || ""),
+        queryFn: async ({ signal }) => {
+            if (!id) return null;
+            return ordersService.fetchOrderById(id, signal);
         },
         enabled: !!id,
     });
 
     // --- invoice (by order id) --- new 
     const { data: invoice } = useQuery({
-        queryKey: ["invoice-by-order", currentOrder?.invoice_id],
+        queryKey: queryKeys.invoices.detail(currentOrder?.invoice_id || ""),
         queryFn: async () => {
             if (!currentOrder?.invoice_id) return null;
 
@@ -126,140 +125,28 @@ export default function OrderDetailNew() {
             console.error("Failed to prepare WhatsApp message", err);
         }
     };
-    // --- invoice (by order id) --- old 
-    // const { data: invoice } = useQuery({
-    //     queryKey: ["invoice-by-order", id],
-    //     queryFn: async () => {
-    //         const { data: order } = await (supabase as any)
-    //             .from("orders")
-    //             .select("invoice_id")
-    //             .eq("id", id)
-    //             .single();
 
-    //         if (!order?.invoice_id) return null;
-
-    //         const { data, error } = await (supabase as any)
-    //             .from("invoices")
-    //             .select("*, customers(name)")
-    //             .eq("id", order.invoice_id)
-    //             .single();
-    //         if (error) throw error;
-    //         return data;
-    //     },
-    // });
-
-    // --- orders for invoice --- old 
-    // const { data: orders } = useQuery({
-    //     queryKey: ["invoice-orders", invoice?.id],
-    //     queryFn: async () => {
-    //         if (!invoice?.id) return [];
-    //         const { data, error } = await (supabase as any)
-    //             .from("orders")
-    //             .select("*")
-    //             .eq("invoice_id", invoice.id)
-    //             .order("created_at", { ascending: true });
-    //         if (error) throw error;
-    //         return data;
-    //     },
-    //     enabled: !!invoice?.id,
-    // });
-
-    // --- orders for invoice --- new 
     // --- orders for this page (just the current order) ---
     const orders = currentOrder ? [currentOrder] : [];
 
-    // --- all order_stages for these orders ---
-    // const { data: allStages } = useQuery({
-    //     queryKey: ["all-order-stages", invoice?.id],
-    //     queryFn: async () => {
-    //         if (!invoice?.id || !orders) return [];
-    //         const orderIds = orders.map((o: any) => o.id);
-    //         const { data, error } = await (supabase as any)
-    //             .from("order_stages")
-    //             .select("*")
-    //             .in("order_id", orderIds)
-    //             .order("created_at", { ascending: true });
-    //         if (error) throw error;
-    //         return data;
-    //     },
-    //     enabled: !!invoice?.id && !!orders,
-    // });
     // --- order_stages for this single order ---
-    // --- order_stages for this single order ---
-
     const { data: allStages } = useQuery({
-        queryKey: ["order-stages", id],
-        queryFn: async () => {
+        queryKey: queryKeys.orders.stages(id || ""),
+        queryFn: async ({ signal }) => {
             if (!id) return [];
-            const { data, error } = await (supabase as any)
-                .from("order_stages")
-                .select("*")
-                .eq("order_id", id)
-                .order("created_at", { ascending: true });
-
-            if (error) throw error;
-            return data;
+            return ordersService.fetchOrderStages(id, signal);
         },
         enabled: !!id,
     });
 
     // --- Fetch canonical workflow stages from DB (ordered by order_index) ---
     const { data: stagesList } = useQuery({
-        queryKey: ["stages"],
-        queryFn: async () => {
-            const { data, error } = await (supabase as any)
-                .from("stages")
-                .select("*")
-                .order("order_index", { ascending: true });
-            if (error) throw error;
-            return data || [];
+        queryKey: queryKeys.stages.all,
+        queryFn: async ({ signal }) => {
+            return ordersService.fetchStages(signal);
         },
         staleTime: 60 * 1000,
     });
-
-    // Real-time subscriptions (same as before)
-    useEffect(() => {
-        if (!invoice?.id || !orders) return;
-
-        const orderIds = orders.map(o => o.id);
-
-        const ordersChannel = supabase
-            .channel(`orders-detail-${invoice.id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'orders',
-                    filter: `id=in.(${orderIds.join(',')})`
-                },
-                () => {
-                    queryClient.invalidateQueries({ queryKey: ["invoice-orders"] });
-                }
-            )
-            .subscribe();
-
-        const stagesChannel = supabase
-            .channel(`stages-detail-${invoice.id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'order_stages',
-                    filter: `order_id=in.(${orderIds.join(',')})`
-                },
-                () => {
-                    queryClient.invalidateQueries({ queryKey: ["all-order-stages"] });
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(ordersChannel);
-            supabase.removeChannel(stagesChannel);
-        };
-    }, [invoice?.id, orders, queryClient]);
 
     // --- update status / delete logic unchanged, except we keep using DB stages for missing stage inserts ---
     const updateOrderStatusMutation = useMutation({

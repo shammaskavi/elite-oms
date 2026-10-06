@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -62,6 +62,13 @@ import { CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } fr
 import { cn } from "@/lib/utils";
 import { InvoiceRow } from "@/components/InvoiceRow";
 import { MobileBarcodeScanner } from "@/components/MobileBarcodeScanner";
+import { queryKeys } from "@/services/api/queryKeys";
+import { invoicesService } from "@/services/invoicesService";
+import { useRealtimeSync } from "@/hooks/use-realtime-sync";
+import { useDataTableSort } from "@/hooks/use-data-table-sort";
+import { SortableTableHead } from "@/components/ui/sortable-table-head";
+import { DateRangeFilter, DateFilterValue } from "@/components/ui/date-range-filter";
+import { FloatingTableFooter } from "@/components/ui/floating-table-footer";
 
 
 export default function Invoices() {
@@ -78,11 +85,28 @@ export default function Invoices() {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState<string>("");
+  const [dateFilterValue, setDateFilterValue] = useState<DateFilterValue>({
+    type: "all",
+  });
   const [showDiscount, setShowDiscount] = useState(false);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+
+  // Enable Realtime Synchronization for Invoices & Payments
+  useRealtimeSync({ enableInvoices: true });
+
+  // 3-state Table Column Sorting
+  type InvoiceSortField = "invoice_number" | "customer" | "date" | "total" | "due";
+  const {
+    sortKey,
+    sortDirection,
+    handleSort,
+    clearSort,
+  } = useDataTableSort<InvoiceSortField>({
+    defaultKey: null,
+    defaultDirection: null,
+  });
   const [formData, setFormData] = useState({
     invoice_number: "",
     customer_id: "",
@@ -246,19 +270,9 @@ export default function Invoices() {
 
 
   const { data: invoices, isLoading } = useQuery({
-    queryKey: ["invoices"],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("invoices")
-        .select(`
-          *, 
-          customers(id, name, phone, email, address),
-          orders(payment_status),
-          invoice_payments(amount)
-        `)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+    queryKey: queryKeys.invoices.all,
+    queryFn: async ({ signal }) => {
+      return invoicesService.fetchInvoices({ signal });
     },
   });
 
@@ -877,43 +891,199 @@ export default function Invoices() {
     updateTotals(newItems);
   };
 
-  // Filter invoices
-  const filteredInvoices = invoices?.filter(invoice => {
-    const matchesSearch =
-      invoice.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.customers?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+  // Filter invoices with search, payment tabs, and date / date-range filters
+  const filteredInvoices = useMemo(() => {
+    if (!invoices) return [];
 
-    const isDraft = invoice.status === "draft";
-    const isSettled = invoice.settled === true;
+    return invoices.filter((invoice: any) => {
+      // 1. Search Query
+      const matchesSearch =
+        !searchQuery ||
+        invoice.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        invoice.customers?.name?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // Derive payment status with reconciled DB payments + legacy payload
-    const paymentInfo = derivePaymentStatusFromData(
-      invoice,
-      invoice.invoice_payments || []
-    );
+      if (!matchesSearch) return false;
 
-    // An invoice is paid if explicit payment_status is 'paid', all orders are paid,
-    // raw payload is 'paid', or reconciled payments equal total.
-    const isPaid =
-      invoice.payment_status === "paid" ||
-      invoice.raw_payload?.payment_status === "paid" ||
-      (invoice.orders && invoice.orders.length > 0 && invoice.orders.every((o: any) => o.payment_status === "paid")) ||
-      paymentInfo.status === "paid";
+      // 2. Payment & Settlement Status (Preserving exact business rules)
+      const isDraft = invoice.status === "draft";
+      const isSettled = invoice.settled === true;
 
-    // Settled invoices are treated as closed under the Paid tab
-    const isPaidOrSettled = isSettled || isPaid;
+      const paymentInfo = derivePaymentStatusFromData(
+        invoice,
+        invoice.invoice_payments || []
+      );
 
-    const matchesPayment =
-      paymentFilter === "all" ||
-      (paymentFilter === "draft" && isDraft) ||
-      (paymentFilter === "paid" && !isDraft && isPaidOrSettled) ||
-      (paymentFilter === "unpaid" && !isDraft && !isPaidOrSettled);
+      const isPaid =
+        invoice.payment_status === "paid" ||
+        invoice.raw_payload?.payment_status === "paid" ||
+        (invoice.orders &&
+          invoice.orders.length > 0 &&
+          invoice.orders.every((o: any) => o.payment_status === "paid")) ||
+        paymentInfo.status === "paid";
 
-    const matchesDate = !dateFilter ||
-      (invoice.date && new Date(invoice.date).toISOString().split("T")[0] === dateFilter);
+      // Settled invoices are treated as closed under the Paid tab
+      const isPaidOrSettled = isSettled || isPaid;
 
-    return matchesSearch && matchesPayment && matchesDate;
-  });
+      const matchesPayment =
+        paymentFilter === "all" ||
+        (paymentFilter === "draft" && isDraft) ||
+        (paymentFilter === "paid" && !isDraft && isPaidOrSettled) ||
+        (paymentFilter === "unpaid" && !isDraft && !isPaidOrSettled);
+
+      if (!matchesPayment) return false;
+
+      // 3. Date & Date-Range Filtering
+      if (dateFilterValue.type === "all") {
+        return true;
+      }
+
+      const invDateStr = invoice.date
+        ? new Date(invoice.date).toISOString().split("T")[0]
+        : null;
+
+      if (!invDateStr) return false;
+
+      if (dateFilterValue.type === "single" && dateFilterValue.singleDate) {
+        return invDateStr === dateFilterValue.singleDate;
+      }
+
+      if (dateFilterValue.startDate && dateFilterValue.endDate) {
+        return (
+          invDateStr >= dateFilterValue.startDate &&
+          invDateStr <= dateFilterValue.endDate
+        );
+      }
+
+      if (dateFilterValue.startDate) {
+        return invDateStr >= dateFilterValue.startDate;
+      }
+
+      if (dateFilterValue.endDate) {
+        return invDateStr <= dateFilterValue.endDate;
+      }
+
+      return true;
+    });
+  }, [invoices, searchQuery, paymentFilter, dateFilterValue]);
+
+  // Sort invoices based on active table header sort
+  const sortedInvoices = useMemo(() => {
+    if (!filteredInvoices || filteredInvoices.length === 0) return [];
+    if (!sortKey || !sortDirection) return filteredInvoices;
+
+    return [...filteredInvoices].sort((a: any, b: any) => {
+      let valA: any = "";
+      let valB: any = "";
+
+      if (sortKey === "invoice_number") {
+        valA = a.invoice_number || "";
+        valB = b.invoice_number || "";
+        const numA = parseInt(valA.replace(/\D/g, ""), 10);
+        const numB = parseInt(valB.replace(/\D/g, ""), 10);
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return sortDirection === "asc" ? numA - numB : numB - numA;
+        }
+        return sortDirection === "asc"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      }
+
+      if (sortKey === "date") {
+        const timeA = a.date ? new Date(a.date).getTime() : 0;
+        const timeB = b.date ? new Date(b.date).getTime() : 0;
+        return sortDirection === "asc" ? timeA - timeB : timeB - timeA;
+      }
+
+      if (sortKey === "customer") {
+        valA = a.customers?.name || "";
+        valB = b.customers?.name || "";
+        return sortDirection === "asc"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      }
+
+      if (sortKey === "total") {
+        valA = parseFloat(String(a.total || 0)) || 0;
+        valB = parseFloat(String(b.total || 0)) || 0;
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+
+      if (sortKey === "due") {
+        const dueA = a.settled
+          ? 0
+          : derivePaymentStatusFromData(a, a.invoice_payments || []).remaining;
+        const dueB = b.settled
+          ? 0
+          : derivePaymentStatusFromData(b, b.invoice_payments || []).remaining;
+        return sortDirection === "asc" ? dueA - dueB : dueB - dueA;
+      }
+
+      return 0;
+    });
+  }, [filteredInvoices, sortKey, sortDirection]);
+
+  // Financial summary calculations for sticky floating footer
+  const financialTotals = useMemo(() => {
+    let totalInvoiced = 0;
+    let totalPaid = 0;
+    let totalDue = 0;
+
+    for (const inv of sortedInvoices) {
+      const invTotal = parseFloat(String(inv.total || 0)) || 0;
+      totalInvoiced += invTotal;
+
+      if (inv.settled === true) {
+        totalPaid += invTotal;
+      } else {
+        const paymentInfo = derivePaymentStatusFromData(
+          inv,
+          inv.invoice_payments || []
+        );
+        totalPaid += paymentInfo.paid;
+        totalDue += paymentInfo.remaining;
+      }
+    }
+
+    return {
+      totalInvoiced,
+      totalPaid,
+      totalDue,
+    };
+  }, [sortedInvoices]);
+
+  const footerMetrics = useMemo(
+    () => [
+      {
+        label: "Total Invoiced",
+        value: `₹${Math.round(financialTotals.totalInvoiced).toLocaleString("en-IN")}`,
+        colorClass: "text-foreground",
+      },
+      {
+        label: "Collected",
+        value: `₹${Math.round(financialTotals.totalPaid).toLocaleString("en-IN")}`,
+        colorClass: "text-emerald-600 dark:text-emerald-400",
+      },
+      {
+        label: "Pending Due",
+        value: `₹${Math.round(financialTotals.totalDue).toLocaleString("en-IN")}`,
+        colorClass: "text-amber-600 dark:text-amber-400",
+      },
+    ],
+    [financialTotals]
+  );
+
+  const hasActiveFilters =
+    Boolean(searchQuery) ||
+    paymentFilter !== "all" ||
+    dateFilterValue.type !== "all" ||
+    sortKey !== null;
+
+  const handleResetAllFilters = () => {
+    setSearchQuery("");
+    setPaymentFilter("all");
+    setDateFilterValue({ type: "all" });
+    clearSort();
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
@@ -1625,19 +1795,18 @@ export default function Invoices() {
             <h2 className="text-lg sm:text-xl font-semibold">Search Invoices</h2>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:flex-wrap md:flex-nowrap gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap md:flex-nowrap gap-3 sm:gap-4 items-stretch sm:items-center">
             <Input
               placeholder="Search by invoice number or customer..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 min-w-[180px]"
+              className="flex-1 min-w-[200px]"
             />
 
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full sm:w-auto"
+            <DateRangeFilter
+              value={dateFilterValue}
+              onChange={setDateFilterValue}
+              className="w-full sm:w-auto min-w-[170px]"
             />
 
             <Tabs value={paymentFilter} onValueChange={setPaymentFilter} className="w-full sm:w-auto">
@@ -1656,11 +1825,46 @@ export default function Invoices() {
         <Table className="min-w-[650px]">
           <TableHeader>
             <TableRow>
-              <TableHead>Invoice #</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Total</TableHead>
-              <TableHead>Due</TableHead>
+              <SortableTableHead
+                sortKey="invoice_number"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+              >
+                Invoice #
+              </SortableTableHead>
+              <SortableTableHead
+                sortKey="customer"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+              >
+                Customer
+              </SortableTableHead>
+              <SortableTableHead
+                sortKey="date"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+              >
+                Date
+              </SortableTableHead>
+              <SortableTableHead
+                sortKey="total"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+              >
+                Total
+              </SortableTableHead>
+              <SortableTableHead
+                sortKey="due"
+                currentSortKey={sortKey}
+                currentDirection={sortDirection}
+                onSort={handleSort}
+              >
+                Due
+              </SortableTableHead>
               <TableHead>Status</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -1678,18 +1882,33 @@ export default function Invoices() {
                   <TableCell className="py-3.5"><Skeleton className="h-8 w-20 rounded-md" /></TableCell>
                 </TableRow>
               ))
-            ) : filteredInvoices?.length === 0 ? (
+            ) : sortedInvoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">No invoices found</TableCell>
+                <TableCell colSpan={7} className="text-center py-8">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      No invoices match the selected filters
+                    </p>
+                    {hasActiveFilters && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleResetAllFilters}
+                        className="mt-1"
+                      >
+                        Reset All Filters
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
               </TableRow>
             ) : (
-              filteredInvoices?.map((invoice: any) => (
+              sortedInvoices.map((invoice: any) => (
                 <InvoiceRow
                   key={invoice.id}
                   invoice={invoice}
                   onRowClick={() => setSelectedInvoice(invoice)}
                   onViewOrder={
-                    // !invoice.status === "draft" && invoice.orders?.[0]?.id
                     invoice.status !== "draft" && invoice.orders?.[0]?.id
                       ? () => navigate(`/orders/${invoice.orders[0].id}`)
                       : undefined
@@ -1704,6 +1923,16 @@ export default function Invoices() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Floating Sticky Summary Footer */}
+      <FloatingTableFooter
+        totalCount={sortedInvoices.length}
+        itemName="Invoices"
+        metrics={footerMetrics}
+        showFinancials={isAdmin}
+        hasActiveFilters={hasActiveFilters}
+        onResetFilters={handleResetAllFilters}
+      />
 
       {/* 🔥 Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

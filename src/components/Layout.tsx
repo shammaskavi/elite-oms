@@ -34,6 +34,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NetworkStatusBanner } from "@/components/NetworkStatusBanner";
 
 interface NavItem {
   name: string;
@@ -290,6 +291,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             collapsed ? "lg:pl-20" : "lg:pl-64"
           )}
         >
+          <NetworkStatusBanner />
           <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b bg-card px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
             <Button
               variant="ghost"

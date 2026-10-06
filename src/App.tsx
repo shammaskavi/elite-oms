@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadingState } from "@/components/states";
+import { TopLoadingBar } from "@/components/TopLoadingBar";
 
 // Code-split routes — keeps the initial bundle small and speeds up first paint.
 const Auth = lazy(() => import("./pages/Auth"));
@@ -98,6 +99,7 @@ const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <TopLoadingBar />
         <Toaster />
         <Sonner />
         <BrowserRouter>
