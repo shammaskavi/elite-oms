@@ -267,14 +267,8 @@ export default function Customers() {
       }
 
       const hasInvoices = totalInvoices > 0;
-      const hasPending = invoices.some(
-        (inv: any) => inv.payment_status !== "paid" && !inv.settled
-      );
-      const allPaid =
-        hasInvoices &&
-        invoices.every(
-          (inv: any) => inv.payment_status === "paid" || inv.settled
-        );
+      const hasPendingDue = totalDue > 0;
+      const allPaid = hasInvoices && totalDue === 0;
 
       return {
         ...c,
@@ -282,7 +276,7 @@ export default function Customers() {
           totalInvoices,
           totalSpent,
           totalDue,
-          hasPendingDue: hasPending || totalDue > 0,
+          hasPendingDue,
           hasInvoices,
           allPaid,
         },
