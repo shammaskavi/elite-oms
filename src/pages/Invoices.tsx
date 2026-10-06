@@ -725,15 +725,15 @@ export default function Invoices() {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      
+
       toast.success(editingDraftId ? "Invoice finalized and order created" : "Invoice and order created");
-      
+
       try {
         const { data: warnings } = await supabase
           .from("orders")
           .select("order_code, metadata")
           .eq("invoice_id", invoice.id);
-          
+
         if (warnings) {
           const oversoldOrders = warnings.filter((w: any) => w.metadata?.stock_warning === true || w.metadata?.stock_warning === "true");
           if (oversoldOrders.length > 0) {
@@ -1176,12 +1176,12 @@ export default function Invoices() {
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <h1 className="text-3xl font-bold">Invoices</h1>
         <div className="flex items-center gap-2">
-          <Link to="/pos">
+          {/* <Link to="/pos">
             <Button variant="outline" className="gap-1.5 border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 font-semibold shadow-2xs">
               <Zap className="w-4 h-4 fill-amber-500 text-amber-500" />
               Quick POS (Mobile Mode)
             </Button>
-          </Link>
+          </Link> */}
           <Dialog open={open} onOpenChange={(o) => {
             setOpen(o);
             if (!o) {
@@ -1195,209 +1195,323 @@ export default function Invoices() {
                 Create Invoice
               </Button>
             </DialogTrigger>
-          <DialogContent className="max-w-6xl w-full max-h-[100vh] overflow-y-auto p-0 md:p-6">
-            <DialogHeader className="p-4 pb-0 md:p-0">
-              <DialogTitle>{editingDraftId ? "Edit Draft Invoice" : "Create Invoice"}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-3 p-4 md:p-0">
+            <DialogContent className="max-w-6xl w-full max-h-[100vh] overflow-y-auto p-0 md:p-6">
+              <DialogHeader className="p-4 pb-0 md:p-0">
+                <DialogTitle>{editingDraftId ? "Edit Draft Invoice" : "Create Invoice"}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-3 p-4 md:p-0">
 
-              {/* Row 1: Responsive Grid for Invoice Details */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <Label htmlFor="invoice_number" className="text-xs">Invoice Number *</Label>
-                  <Input
-                    id="invoice_number"
-                    value={formData.invoice_number}
-                    onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
-                    required
-                    disabled
-                    placeholder="Invoice Number"
-                    className="bg-muted h-9"
-                  />
+                {/* Row 1: Responsive Grid for Invoice Details */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <Label htmlFor="invoice_number" className="text-xs">Invoice Number *</Label>
+                    <Input
+                      id="invoice_number"
+                      value={formData.invoice_number}
+                      onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
+                      required
+                      disabled
+                      placeholder="Invoice Number"
+                      className="bg-muted h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="date" className="text-xs">Invoice Date *</Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                      required
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="delivery_date" className="text-xs">Delivery Date *</Label>
+                    <Input
+                      id="delivery_date"
+                      type="date"
+                      value={formData.delivery_date}
+                      onChange={(e) => {
+                        const newDeliveryDate = e.target.value;
+                        setFormData({ ...formData, delivery_date: newDeliveryDate });
+                        setItems(items.map(item => ({ ...item, delivery_date: newDeliveryDate })));
+                      }}
+                      required
+                      className="h-9"
+                    />
+                  </div>
                 </div>
+
+                {/* CUSTOMER FIELD */}
                 <div>
-                  <Label htmlFor="date" className="text-xs">Invoice Date *</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    required
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="delivery_date" className="text-xs">Delivery Date *</Label>
-                  <Input
-                    id="delivery_date"
-                    type="date"
-                    value={formData.delivery_date}
-                    onChange={(e) => {
-                      const newDeliveryDate = e.target.value;
-                      setFormData({ ...formData, delivery_date: newDeliveryDate });
-                      setItems(items.map(item => ({ ...item, delivery_date: newDeliveryDate })));
-                    }}
-                    required
-                    className="h-9"
-                  />
-                </div>
-              </div>
+                  <Label htmlFor="customer_id" className="text-xs mb-2 block">Customer *</Label>
+                  <Popover open={customerComboboxOpen} onOpenChange={setCustomerComboboxOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={customerComboboxOpen}
+                        className="w-full justify-between h-9"
+                      >
+                        <span className="truncate">
+                          {formData.customer_id
+                            ? (() => {
+                              const c = customers?.find((x) => x.id === formData.customer_id);
+                              return c ? `${c.name}${c.phone ? ` (${c.phone})` : ""}` : "Select customer..."
+                            })()
+                            : "Select customer..."}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
 
-              {/* CUSTOMER FIELD */}
-              <div>
-                <Label htmlFor="customer_id" className="text-xs mb-2 block">Customer *</Label>
-                <Popover open={customerComboboxOpen} onOpenChange={setCustomerComboboxOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={customerComboboxOpen}
-                      className="w-full justify-between h-9"
-                    >
-                      <span className="truncate">
-                        {formData.customer_id
-                          ? (() => {
-                            const c = customers?.find((x) => x.id === formData.customer_id);
-                            return c ? `${c.name}${c.phone ? ` (${c.phone})` : ""}` : "Select customer..."
-                          })()
-                          : "Select customer..."}
-                      </span>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-
-                  <PopoverContent className="w-[calc(100vw-2rem)] md:w-[400px] p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder="Search customers..."
-                        value={customerInput}
-                        onValueChange={(value) => {
-                          setCustomerInput(value);
-                          setFormData((prev) => ({ ...prev, customer_id: "" }));
-                        }}
-                      />
-                      <CommandList>
-                        <CommandEmpty>No customer found.</CommandEmpty>
-                        <CommandGroup>
-                          {customers?.filter((customer) =>
-                            `${customer.name} ${customer.phone || ""}`.toLowerCase().includes(customerInput.toLowerCase())
-                          ).map((customer) => (
-                            <CommandItem
-                              key={customer.id}
-                              value={`${customer.name} ${customer.phone || ""}`}
-                              onSelect={() => {
-                                setFormData({ ...formData, customer_id: customer.id });
-                                setCustomerInput(customer.name);
-                                setCustomerComboboxOpen(false);
-                              }}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", formData.customer_id === customer.id ? "opacity-100" : "opacity-0")} />
-                              {customer.name} {customer.phone && `(${customer.phone})`}
-                            </CommandItem>
-                          ))}
-
-                          {customers?.filter((c) =>
-                            `${c.name} ${c.phone}`.toLowerCase().includes(customerInput.toLowerCase())
-                          ).length === 0 && customerInput.length > 0 && (
+                    <PopoverContent className="w-[calc(100vw-2rem)] md:w-[400px] p-0" align="start">
+                      <Command>
+                        <CommandInput
+                          placeholder="Search customers..."
+                          value={customerInput}
+                          onValueChange={(value) => {
+                            setCustomerInput(value);
+                            setFormData((prev) => ({ ...prev, customer_id: "" }));
+                          }}
+                        />
+                        <CommandList>
+                          <CommandEmpty>No customer found.</CommandEmpty>
+                          <CommandGroup>
+                            {customers?.filter((customer) =>
+                              `${customer.name} ${customer.phone || ""}`.toLowerCase().includes(customerInput.toLowerCase())
+                            ).map((customer) => (
                               <CommandItem
-                                value={`Create ${customerInput}`}
+                                key={customer.id}
+                                value={`${customer.name} ${customer.phone || ""}`}
                                 onSelect={() => {
-                                  setNewCustomer({ name: customerInput, phone: "", email: "", address: "" });
-                                  setCustomerDialogOpen(true);
+                                  setFormData({ ...formData, customer_id: customer.id });
+                                  setCustomerInput(customer.name);
+                                  setCustomerComboboxOpen(false);
                                 }}
-                                className="text-blue-600 font-medium"
                               >
-                                + Create new customer “{customerInput}”
+                                <Check className={cn("mr-2 h-4 w-4", formData.customer_id === customer.id ? "opacity-100" : "opacity-0")} />
+                                {customer.name} {customer.phone && `(${customer.phone})`}
                               </CommandItem>
-                            )}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
+                            ))}
 
-              {/* Items Section */}
-              {/* Barcode Scanner Input */}
-              <div className="mb-3">
-                <Label className="text-xs">Scan Barcode</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Scan or enter barcode and press Enter"
-                    value={barcodeInput}
-                    onChange={(e) => setBarcodeInput(e.target.value)}
-                    onKeyDown={async (e) => {
-                      if (e.key === "Enter" && barcodeInput.trim()) {
-                        e.preventDefault();
-                        await processBarcodeScan(barcodeInput.trim());
-                        setBarcodeInput("");
-                      }
-                    }}
-                    className="h-9 flex-1"
-                  />
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="icon" 
-                    className="h-9 w-9 shrink-0 text-primary border-primary/20 hover:bg-primary/5"
-                    onClick={() => setIsScanningCamera(true)}
-                  >
-                    <Camera className="w-4 h-4" />
-                  </Button>
+                            {customers?.filter((c) =>
+                              `${c.name} ${c.phone}`.toLowerCase().includes(customerInput.toLowerCase())
+                            ).length === 0 && customerInput.length > 0 && (
+                                <CommandItem
+                                  value={`Create ${customerInput}`}
+                                  onSelect={() => {
+                                    setNewCustomer({ name: customerInput, phone: "", email: "", address: "" });
+                                    setCustomerDialogOpen(true);
+                                  }}
+                                  className="text-blue-600 font-medium"
+                                >
+                                  + Create new customer “{customerInput}”
+                                </CommandItem>
+                              )}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
-                <MobileBarcodeScanner 
-                  open={isScanningCamera} 
-                  onOpenChange={setIsScanningCamera} 
-                  onScan={processBarcodeScan} 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs">Items</Label>
+                {/* Items Section */}
+                {/* Barcode Scanner Input */}
+                <div className="mb-3">
+                  <Label className="text-xs">Scan Barcode</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Scan or enter barcode and press Enter"
+                      value={barcodeInput}
+                      onChange={(e) => setBarcodeInput(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter" && barcodeInput.trim()) {
+                          e.preventDefault();
+                          await processBarcodeScan(barcodeInput.trim());
+                          setBarcodeInput("");
+                        }
+                      }}
+                      className="h-9 flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 text-primary border-primary/20 hover:bg-primary/5"
+                      onClick={() => setIsScanningCamera(true)}
+                    >
+                      <Camera className="w-4 h-4" />
+                    </Button>
+                  </div>
 
-                {/* Desktop Table View */}
-                <div className="hidden md:block border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="h-8 text-xs">Name *</TableHead>
-                        <TableHead className="h-8 text-xs w-20">Qty *</TableHead>
-                        <TableHead className="h-8 text-xs w-24">Price *</TableHead>
-                        <TableHead className="h-8 text-xs w-24">Product *</TableHead>
-                        <TableHead className="h-8 text-xs w-24">Total</TableHead>
-                        <TableHead className="h-8 text-xs">Customer Ref</TableHead>
-                        <TableHead className="h-8 text-xs w-32">Delivery Date *</TableHead>
-                        <TableHead className="h-8 text-xs w-12"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="p-2">
-                            <Popover open={activeDesktopSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveDesktopSuggestionRow(null); }}>
+                  <MobileBarcodeScanner
+                    open={isScanningCamera}
+                    onOpenChange={setIsScanningCamera}
+                    onScan={processBarcodeScan}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Items</Label>
+
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="h-8 text-xs">Name *</TableHead>
+                          <TableHead className="h-8 text-xs w-20">Qty *</TableHead>
+                          <TableHead className="h-8 text-xs w-24">Price *</TableHead>
+                          <TableHead className="h-8 text-xs w-24">Product *</TableHead>
+                          <TableHead className="h-8 text-xs w-24">Total</TableHead>
+                          <TableHead className="h-8 text-xs">Customer Ref</TableHead>
+                          <TableHead className="h-8 text-xs w-32">Delivery Date *</TableHead>
+                          <TableHead className="h-8 text-xs w-12"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((item, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="p-2">
+                              <Popover open={activeDesktopSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveDesktopSuggestionRow(null); }}>
+                                <PopoverAnchor asChild>
+                                  <Input
+                                    value={item.name}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setActiveDesktopSuggestionRow(index);
+                                      setProductSearchQuery(val);
+                                      updateItem(index, "name", val);
+                                      updateItem(index, "product_id", null);
+                                      updateItem(index, "sku", "");
+                                    }}
+                                    onFocus={() => {
+                                      setActiveDesktopSuggestionRow(index);
+                                      setProductSearchQuery(item.name || "");
+                                    }}
+                                    required
+                                    placeholder="Item name"
+                                    className="h-8"
+                                  />
+                                </PopoverAnchor>
+                                <PopoverContent
+                                  className="w-[300px] p-0"
+                                  align="start"
+                                  onOpenAutoFocus={(e) => e.preventDefault()}
+                                  onPointerDownOutside={(e) => e.preventDefault()}
+                                >
+                                  <div className="max-h-[200px] overflow-y-auto p-1 space-y-1">
+                                    {(products || [])
+                                      .filter((p: any) => {
+                                        const query = productSearchQuery.toLowerCase();
+                                        return (
+                                          p.name?.toLowerCase().includes(query) ||
+                                          p.sku?.toLowerCase().includes(query) ||
+                                          p.category?.toLowerCase().includes(query)
+                                        );
+                                      })
+                                      .slice(0, 8)
+                                      .map((prod: any) => (
+                                        <button
+                                          key={prod.id}
+                                          type="button"
+                                          onClick={() => {
+                                            updateItem(index, "name", prod.name);
+                                            updateItem(index, "unit_price", prod.price?.toString() || "0");
+                                            updateItem(index, "product_id", prod.id);
+                                            updateItem(index, "sku", prod.sku || "");
+                                            setActiveDesktopSuggestionRow(null);
+                                          }}
+                                          className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent hover:text-accent-foreground transition-colors flex justify-between items-center"
+                                        >
+                                          <div className="max-w-[70%] truncate">
+                                            <div className="font-semibold truncate">{prod.name}</div>
+                                            <div className="text-[10px] text-muted-foreground truncate">
+                                              {prod.sku || "No SKU"} • {prod.category || "No Category"}
+                                            </div>
+                                          </div>
+                                          <div className="text-right">
+                                            <div className="font-bold text-primary">₹{prod.price || 0}</div>
+                                            <div className="text-[10px] text-muted-foreground">Stock: {prod.stock}</div>
+                                          </div>
+                                        </button>
+                                      ))}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input type="number" value={item.qty} onChange={(e) => updateItem(index, "qty", e.target.value)} required min="1" placeholder="0" className="h-8" />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input type="text" inputMode="decimal" value={item.unit_price} onChange={(e) => updateItem(index, "unit_price", e.target.value.replace(/[^\d.]/g, ""))} required placeholder="0.00" className="h-8" />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Select value={item.num_products} onValueChange={(value) => updateItem(index, "num_products", value)}>
+                                <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
+                                <SelectContent>
+                                  {["1", "2", "3", "4", "5"].map(num => <SelectItem key={num} value={num}>{num}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input value={`₹${(parseFloat(item.qty || 0) * parseFloat(item.unit_price || 0)).toFixed(2)}`} disabled className="bg-muted h-8 font-medium text-xs" />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input value={item.reference_name} onChange={(e) => updateItem(index, "reference_name", e.target.value)} placeholder="Reference" className="h-8" />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input type="date" value={item.delivery_date} onChange={(e) => updateItem(index, "delivery_date", e.target.value)} required className="h-8" />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(index)} disabled={items.length === 1} className="h-8 w-8 text-destructive">
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Mobile Item Cards */}
+                  <div className="md:hidden space-y-4">
+                    {items.map((item, index) => (
+                      <div key={index} className="border rounded-lg p-4 space-y-3 bg-card relative shadow-sm">
+                        <div className="flex justify-between items-center border-b pb-2 mb-1">
+                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Item #{index + 1}</span>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeItem(index)} disabled={items.length === 1} className="h-8 w-8 p-0 text-destructive">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+                          <div className="col-span-2">
+                            <Label className="text-[11px] font-semibold mb-1 block">Item Name *</Label>
+                            <Popover open={activeMobileSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveMobileSuggestionRow(null); }}>
                               <PopoverAnchor asChild>
                                 <Input
                                   value={item.name}
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setActiveDesktopSuggestionRow(index);
+                                    setActiveMobileSuggestionRow(index);
                                     setProductSearchQuery(val);
                                     updateItem(index, "name", val);
                                     updateItem(index, "product_id", null);
                                     updateItem(index, "sku", "");
                                   }}
                                   onFocus={() => {
-                                    setActiveDesktopSuggestionRow(index);
+                                    setActiveMobileSuggestionRow(index);
                                     setProductSearchQuery(item.name || "");
                                   }}
                                   required
-                                  placeholder="Item name"
-                                  className="h-8"
+                                  placeholder="Enter item name"
+                                  className="h-10"
                                 />
                               </PopoverAnchor>
-                              <PopoverContent 
-                                className="w-[300px] p-0" 
-                                align="start" 
+                              <PopoverContent
+                                className="w-[300px] p-0"
+                                align="start"
                                 onOpenAutoFocus={(e) => e.preventDefault()}
                                 onPointerDownOutside={(e) => e.preventDefault()}
                               >
@@ -1421,7 +1535,7 @@ export default function Invoices() {
                                           updateItem(index, "unit_price", prod.price?.toString() || "0");
                                           updateItem(index, "product_id", prod.id);
                                           updateItem(index, "sku", prod.sku || "");
-                                          setActiveDesktopSuggestionRow(null);
+                                          setActiveMobileSuggestionRow(null);
                                         }}
                                         className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent hover:text-accent-foreground transition-colors flex justify-between items-center"
                                       >
@@ -1440,231 +1554,117 @@ export default function Invoices() {
                                 </div>
                               </PopoverContent>
                             </Popover>
-                          </TableCell>
-                          <TableCell className="p-2">
-                            <Input type="number" value={item.qty} onChange={(e) => updateItem(index, "qty", e.target.value)} required min="1" placeholder="0" className="h-8" />
-                          </TableCell>
-                          <TableCell className="p-2">
-                            <Input type="text" inputMode="decimal" value={item.unit_price} onChange={(e) => updateItem(index, "unit_price", e.target.value.replace(/[^\d.]/g, ""))} required placeholder="0.00" className="h-8" />
-                          </TableCell>
-                          <TableCell className="p-2">
-                            <Select value={item.num_products} onValueChange={(value) => updateItem(index, "num_products", value)}>
-                              <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
+                          </div>
+                          <div>
+                            <Label className="text-[11px] font-semibold mb-1 block">Quantity *</Label>
+                            <Input type="number" value={item.qty} onChange={(e) => updateItem(index, "qty", e.target.value)} required min="1" placeholder="Qty" className="h-10" />
+                          </div>
+                          <div>
+                            <Label className="text-[11px] font-semibold mb-1 block">Unit Price *</Label>
+                            <Input type="text" inputMode="decimal" value={item.unit_price} onChange={(e) => updateItem(index, "unit_price", e.target.value.replace(/[^\d.]/g, ""))} required placeholder="Price" className="h-10" />
+                          </div>
+                          <div>
+                            <Label className="text-[11px] font-semibold mb-1 block">Product *</Label>
+                            <Select value={item.num_products} onValueChange={(v) => updateItem(index, "num_products", v)}>
+                              <SelectTrigger className="h-10"><SelectValue placeholder="Qty" /></SelectTrigger>
                               <SelectContent>
                                 {["1", "2", "3", "4", "5"].map(num => <SelectItem key={num} value={num}>{num}</SelectItem>)}
                               </SelectContent>
                             </Select>
-                          </TableCell>
-                          <TableCell className="p-2">
-                            <Input value={`₹${(parseFloat(item.qty || 0) * parseFloat(item.unit_price || 0)).toFixed(2)}`} disabled className="bg-muted h-8 font-medium text-xs" />
-                          </TableCell>
-                          <TableCell className="p-2">
-                            <Input value={item.reference_name} onChange={(e) => updateItem(index, "reference_name", e.target.value)} placeholder="Reference" className="h-8" />
-                          </TableCell>
-                          <TableCell className="p-2">
-                            <Input type="date" value={item.delivery_date} onChange={(e) => updateItem(index, "delivery_date", e.target.value)} required className="h-8" />
-                          </TableCell>
-                          <TableCell className="p-2">
-                            <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(index)} disabled={items.length === 1} className="h-8 w-8 text-destructive">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                          </div>
+                          <div>
+                            <Label className="text-[11px] font-semibold mb-1 block">Total</Label>
+                            <Input value={`₹${(parseFloat(item.qty || 0) * parseFloat(item.unit_price || 0)).toFixed(2)}`} disabled className="bg-muted h-10 font-bold" />
+                          </div>
 
-                {/* Mobile Item Cards */}
-                <div className="md:hidden space-y-4">
-                  {items.map((item, index) => (
-                    <div key={index} className="border rounded-lg p-4 space-y-3 bg-card relative shadow-sm">
-                      <div className="flex justify-between items-center border-b pb-2 mb-1">
-                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Item #{index + 1}</span>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeItem(index)} disabled={items.length === 1} className="h-8 w-8 p-0 text-destructive">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-3">
-                        <div className="col-span-2">
-                          <Label className="text-[11px] font-semibold mb-1 block">Item Name *</Label>
-                          <Popover open={activeMobileSuggestionRow === index && productSearchQuery.trim().length > 0} onOpenChange={(open) => { if (!open) setActiveMobileSuggestionRow(null); }}>
-                            <PopoverAnchor asChild>
-                              <Input
-                                value={item.name}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setActiveMobileSuggestionRow(index);
-                                  setProductSearchQuery(val);
-                                  updateItem(index, "name", val);
-                                  updateItem(index, "product_id", null);
-                                  updateItem(index, "sku", "");
-                                }}
-                                onFocus={() => {
-                                  setActiveMobileSuggestionRow(index);
-                                  setProductSearchQuery(item.name || "");
-                                }}
-                                required
-                                placeholder="Enter item name"
-                                className="h-10"
-                              />
-                            </PopoverAnchor>
-                            <PopoverContent 
-                              className="w-[300px] p-0" 
-                              align="start" 
-                              onOpenAutoFocus={(e) => e.preventDefault()}
-                              onPointerDownOutside={(e) => e.preventDefault()}
-                            >
-                              <div className="max-h-[200px] overflow-y-auto p-1 space-y-1">
-                                {(products || [])
-                                  .filter((p: any) => {
-                                    const query = productSearchQuery.toLowerCase();
-                                    return (
-                                      p.name?.toLowerCase().includes(query) ||
-                                      p.sku?.toLowerCase().includes(query) ||
-                                      p.category?.toLowerCase().includes(query)
-                                    );
-                                  })
-                                  .slice(0, 8)
-                                  .map((prod: any) => (
-                                    <button
-                                      key={prod.id}
-                                      type="button"
-                                      onClick={() => {
-                                        updateItem(index, "name", prod.name);
-                                        updateItem(index, "unit_price", prod.price?.toString() || "0");
-                                        updateItem(index, "product_id", prod.id);
-                                        updateItem(index, "sku", prod.sku || "");
-                                        setActiveMobileSuggestionRow(null);
-                                      }}
-                                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent hover:text-accent-foreground transition-colors flex justify-between items-center"
-                                    >
-                                      <div className="max-w-[70%] truncate">
-                                        <div className="font-semibold truncate">{prod.name}</div>
-                                        <div className="text-[10px] text-muted-foreground truncate">
-                                          {prod.sku || "No SKU"} • {prod.category || "No Category"}
-                                        </div>
-                                      </div>
-                                      <div className="text-right">
-                                        <div className="font-bold text-primary">₹{prod.price || 0}</div>
-                                        <div className="text-[10px] text-muted-foreground">Stock: {prod.stock}</div>
-                                      </div>
-                                    </button>
-                                  ))}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        <div>
-                          <Label className="text-[11px] font-semibold mb-1 block">Quantity *</Label>
-                          <Input type="number" value={item.qty} onChange={(e) => updateItem(index, "qty", e.target.value)} required min="1" placeholder="Qty" className="h-10" />
-                        </div>
-                        <div>
-                          <Label className="text-[11px] font-semibold mb-1 block">Unit Price *</Label>
-                          <Input type="text" inputMode="decimal" value={item.unit_price} onChange={(e) => updateItem(index, "unit_price", e.target.value.replace(/[^\d.]/g, ""))} required placeholder="Price" className="h-10" />
-                        </div>
-                        <div>
-                          <Label className="text-[11px] font-semibold mb-1 block">Product *</Label>
-                          <Select value={item.num_products} onValueChange={(v) => updateItem(index, "num_products", v)}>
-                            <SelectTrigger className="h-10"><SelectValue placeholder="Qty" /></SelectTrigger>
-                            <SelectContent>
-                              {["1", "2", "3", "4", "5"].map(num => <SelectItem key={num} value={num}>{num}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-[11px] font-semibold mb-1 block">Total</Label>
-                          <Input value={`₹${(parseFloat(item.qty || 0) * parseFloat(item.unit_price || 0)).toFixed(2)}`} disabled className="bg-muted h-10 font-bold" />
-                        </div>
+                          {/* Reference Name Fixed to Col-Span-2 */}
+                          <div className="col-span-2">
+                            <Label className="text-[11px] font-semibold mb-1 block">Customer Reference</Label>
+                            <Input
+                              value={item.reference_name}
+                              onChange={(e) => updateItem(index, "reference_name", e.target.value)}
+                              placeholder="Enter Customer Reference Name "
+                              className="h-10 w-full"
+                            />
+                          </div>
 
-                        {/* Reference Name Fixed to Col-Span-2 */}
-                        <div className="col-span-2">
-                          <Label className="text-[11px] font-semibold mb-1 block">Customer Reference</Label>
-                          <Input
-                            value={item.reference_name}
-                            onChange={(e) => updateItem(index, "reference_name", e.target.value)}
-                            placeholder="Enter Customer Reference Name "
-                            className="h-10 w-full"
-                          />
-                        </div>
-
-                        <div className="col-span-2">
-                          <Label className="text-[11px] font-semibold mb-1 block">Item Delivery Date *</Label>
-                          <Input type="date" value={item.delivery_date} onChange={(e) => updateItem(index, "delivery_date", e.target.value)} required className="h-10" />
+                          <div className="col-span-2">
+                            <Label className="text-[11px] font-semibold mb-1 block">Item Delivery Date *</Label>
+                            <Input type="date" value={item.delivery_date} onChange={(e) => updateItem(index, "delivery_date", e.target.value)} required className="h-10" />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
-                <Button type="button" variant="outline" size="sm" onClick={addItem} className="w-full h-10">
-                  <Plus className="w-4 h-4 mr-1" /> Add Another Item
-                </Button>
-              </div>
-
-              {/* Discount Section */}
-              <Collapsible open={showDiscount} onOpenChange={setShowDiscount} className="border-t pt-3">
-                <CollapsibleTrigger asChild>
-                  <Button type="button" variant="link" className="h-auto p-0 text-sm">
-                    {showDiscount ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
-                    Add Discount / Coupon
+                  <Button type="button" variant="outline" size="sm" onClick={addItem} className="w-full h-10">
+                    <Plus className="w-4 h-4 mr-1" /> Add Another Item
                   </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-3 pt-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                      <Label htmlFor="coupon_code" className="text-xs">Coupon Code</Label>
-                      <Input id="coupon_code" value={formData.coupon_code} onChange={(e) => setFormData({ ...formData, coupon_code: e.target.value })} placeholder="Enter Code" className="h-9" />
-                    </div>
-                    <div>
-                      <Label htmlFor="discount_type" className="text-xs">Discount Type</Label>
-                      <Select value={formData.discount_type} onValueChange={(value) => { setFormData({ ...formData, discount_type: value }); updateTotals(items, formData.discount, value); }}>
-                        <SelectTrigger className="h-9"><SelectValue placeholder="Select Type" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="fixed">₹ Fixed</SelectItem>
-                          <SelectItem value="percentage">% Percentage</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="discount" className="text-xs">Amount</Label>
-                      <Input id="discount" type="number" step="0.01" value={formData.discount} onChange={(e) => { setFormData({ ...formData, discount: e.target.value }); updateTotals(items, e.target.value, formData.discount_type); }} placeholder="0.00" className="h-9" />
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-
-              {/* Remarks Section */}
-              <div>
-                <Label htmlFor="remarks" className="text-xs">Remarks (optional)</Label>
-                <textarea
-                  id="remarks"
-                  rows={3}
-                  value={formData.remarks}
-                  onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                  placeholder="Add any notes or special instructions..."
-                  className="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-                />
-              </div>
-
-              {/* Totals Section */}
-              <div className="border-t pt-3 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal:</span>
-                  <span className="font-medium">₹{parseFloat(formData.subtotal).toFixed(2)}</span>
-                </div>
-                {parseFloat(formData.discount) > 0 && (
-                  <div className="flex justify-between text-sm text-green-600">
-                    <span>Discount ({formData.discount_type === "percentage" ? `${formData.discount}%` : `₹${formData.discount}`}):</span>
-                    <span className="font-medium">-₹{(formData.discount_type === "percentage" ? (parseFloat(formData.subtotal) * parseFloat(formData.discount)) / 100 : parseFloat(formData.discount)).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-xl font-bold pt-2 border-t">
-                  <span>Total:</span>
-                  <span>₹{parseFloat(formData.total).toFixed(2)}</span>
                 </div>
 
-                {/* <div className="flex flex-col gap-2 pt-2 border-t border-dashed">
+                {/* Discount Section */}
+                <Collapsible open={showDiscount} onOpenChange={setShowDiscount} className="border-t pt-3">
+                  <CollapsibleTrigger asChild>
+                    <Button type="button" variant="link" className="h-auto p-0 text-sm">
+                      {showDiscount ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
+                      Add Discount / Coupon
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-3 pt-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <Label htmlFor="coupon_code" className="text-xs">Coupon Code</Label>
+                        <Input id="coupon_code" value={formData.coupon_code} onChange={(e) => setFormData({ ...formData, coupon_code: e.target.value })} placeholder="Enter Code" className="h-9" />
+                      </div>
+                      <div>
+                        <Label htmlFor="discount_type" className="text-xs">Discount Type</Label>
+                        <Select value={formData.discount_type} onValueChange={(value) => { setFormData({ ...formData, discount_type: value }); updateTotals(items, formData.discount, value); }}>
+                          <SelectTrigger className="h-9"><SelectValue placeholder="Select Type" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="fixed">₹ Fixed</SelectItem>
+                            <SelectItem value="percentage">% Percentage</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="discount" className="text-xs">Amount</Label>
+                        <Input id="discount" type="number" step="0.01" value={formData.discount} onChange={(e) => { setFormData({ ...formData, discount: e.target.value }); updateTotals(items, e.target.value, formData.discount_type); }} placeholder="0.00" className="h-9" />
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* Remarks Section */}
+                <div>
+                  <Label htmlFor="remarks" className="text-xs">Remarks (optional)</Label>
+                  <textarea
+                    id="remarks"
+                    rows={3}
+                    value={formData.remarks}
+                    onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                    placeholder="Add any notes or special instructions..."
+                    className="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
+                  />
+                </div>
+
+                {/* Totals Section */}
+                <div className="border-t pt-3 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal:</span>
+                    <span className="font-medium">₹{parseFloat(formData.subtotal).toFixed(2)}</span>
+                  </div>
+                  {parseFloat(formData.discount) > 0 && (
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span>Discount ({formData.discount_type === "percentage" ? `${formData.discount}%` : `₹${formData.discount}`}):</span>
+                      <span className="font-medium">-₹{(formData.discount_type === "percentage" ? (parseFloat(formData.subtotal) * parseFloat(formData.discount)) / 100 : parseFloat(formData.discount)).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xl font-bold pt-2 border-t">
+                    <span>Total:</span>
+                    <span>₹{parseFloat(formData.total).toFixed(2)}</span>
+                  </div>
+
+                  {/* <div className="flex flex-col gap-2 pt-2 border-t border-dashed">
                   <Label className="text-xs">Advance Payment</Label>
                   <div className="flex items-center gap-2">
                     <Select value={formData.payment_method} onValueChange={(value) => setFormData({ ...formData, payment_method: value })}>
@@ -1701,31 +1701,31 @@ export default function Invoices() {
                     <span className="text-destructive">₹{Math.max(0, parseFloat(formData.total) - parseFloat(formData.paid_amount || "0")).toFixed(2)}</span>
                   </div>
                 </div> */}
-              </div>
+                </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col md:flex-row gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 order-2 md:order-1 h-11"
-                  onClick={handleSaveDraft}
-                  disabled={saveDraftMutation.isPending || isSubmitting}
-                >
-                  {saveDraftMutation.isPending ? "Saving..." : editingDraftId ? "Update Draft" : "Save as Draft"}
-                </Button>
-                <Button
-                  type="submit"
-                  className="flex-1 order-1 md:order-2 h-11"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting
-                    ? "Processing..." : editingDraftId ? "Finalize & Create Order" : "Create Invoice & Order"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+                {/* Action Buttons */}
+                <div className="flex flex-col md:flex-row gap-3 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 order-2 md:order-1 h-11"
+                    onClick={handleSaveDraft}
+                    disabled={saveDraftMutation.isPending || isSubmitting}
+                  >
+                    {saveDraftMutation.isPending ? "Saving..." : editingDraftId ? "Update Draft" : "Save as Draft"}
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1 order-1 md:order-2 h-11"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting
+                      ? "Processing..." : editingDraftId ? "Finalize & Create Order" : "Create Invoice & Order"}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Add Customer Dialog */}
