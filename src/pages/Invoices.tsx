@@ -1072,6 +1072,26 @@ export default function Invoices() {
     [financialTotals]
   );
 
+  // Stable handlers for the memoized InvoiceRow. Keeping these referentially
+  // stable lets React.memo skip re-rendering unchanged rows when the user types
+  // in search or re-sorts. State setters and `navigate` are themselves stable,
+  // so these callback identities never change. Behavior is identical to the
+  // previous inline arrows — InvoiceRow still only shows the "View Order" button
+  // for non-draft invoices that have an order.
+  const handleSelectInvoiceRow = useCallback((inv: any) => {
+    setSelectedInvoice(inv);
+  }, []);
+  const handleViewInvoiceOrder = useCallback(
+    (inv: any) => {
+      if (inv?.orders?.[0]?.id) navigate(`/orders/${inv.orders[0].id}`);
+    },
+    [navigate]
+  );
+  const handleRequestDeleteInvoice = useCallback((inv: any) => {
+    setInvoiceToDelete(inv);
+    setDeleteDialogOpen(true);
+  }, []);
+
   const hasActiveFilters =
     Boolean(searchQuery) ||
     paymentFilter !== "all" ||
@@ -1907,16 +1927,9 @@ export default function Invoices() {
                 <InvoiceRow
                   key={invoice.id}
                   invoice={invoice}
-                  onRowClick={() => setSelectedInvoice(invoice)}
-                  onViewOrder={
-                    invoice.status !== "draft" && invoice.orders?.[0]?.id
-                      ? () => navigate(`/orders/${invoice.orders[0].id}`)
-                      : undefined
-                  }
-                  onDelete={() => {
-                    setInvoiceToDelete(invoice);
-                    setDeleteDialogOpen(true);
-                  }}
+                  onRowClick={handleSelectInvoiceRow}
+                  onViewOrder={handleViewInvoiceOrder}
+                  onDelete={handleRequestDeleteInvoice}
                 />
               ))
             )}

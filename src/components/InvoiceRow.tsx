@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { derivePaymentStatus, derivePaymentStatusFromData } from "@/lib/derivePaymentStatus";
@@ -9,16 +10,16 @@ import { Eye, Trash2, Smartphone } from "lucide-react";
 
 import { StatusBadge } from "./StatusBadge";
 
-export function InvoiceRow({
+function InvoiceRowImpl({
     invoice,
     onRowClick,
     onViewOrder,
     onDelete,
 }: {
     invoice: any;
-    onRowClick: () => void;
-    onViewOrder?: () => void;
-    onDelete: () => void;
+    onRowClick: (invoice: any) => void;
+    onViewOrder?: (invoice: any) => void;
+    onDelete: (invoice: any) => void;
 }) {
     const navigate = useNavigate();
     const isDraft = invoice.status === "draft";
@@ -66,7 +67,7 @@ export function InvoiceRow({
     return (
         <TableRow
             className="cursor-pointer hover:bg-muted/50"
-            onClick={onRowClick}
+            onClick={() => onRowClick(invoice)}
         >
             <TableCell className="font-medium">
                 <div className="flex items-center gap-2">
@@ -121,7 +122,7 @@ export function InvoiceRow({
                             size="icon"
                             className="h-8 w-8"
                             title="View Order"
-                            onClick={onViewOrder}
+                            onClick={() => onViewOrder?.(invoice)}
                         >
                             <Eye className="w-4 h-4" />
                         </Button>
@@ -132,7 +133,7 @@ export function InvoiceRow({
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                         title="Delete Invoice"
-                        onClick={onDelete}
+                        onClick={() => onDelete(invoice)}
                     >
                         <Trash2 className="w-4 h-4" />
                     </Button>
@@ -141,3 +142,9 @@ export function InvoiceRow({
         </TableRow>
     );
 }
+
+// Memoized so that filtering/sorting or a parent re-render (e.g. typing in the
+// search box) does not re-render every row — only rows whose `invoice` object
+// identity actually changes re-render. Requires the parent to pass referentially
+// stable callbacks (see Invoices.tsx), which is why the handlers take `invoice`.
+export const InvoiceRow = memo(InvoiceRowImpl);

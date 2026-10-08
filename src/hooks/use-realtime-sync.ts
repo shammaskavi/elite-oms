@@ -27,17 +27,45 @@ export function useRealtimeSync(options: RealtimeSyncOptions = {}) {
 
   const queryClient = useQueryClient();
   const debounceTimerRef = useRef<Record<string, any>>({});
+  const firstScheduledRef = useRef<Record<string, number>>({});
 
-  const debounceInvalidate = (key: readonly any[], delayMs = 300) => {
+  // Coalesce bursts of realtime events into a single cache invalidation.
+  // DEBOUNCE_MS waits for a short quiet gap before refetching; MAX_WAIT_MS
+  // guarantees a refetch still happens within a bounded window even under a
+  // continuous stream of writes, so lists never appear frozen during busy
+  // billing. This only affects how quickly OTHER devices' changes appear — the
+  // current user's own actions refresh immediately via each page's mutation
+  // onSuccess invalidation, which is independent of this hook.
+  const DEBOUNCE_MS = 1000;
+  const MAX_WAIT_MS = 4000;
+
+  const debounceInvalidate = (key: readonly any[], delayMs = DEBOUNCE_MS) => {
     const keyString = JSON.stringify(key);
+    const now = Date.now();
+
+    if (firstScheduledRef.current[keyString] == null) {
+      firstScheduledRef.current[keyString] = now;
+    }
+
+    const fire = () => {
+      clearTimeout(debounceTimerRef.current[keyString]);
+      delete debounceTimerRef.current[keyString];
+      delete firstScheduledRef.current[keyString];
+      queryClient.invalidateQueries({ queryKey: key });
+    };
+
+    // Guarantee a refresh within MAX_WAIT_MS of the first pending event.
+    const waited = now - firstScheduledRef.current[keyString];
+    if (waited >= MAX_WAIT_MS) {
+      fire();
+      return;
+    }
+
     if (debounceTimerRef.current[keyString]) {
       clearTimeout(debounceTimerRef.current[keyString]);
     }
-
-    debounceTimerRef.current[keyString] = setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: key });
-      delete debounceTimerRef.current[keyString];
-    }, delayMs);
+    const wait = Math.min(delayMs, MAX_WAIT_MS - waited);
+    debounceTimerRef.current[keyString] = setTimeout(fire, wait);
   };
 
   useEffect(() => {
@@ -170,6 +198,8 @@ export function useRealtimeSync(options: RealtimeSyncOptions = {}) {
       Object.values(debounceTimerRef.current).forEach((timer) =>
         clearTimeout(timer)
       );
+      debounceTimerRef.current = {};
+      firstScheduledRef.current = {};
     };
   }, [enableOrders, enableInvoices, enableStock, orderId, invoiceId, queryClient]);
 }

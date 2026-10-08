@@ -40,6 +40,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const mountedRef = useRef(true);
+  // Tracks the user id whose profile is currently loaded, so we only (re)fetch
+  // the profile when the signed-in user actually changes — not on every repeated
+  // SIGNED_IN / token-refresh event that Supabase re-emits.
+  const lastProfileUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -134,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (initialUser) {
         try {
+          lastProfileUserIdRef.current = initialUser.id;
           await fetchProfile(initialUser.id, initialUser.email);
         } catch {
           // ignore error, fallback is handled inside fetchProfile
@@ -156,14 +161,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(currentUser);
 
       if (currentUser) {
-        // Fire asynchronously outside the auth dispatch lock
-        setTimeout(async () => {
-          if (isSubscribed) {
-            await fetchProfile(currentUser.id, currentUser.email);
-            setLoading(false);
-          }
-        }, 0);
+        // Only (re)fetch the profile when the signed-in user actually changes.
+        // Supabase re-emits SIGNED_IN / token-refresh events periodically; refetching
+        // on every emission caused a ~6s background profiles query loop. Role and
+        // kill-switch changes are still delivered live via the profiles realtime
+        // channel below, so freshness is preserved.
+        if (lastProfileUserIdRef.current !== currentUser.id) {
+          lastProfileUserIdRef.current = currentUser.id;
+          // Fire asynchronously outside the auth dispatch lock
+          setTimeout(async () => {
+            if (isSubscribed) {
+              await fetchProfile(currentUser.id, currentUser.email);
+              setLoading(false);
+            }
+          }, 0);
+        } else {
+          setLoading(false);
+        }
       } else {
+        lastProfileUserIdRef.current = null;
         setProfile(null);
         setLoading(false);
       }
@@ -233,6 +249,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
     });
     if (data?.user) {
+      lastProfileUserIdRef.current = data.user.id;
       const userProfile = await fetchProfile(data.user.id, data.user.email);
       if (userProfile && !userProfile.is_active) {
         await supabase.auth.signOut();
@@ -260,6 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    lastProfileUserIdRef.current = null;
     if (mountedRef.current) {
       setUser(null);
       setSession(null);
