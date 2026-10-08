@@ -103,6 +103,10 @@ export function useRealtimeSync(options: RealtimeSyncOptions = {}) {
           },
           (payload) => {
             debounceInvalidate(queryKeys.orders.all);
+            // Orders list current-stage/products/vendors come from the
+            // order_stage_summary view, which is derived from order_stages —
+            // refresh it when stages change elsewhere.
+            debounceInvalidate(["order-stage-summaries"] as const);
             const targetOrderId =
               (payload.new as any)?.order_id ||
               (payload.old as any)?.order_id ||

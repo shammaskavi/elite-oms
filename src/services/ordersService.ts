@@ -10,10 +10,10 @@ export const ordersService = {
    * Fetch orders with related customer, invoice, and stage history
    */
   async fetchOrders(options?: FetchOrdersOptions) {
-    let query = (supabase as any)
-      .from("orders")
-      .select(
-        `
+    // No longer embeds the full order_stages history (that bloated the payload).
+    // Current stage per product + vendors now come from fetchOrderStageSummaries()
+    // / the order_stage_summary view, merged in the page.
+    const SELECT = `
         id,
         order_code,
         invoice_id,
@@ -24,25 +24,71 @@ export const ordersService = {
         metadata,
         created_at,
         customers(name),
-        invoices(invoice_number),
-        order_stages(id, stage_name, vendor_name, metadata, created_at)
-      `
-      )
-      .order("created_at", { ascending: false });
+        invoices(invoice_number)
+      `;
 
+    // Bounded fetch (legacy callers that pass an explicit limit).
     if (options?.limit) {
-      query = query.limit(options.limit);
-    } else {
-      query = query.limit(1000);
+      let query = (supabase as any)
+        .from("orders")
+        .select(SELECT)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .limit(options.limit);
+      if (options?.signal) query = query.abortSignal(options.signal);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
     }
 
-    if (options?.signal) {
-      query = query.abortSignal(options.signal);
+    // Fetch ALL orders via range pagination. PostgREST caps each response at
+    // ~1000 rows, so we loop until a short page. A stable sort (created_at, id)
+    // keeps pages from overlapping or skipping — this is what lets every order
+    // load (previously .limit(1000) silently hid the oldest ~340).
+    const step = 1000;
+    let from = 0;
+    let all: any[] = [];
+    for (;;) {
+      let query = (supabase as any)
+        .from("orders")
+        .select(SELECT)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, from + step - 1);
+      if (options?.signal) query = query.abortSignal(options.signal);
+      const { data, error } = await query;
+      if (error) throw error;
+      all = all.concat(data || []);
+      if (!data || data.length < step) break;
+      from += step;
     }
+    return all;
+  },
 
-    const { data, error } = await query;
-    if (error) throw error;
-    return data || [];
+  /**
+   * Fetch current-stage summaries for all orders from the order_stage_summary
+   * view: per order, the latest stage name, the latest stage per product (as a
+   * compact array), and the set of vendors ever assigned. Replaces embedding the
+   * full order_stages history in the orders list. Paginated to return every order.
+   */
+  async fetchOrderStageSummaries(signal?: AbortSignal) {
+    const step = 1000;
+    let from = 0;
+    let all: any[] = [];
+    for (;;) {
+      let query = (supabase as any)
+        .from("order_stage_summary")
+        .select("order_id, current_stage, products, vendors")
+        .order("order_id", { ascending: true })
+        .range(from, from + step - 1);
+      if (signal) query = query.abortSignal(signal);
+      const { data, error } = await query;
+      if (error) throw error;
+      all = all.concat(data || []);
+      if (!data || data.length < step) break;
+      from += step;
+    }
+    return all;
   },
 
   /**

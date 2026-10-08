@@ -208,9 +208,25 @@ export default function OrdersNew() {
   const { data: rawOrders, isLoading } = useQuery({
     queryKey: queryKeys.orders.all,
     queryFn: async ({ signal }) => {
-      return ordersService.fetchOrders({ limit: 1000, signal });
+      // Fetch ALL orders (no 1000 cap) — the list no longer carries the heavy
+      // order_stages history, so this stays light.
+      return ordersService.fetchOrders({ signal });
     },
   });
+
+  // --- Current stage per product + vendors (from the order_stage_summary view) ---
+  const { data: stageSummaries } = useQuery({
+    queryKey: ["order-stage-summaries"],
+    queryFn: async ({ signal }) => {
+      return ordersService.fetchOrderStageSummaries(signal);
+    },
+  });
+
+  const summaryMap = useMemo(() => {
+    const m = new Map<string, any>();
+    (stageSummaries || []).forEach((s: any) => m.set(s.order_id, s));
+    return m;
+  }, [stageSummaries]);
 
   // --- Fetch stages from DB (order by order_index) ---
   const { data: stagesData } = useQuery({
@@ -252,35 +268,23 @@ export default function OrdersNew() {
     const defaultStage = STAGES.length > 0 ? STAGES[0] : "Ordered";
 
     return rawOrders.map((order: any) => {
-      const stages = order.order_stages || [];
-      const stagesSorted = stages.length > 1
-        ? [...stages].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-        : stages;
+      // Current stage, latest stage per product, and the vendor set all come
+      // from the order_stage_summary view (verified identical to the previous
+      // in-browser derivation from the full order_stages history), so the heavy
+      // history no longer needs to travel with the list.
+      const summary = summaryMap.get(order.id);
+      const currentStage = summary?.current_stage || defaultStage;
+      const allVendors: string[] = summary?.vendors || [];
 
-      const latestStageEntry = stagesSorted[stagesSorted.length - 1];
-      const currentStage = latestStageEntry?.stage_name || defaultStage;
-
-      // Extract products once per order
-      const productMap = new Map<number, any[]>();
-      stages.forEach((stage: any) => {
-        const productNumber = stage.metadata?.product_number;
-        if (!productNumber) return;
-        if (!productMap.has(productNumber)) productMap.set(productNumber, []);
-        productMap.get(productNumber)!.push(stage);
-      });
-
-      let products = Array.from(productMap.entries()).map(([productNumber, pStages]) => {
-        const sortedPStages = pStages.length > 1
-          ? [...pStages].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-          : pStages;
-        const latest = sortedPStages[sortedPStages.length - 1];
-        return {
-          productNumber,
-          productName: latest?.metadata?.product_name || null,
-          stage: latest?.stage_name ?? "Ordered",
-          vendor: latest?.vendor_name ?? "In-house",
-        };
-      });
+      let products = (summary?.products || []).map((p: any) => ({
+        productNumber: p.product_number,
+        productName: p.product_name || null,
+        stage: p.stage ?? "Ordered",
+        vendor: p.vendor ?? "In-house",
+        // Raw vendor (null when unassigned) — the Kanban shows a vendor line only
+        // for a real vendor, matching the previous history-based behavior.
+        vendorRaw: p.vendor ?? null,
+      }));
 
       // Fallback for older orders created before multi-product metadata was introduced
       if (products.length === 0) {
@@ -289,7 +293,8 @@ export default function OrdersNew() {
             productNumber: 1,
             productName: order.metadata?.item_name || "Order Item",
             stage: currentStage,
-            vendor: latestStageEntry?.vendor_name ?? "In-house",
+            vendor: "In-house",
+            vendorRaw: null,
           },
         ];
       }
@@ -333,6 +338,7 @@ export default function OrdersNew() {
         ...order,
         currentStage,
         products,
+        allVendors,
         isOverdue,
         isDueSoon,
         deliveryDateObj,
@@ -343,7 +349,7 @@ export default function OrdersNew() {
         invoiceNumber: order.invoices?.invoice_number || "",
       };
     });
-  }, [rawOrders, STAGES]);
+  }, [rawOrders, STAGES, summaryMap]);
 
   // --- Fast Computed Stats (fallback if RPC not available) ---
   const stats = useMemo(() => {
@@ -471,9 +477,11 @@ export default function OrdersNew() {
         if (!matchesCode && !matchesCustomer && !matchesItem) return;
       }
 
-      // Optional vendor filter
+      // Optional vendor filter — matches orders ever assigned to this vendor
+      // (allVendors = distinct vendor_names across the order's stages, from the
+      // summary view; preserves the previous "ever assigned" behavior).
       if (vendorFilter) {
-        const hasVendor = (order.order_stages || []).some((s: any) => s.vendor_name === vendorFilter);
+        const hasVendor = (order.allVendors || []).includes(vendorFilter);
         if (!hasVendor) return;
       }
 
@@ -627,42 +635,32 @@ export default function OrdersNew() {
     },
     onMutate: async ({ orderId, newStage }) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.orders.all });
+      await queryClient.cancelQueries({ queryKey: ["order-stage-summaries"] });
       const previousOrders = queryClient.getQueryData(queryKeys.orders.all);
+      const previousSummaries = queryClient.getQueryData(["order-stage-summaries"]);
 
-      queryClient.setQueryData(queryKeys.orders.all, (old: any[] = []) => {
-        return old.map((order) => {
-          if (order.id !== orderId) return order;
+      // Optimistically advance the order's CURRENT stage (held in the summaries
+      // cache now) so it jumps to the new stage column immediately, and reflect
+      // delivery on order_status. Per-product stages catch up on the refetch,
+      // exactly as before.
+      queryClient.setQueryData(["order-stage-summaries"], (old: any[] = []) =>
+        (old || []).map((s: any) =>
+          s.order_id === orderId ? { ...s, current_stage: newStage } : s
+        )
+      );
+      queryClient.setQueryData(queryKeys.orders.all, (old: any[] = []) =>
+        (old || []).map((order: any) =>
+          order.id === orderId
+            ? {
+                ...order,
+                order_status:
+                  newStage === "Delivered" ? "delivered" : order.order_status,
+              }
+            : order
+        )
+      );
 
-          const now = new Date().toISOString();
-          const existingStages = order.order_stages || [];
-          const updatedStages = [
-            ...existingStages.map((s: any) =>
-              s.status === "in_progress"
-                ? { ...s, status: "done", end_ts: now }
-                : s
-            ),
-            {
-              id: "temp-" + Date.now(),
-              stage_name: newStage,
-              vendor_name: null,
-              status: newStage === "Delivered" ? "done" : "in_progress",
-              created_at: now,
-              start_ts: now,
-              end_ts: newStage === "Delivered" ? now : null,
-              metadata: null,
-            },
-          ];
-
-          return {
-            ...order,
-            order_status:
-              newStage === "Delivered" ? "delivered" : order.order_status,
-            order_stages: updatedStages,
-          };
-        });
-      });
-
-      return { previousOrders };
+      return { previousOrders, previousSummaries };
     },
     onSuccess: () => {
       toast.success("Order stage updated successfully!");
@@ -671,12 +669,16 @@ export default function OrdersNew() {
       if (context?.previousOrders) {
         queryClient.setQueryData(queryKeys.orders.all, context.previousOrders);
       }
+      if (context?.previousSummaries) {
+        queryClient.setQueryData(["order-stage-summaries"], context.previousSummaries);
+      }
       console.error("updateStageMutation error:", err);
       toast.error(err?.message || "Failed to update order stage");
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.stats() });
+      queryClient.invalidateQueries({ queryKey: ["order-stage-summaries"] });
     },
   });
 
@@ -722,6 +724,7 @@ export default function OrdersNew() {
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.stats() });
+      queryClient.invalidateQueries({ queryKey: ["order-stage-summaries"] });
       toast.success(`Order marked as ${status === "delivered" ? "delivered" : "cancelled"}!`);
       setConfirmDialog({ open: false, orderId: "", action: "delivered" });
     },
@@ -1272,10 +1275,11 @@ export default function OrdersNew() {
                     ) : (
                       stageOrders.map((order: any) => {
                         // Find the vendor assigned to this specific stage
-                        const currentKanbanStageEntry = (order.order_stages || []).find(
-                          (s: any) => s.stage_name === stage
-                        );
-                        const vendorName = currentKanbanStageEntry?.vendor_name;
+                        // Vendor assigned at this (current) stage — raw value, so
+                        // the line shows only for a real vendor (matches prior behavior).
+                        const vendorName = (order.products || []).find(
+                          (p: any) => p.stage === stage
+                        )?.vendorRaw;
 
                         return (
                           <Card
