@@ -35,7 +35,13 @@ export function derivePaymentStatusFromData(
             })();
 
     // 1️⃣ Legacy paid (stored in raw_payload)
-    const legacyPaid = parseFloat(String(payload?.paid_amount ?? 0)) || 0;
+    // Billing-time advance: prefer the generated `paid_amount` column (so list
+    // queries need not fetch the raw_payload blob); fall back to raw_payload when
+    // the column isn't selected (detail/edit views that load the full blob).
+    const legacyPaid =
+        invoice?.paid_amount != null
+            ? parseFloat(String(invoice.paid_amount)) || 0
+            : parseFloat(String(payload?.paid_amount ?? 0)) || 0;
 
     // 2️⃣ Payments from DB (passed in)
     const dbPaid = (payments || []).reduce((sum, p) => {
@@ -65,7 +71,13 @@ export async function derivePaymentStatus(invoice: any): Promise<DerivedPaymentS
     /** -------------------------
      * 1️⃣ LEGACY PAID FIELDS
      --------------------------*/
-    const legacyPaid = parseFloat(String(payload?.paid_amount ?? 0)) || 0;
+    // Billing-time advance: prefer the generated `paid_amount` column (so list
+    // queries need not fetch the raw_payload blob); fall back to raw_payload when
+    // the column isn't selected (detail/edit views that load the full blob).
+    const legacyPaid =
+        invoice?.paid_amount != null
+            ? parseFloat(String(invoice.paid_amount)) || 0
+            : parseFloat(String(payload?.paid_amount ?? 0)) || 0;
 
     /** -------------------------
      * 2️⃣ DB PAYMENTS

@@ -34,7 +34,7 @@ export const customersService = {
           total,
           payment_status,
           settled,
-          raw_payload,
+          paid_amount,
           invoice_payments (
             id,
             amount

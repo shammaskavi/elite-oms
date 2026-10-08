@@ -5,12 +5,19 @@ export const invoicesService = {
    * Fetch all invoices with customer and order relations
    */
   async fetchInvoices(options?: { signal?: AbortSignal }) {
+    // Explicit column list (every scalar column EXCEPT the heavy `raw_payload`
+    // jsonb blob). `paid_amount` is the generated column that mirrors
+    // raw_payload->>'paid_amount', so payment math is unchanged. The full blob
+    // (items, discount, delivery, etc.) is fetched per-invoice via
+    // fetchInvoiceById only when a row is opened/edited/printed.
     let query = (supabase as any)
       .from("invoices")
       .select(
         `
-        *, 
-        customers(id, name, phone, email, address),
+        id, invoice_number, customer_id, date, subtotal, tax, total,
+        payment_method, created_at, payment_status, status,
+        tracking_token, settled, settlement_reason, paid_amount,
+        customers(id, name),
         orders(payment_status),
         invoice_payments(amount)
       `

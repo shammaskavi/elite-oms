@@ -281,7 +281,12 @@ export default function Invoices() {
 
     const invoice = invoices.find((i: any) => i.id === openInvoiceId);
     if (invoice) {
-      setSelectedInvoice(invoice);
+      // Fetch the full invoice (with raw_payload) for the detail view, since the
+      // list query no longer carries the blob. Fall back to the list row.
+      invoicesService
+        .fetchInvoiceById(openInvoiceId)
+        .then((full: any) => setSelectedInvoice(full || invoice))
+        .catch(() => setSelectedInvoice(invoice));
     }
 
     // clear state so refresh doesn't reopen
@@ -1078,8 +1083,16 @@ export default function Invoices() {
   // so these callback identities never change. Behavior is identical to the
   // previous inline arrows — InvoiceRow still only shows the "View Order" button
   // for non-draft invoices that have an order.
-  const handleSelectInvoiceRow = useCallback((inv: any) => {
-    setSelectedInvoice(inv);
+  const handleSelectInvoiceRow = useCallback(async (inv: any) => {
+    // The list query no longer includes raw_payload (items/discount/etc.), so
+    // fetch the full invoice by id before opening the detail view. Falls back to
+    // the list row if the fetch fails, so the modal always opens.
+    try {
+      const full = await invoicesService.fetchInvoiceById(inv.id);
+      setSelectedInvoice(full || inv);
+    } catch {
+      setSelectedInvoice(inv);
+    }
   }, []);
   const handleViewInvoiceOrder = useCallback(
     (inv: any) => {
