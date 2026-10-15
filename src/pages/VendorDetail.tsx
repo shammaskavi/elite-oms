@@ -95,10 +95,37 @@ export default function VendorDetail() {
   const { data: allOrders = [], isLoading: stagesLoading } = useQuery({
     queryKey: ["vendor-all-orders-detail", id, vendor?.name],
     queryFn: async () => {
-      if (!id) return [];
-      const { data, error } = await (supabase as any)
-        .from("orders")
-        .select(`
+      if (!id || !vendor?.name) return [];
+      const vName = vendor.name.trim();
+
+      // 1. Find the order ids this vendor is actually involved in — via the
+      //    order_stages table, matched by vendor_id OR vendor_name. This is
+      //    bounded by THIS vendor's work (not the whole orders table), so it
+      //    never hits PostgREST's ~1000-row response cap (which previously
+      //    truncated this page to the newest 1000 orders and hid old ones).
+      const orderIdSet = new Set<string>();
+      {
+        const step = 1000;
+        let from = 0;
+        for (;;) {
+          const { data, error } = await (supabase as any)
+            .from("order_stages")
+            .select("order_id")
+            .or(`vendor_id.eq.${id},vendor_name.ilike.${vName}`)
+            .range(from, from + step - 1);
+          if (error) throw error;
+          (data || []).forEach((r: any) => r.order_id && orderIdSet.add(r.order_id));
+          if (!data || data.length < step) break;
+          from += step;
+        }
+      }
+      const orderIds = Array.from(orderIdSet);
+      if (orderIds.length === 0) return [];
+
+      // 2. Fetch exactly those orders with ALL their stages (chunked to keep the
+      //    request URL sane for vendors with many orders). The existing workload
+      //    computation below then runs unchanged on this bounded, complete set.
+      const SELECT = `
           id,
           order_code,
           order_status,
@@ -123,13 +150,26 @@ export default function VendorDetail() {
             metadata,
             created_at
           )
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data || [];
+        `;
+      const CHUNK = 200;
+      let all: any[] = [];
+      for (let i = 0; i < orderIds.length; i += CHUNK) {
+        const batch = orderIds.slice(i, i + CHUNK);
+        const { data, error } = await (supabase as any)
+          .from("orders")
+          .select(SELECT)
+          .in("id", batch);
+        if (error) throw error;
+        all = all.concat(data || []);
+      }
+      // Preserve the previous newest-first ordering.
+      all.sort(
+        (a: any, b: any) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      return all;
     },
-    enabled: !!id,
+    enabled: !!id && !!vendor?.name,
     staleTime: 60 * 1000,
   });
 
