@@ -1,5 +1,5 @@
 // Orders page - in use
-import { useState, useEffect, useRef, useMemo, useDeferredValue } from "react";
+import { useState, useEffect, useRef, useMemo, useDeferredValue, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { queryKeys } from "@/services/api/queryKeys";
@@ -34,6 +34,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -48,6 +51,8 @@ import {
 import { toast } from "sonner";
 import WeekCalendar from "@/components/calendar/WeekCalendar";
 import OrdersInvoiceTable from "@/components/orders/OrdersInvoiceTable";
+import { FloatingTableFooter, type SummaryMetric } from "@/components/ui/floating-table-footer";
+import { DateRangeFilter, type DateFilterValue } from "@/components/ui/date-range-filter";
 
 export default function OrdersNew() {
   useDocumentTitle("Orders");
@@ -65,9 +70,22 @@ export default function OrdersNew() {
     d.setHours(0, 0, 0, 0);
     return d;
   });
-  const [stageFilter, setStageFilter] = useState<string | null>(null);
-  const [vendorFilter, setVendorFilter] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState<string>("");
+  // Table/List filters (multi-select stages & vendors, plus a date range).
+  // Empty arrays / { type: "all" } mean "no filter". Kanban & Calendar ignore these.
+  const [stageFilter, setStageFilter] = useState<string[]>([]);
+  const [vendorFilter, setVendorFilter] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>({ type: "all" });
+
+  const toggleStage = useCallback(
+    (s: string) =>
+      setStageFilter((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])),
+    []
+  );
+  const toggleVendor = useCallback(
+    (v: string) =>
+      setVendorFilter((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])),
+    []
+  );
   const [quickFilter, setQuickFilter] = useState<"overdue" | "dueSoon" | null>(null);
 
   // Sorting for invoices in table view
@@ -159,15 +177,19 @@ export default function OrdersNew() {
     try {
       const state = JSON.parse(saved);
 
-      if (state.stageFilter !== undefined) setStageFilter(state.stageFilter);
-      if (state.vendorFilter !== undefined) setVendorFilter(state.vendorFilter);
+      if (Array.isArray(state.stageFilter)) setStageFilter(state.stageFilter);
+      if (Array.isArray(state.vendorFilter)) setVendorFilter(state.vendorFilter);
       if (state.invoiceSortKey) setInvoiceSortKey(state.invoiceSortKey);
       if (state.invoiceSortDirection) setInvoiceSortDirection(state.invoiceSortDirection);
 
       setSearchQuery(state.searchQuery ?? "");
       setStatusFilter(state.statusFilter ?? "active");
       setViewMode(state.viewMode ?? "table");
-      setDateFilter(state.dateFilter ?? "");
+      setDateFilter(
+        state.dateFilter && typeof state.dateFilter === "object"
+          ? state.dateFilter
+          : { type: "all" }
+      );
       setQuickFilter(state.quickFilter ?? null);
 
       if (state.anchorDate) {
@@ -411,8 +433,20 @@ export default function OrdersNew() {
       if (quickFilter === "overdue" && !order.isOverdue) return false;
       if (quickFilter === "dueSoon" && !order.isDueSoon) return false;
 
-      // Date filter (YYYY-MM-DD)
-      if (dateFilter && order.createdDateYMD !== dateFilter) return false;
+      // Date-range filter (on the order's created date, YYYY-MM-DD)
+      if (dateFilter.type !== "all") {
+        const d = order.createdDateYMD;
+        if (!d) return false;
+        if (dateFilter.type === "single" && dateFilter.singleDate) {
+          if (d !== dateFilter.singleDate) return false;
+        } else if (dateFilter.startDate && dateFilter.endDate) {
+          if (!(d >= dateFilter.startDate && d <= dateFilter.endDate)) return false;
+        } else if (dateFilter.startDate) {
+          if (!(d >= dateFilter.startDate)) return false;
+        } else if (dateFilter.endDate) {
+          if (!(d <= dateFilter.endDate)) return false;
+        }
+      }
 
       // Search query (order code, customer name, item name)
       if (query) {
@@ -430,9 +464,10 @@ export default function OrdersNew() {
   const ordersWithVisibleProducts = useMemo(() => {
     if (!filteredOrders.length) return [];
 
-    const hasStageFilter = !!stageFilter;
-    const hasVendorFilter = !!vendorFilter;
-    const stageLower = stageFilter ? stageFilter.toLowerCase() : null;
+    const hasStageFilter = stageFilter.length > 0;
+    const hasVendorFilter = vendorFilter.length > 0;
+    const stageSet = new Set(stageFilter.map((s) => s.toLowerCase()));
+    const vendorSet = new Set(vendorFilter);
 
     if (!hasStageFilter && !hasVendorFilter) {
       return filteredOrders.map((order) => ({
@@ -444,8 +479,8 @@ export default function OrdersNew() {
     return filteredOrders
       .map((order) => {
         const visibleProducts = order.products.filter((p: any) => {
-          if (hasStageFilter && p.stage?.toLowerCase() !== stageLower) return false;
-          if (hasVendorFilter && p.vendor !== vendorFilter) return false;
+          if (hasStageFilter && !stageSet.has((p.stage || "").toLowerCase())) return false;
+          if (hasVendorFilter && !vendorSet.has(p.vendor)) return false;
           return true;
         });
 
@@ -460,43 +495,23 @@ export default function OrdersNew() {
   }, [filteredOrders, stageFilter, vendorFilter]);
 
   // --- Kanban Stage Grouping (Shows active production orders partitioned by stage) ---
+  // Kanban is intentionally filter-free: it always shows ALL active orders
+  // grouped by their current stage. The Table/List search & filters do not
+  // apply here (by design).
   const ordersByStage = useMemo(() => {
     const map: Record<string, any[]> = {};
     STAGES.forEach((s) => {
       map[s] = [];
     });
 
-    const query = deferredSearchQuery.trim().toLowerCase();
-
     activeOrders.forEach((order) => {
-      // Optional search filter
-      if (query) {
-        const matchesCode = order.order_code?.toLowerCase().includes(query);
-        const matchesCustomer = order.customerName?.toLowerCase().includes(query);
-        const matchesItem = order.metadata?.item_name?.toLowerCase().includes(query);
-        if (!matchesCode && !matchesCustomer && !matchesItem) return;
-      }
-
-      // Optional vendor filter — matches orders ever assigned to this vendor
-      // (allVendors = distinct vendor_names across the order's stages, from the
-      // summary view; preserves the previous "ever assigned" behavior).
-      if (vendorFilter) {
-        const hasVendor = (order.allVendors || []).includes(vendorFilter);
-        if (!hasVendor) return;
-      }
-
-      // Optional stage filter
-      if (stageFilter && order.currentStage?.toLowerCase() !== stageFilter.toLowerCase()) {
-        return;
-      }
-
       const stage = order.currentStage;
       if (!map[stage]) map[stage] = [];
       map[stage].push(order);
     });
 
     return map;
-  }, [activeOrders, STAGES, deferredSearchQuery, vendorFilter, stageFilter]);
+  }, [activeOrders, STAGES]);
 
   // --- Group Orders by Invoice for Table View (Memoized & Sorted) ---
   const ordersGroupedByInvoice = useMemo(() => {
@@ -548,6 +563,49 @@ export default function OrdersNew() {
 
     return sortedInvoices;
   }, [ordersWithVisibleProducts, invoiceSortKey, invoiceSortDirection]);
+
+  // --- Sticky summary footer (Table & List views only) ---
+  // "active" is the default Orders view, so it's the clean baseline (not counted
+  // as an applied filter). Resetting returns here, not to "all".
+  const hasActiveOrderFilters =
+    statusFilter !== "active" ||
+    !!quickFilter ||
+    stageFilter.length > 0 ||
+    vendorFilter.length > 0 ||
+    dateFilter.type !== "all" ||
+    !!searchQuery;
+
+  const handleClearAllOrderFilters = useCallback(() => {
+    setSearchQuery("");
+    setDateFilter({ type: "all" });
+    setStageFilter([]);
+    setVendorFilter([]);
+    setStatusFilter("active");
+    setQuickFilter(null);
+  }, []);
+
+  // Count + metrics for exactly what the active view shows: the Table view
+  // renders ordersWithVisibleProducts (grouped by invoice); the List view
+  // renders filteredOrders.
+  const orderFooterCount =
+    viewMode === "table" ? ordersWithVisibleProducts.length : filteredOrders.length;
+
+  const orderFooterMetrics = useMemo<SummaryMetric[]>(() => {
+    const source = viewMode === "table" ? ordersWithVisibleProducts : filteredOrders;
+    let totalValue = 0;
+    let overdue = 0;
+    let dueSoon = 0;
+    source.forEach((o: any) => {
+      totalValue += Number(o.total_amount || 0);
+      if (o.isOverdue) overdue += 1;
+      else if (o.isDueSoon) dueSoon += 1;
+    });
+    return [
+      { label: "Overdue", value: overdue, colorClass: "text-destructive" },
+      { label: "Due Soon", value: dueSoon, colorClass: "text-amber-600 dark:text-amber-400" },
+      { label: "Total Value", value: `₹${Math.round(totalValue).toLocaleString("en-IN")}` },
+    ];
+  }, [viewMode, ordersWithVisibleProducts, filteredOrders]);
 
   const handleInvoiceSortChange = (key: InvoiceSortKey) => {
     if (invoiceSortKey === key) {
@@ -918,6 +976,7 @@ export default function OrdersNew() {
             </div>
           </div>
 
+          {(viewMode === "table" || viewMode === "list") && (
           <div className="flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap gap-2.5 items-stretch sm:items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Input
@@ -937,45 +996,49 @@ export default function OrdersNew() {
               )}
             </div>
 
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full sm:w-auto h-9 text-xs"
-            />
+            <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
 
-            {/* Stage Filter */}
+            {/* Stage Filter (multi-select) */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="min-w-[130px] justify-between h-9 text-xs">
                   <span className="truncate">
-                    {stageFilter ? `Stage: ${stageFilter}` : "All Stages"}
+                    {stageFilter.length === 0
+                      ? "All Stages"
+                      : `${stageFilter.length} stage${stageFilter.length > 1 ? "s" : ""}`}
                   </span>
                   <SlidersHorizontal className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="start" className="w-56 max-h-[280px] overflow-y-auto">
-                <DropdownMenuItem
-                  onClick={() => setStageFilter(null)}
-                  className={!stageFilter ? "font-semibold text-primary" : ""}
-                >
-                  All Stages
-                </DropdownMenuItem>
-
+                <DropdownMenuLabel className="flex items-center justify-between">
+                  Stages
+                  {stageFilter.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-[11px] font-normal text-muted-foreground hover:text-foreground"
+                      onClick={() => setStageFilter([])}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
                 {STAGES.map((stage) => (
-                  <DropdownMenuItem
+                  <DropdownMenuCheckboxItem
                     key={stage}
-                    onClick={() => setStageFilter(stage)}
-                    className={stageFilter === stage ? "font-semibold text-primary" : ""}
+                    checked={stageFilter.includes(stage)}
+                    onCheckedChange={() => toggleStage(stage)}
+                    onSelect={(e) => e.preventDefault()}
                   >
                     {stage}
-                  </DropdownMenuItem>
+                  </DropdownMenuCheckboxItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Vendor Filter */}
+            {/* Vendor Filter (multi-select) */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -984,32 +1047,37 @@ export default function OrdersNew() {
                   className="min-w-[130px] justify-between h-9 text-xs"
                 >
                   <span className="truncate">
-                    {vendorFilter ? `Vendor: ${vendorFilter}` : "All Vendors"}
+                    {vendorFilter.length === 0
+                      ? "All Vendors"
+                      : `${vendorFilter.length} vendor${vendorFilter.length > 1 ? "s" : ""}`}
                   </span>
                   <SlidersHorizontal className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="start" className="w-56 max-h-[280px] overflow-y-auto">
-                <DropdownMenuItem
-                  onClick={() => setVendorFilter(null)}
-                  className={!vendorFilter ? "font-semibold text-primary" : ""}
-                >
-                  All Vendors
-                </DropdownMenuItem>
-
+                <DropdownMenuLabel className="flex items-center justify-between">
+                  Vendors
+                  {vendorFilter.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-[11px] font-normal text-muted-foreground hover:text-foreground"
+                      onClick={() => setVendorFilter([])}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
                 {(vendors || []).map((vendor: any) => (
-                  <DropdownMenuItem
+                  <DropdownMenuCheckboxItem
                     key={vendor.id}
-                    onClick={() => setVendorFilter(vendor.name)}
-                    className={
-                      vendorFilter === vendor.name
-                        ? "font-semibold text-primary"
-                        : ""
-                    }
+                    checked={vendorFilter.includes(vendor.name)}
+                    onCheckedChange={() => toggleVendor(vendor.name)}
+                    onSelect={(e) => e.preventDefault()}
                   >
                     {vendor.name}
-                  </DropdownMenuItem>
+                  </DropdownMenuCheckboxItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1022,10 +1090,11 @@ export default function OrdersNew() {
               </TabsList>
             </Tabs>
           </div>
+          )}
         </div>
 
-        {/* Active Filters Pill Badges */}
-        {(statusFilter !== "all" || quickFilter || stageFilter || vendorFilter || dateFilter || searchQuery) && (
+        {/* Active Filters Pill Badges — Table & List only */}
+        {(viewMode === "table" || viewMode === "list") && hasActiveOrderFilters && (
           <div className="flex flex-wrap items-center gap-1.5 pt-3 mt-1 border-t border-border/40">
             <span className="text-xs text-muted-foreground mr-1">Active filters:</span>
 
@@ -1039,31 +1108,55 @@ export default function OrdersNew() {
               </Badge>
             )}
 
-            {dateFilter && (
+            {dateFilter.type !== "all" && (
               <Badge
                 variant="secondary"
                 className="cursor-pointer text-[11px] gap-1 hover:bg-muted"
-                onClick={() => setDateFilter("")}
+                onClick={() => setDateFilter({ type: "all" })}
               >
-                Date: {dateFilter} <X className="h-3 w-3" />
+                Date:{" "}
+                {dateFilter.presetLabel
+                  ? dateFilter.presetLabel
+                  : dateFilter.singleDate
+                  ? dateFilter.singleDate
+                  : dateFilter.startDate && dateFilter.endDate
+                  ? `${dateFilter.startDate} → ${dateFilter.endDate}`
+                  : dateFilter.startDate
+                  ? `From ${dateFilter.startDate}`
+                  : dateFilter.endDate
+                  ? `Until ${dateFilter.endDate}`
+                  : "custom"}{" "}
+                <X className="h-3 w-3" />
               </Badge>
             )}
 
-            {stageFilter && (
+            {stageFilter.map((stage) => (
               <Badge
+                key={`stage-${stage}`}
                 variant="secondary"
                 className="cursor-pointer text-[11px] gap-1 hover:bg-muted"
-                onClick={() => setStageFilter(null)}
+                onClick={() => toggleStage(stage)}
               >
-                Stage: {stageFilter} <X className="h-3 w-3" />
+                Stage: {stage} <X className="h-3 w-3" />
               </Badge>
-            )}
+            ))}
 
-            {statusFilter !== "all" && (
+            {vendorFilter.map((vendor) => (
+              <Badge
+                key={`vendor-${vendor}`}
+                variant="secondary"
+                className="cursor-pointer text-[11px] gap-1 hover:bg-muted"
+                onClick={() => toggleVendor(vendor)}
+              >
+                Vendor: {vendor} <X className="h-3 w-3" />
+              </Badge>
+            ))}
+
+            {statusFilter !== "active" && (
               <Badge
                 variant="secondary"
                 className="cursor-pointer text-[11px] gap-1 hover:bg-muted"
-                onClick={() => setStatusFilter("all")}
+                onClick={() => setStatusFilter("active")}
               >
                 Status: {statusFilter} <X className="h-3 w-3" />
               </Badge>
@@ -1089,28 +1182,11 @@ export default function OrdersNew() {
               </Badge>
             )}
 
-            {vendorFilter && (
-              <Badge
-                variant="secondary"
-                className="cursor-pointer text-[11px] gap-1 hover:bg-muted"
-                onClick={() => setVendorFilter(null)}
-              >
-                Vendor: {vendorFilter} <X className="h-3 w-3" />
-              </Badge>
-            )}
-
             <Button
               variant="ghost"
               size="sm"
               className="text-xs h-6 px-2 text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setSearchQuery("");
-                setDateFilter("");
-                setStageFilter(null);
-                setVendorFilter(null);
-                setStatusFilter("all");
-                setQuickFilter(null);
-              }}
+              onClick={handleClearAllOrderFilters}
             >
               Clear all
             </Button>
@@ -1416,6 +1492,18 @@ export default function OrdersNew() {
           onOrderClick={(orderId) => {
             goToOrder(orderId);
           }}
+        />
+      )}
+
+      {/* Sticky summary footer — Table & List views only (Kanban/Calendar unaffected) */}
+      {(viewMode === "table" || viewMode === "list") && !isLoading && (
+        <FloatingTableFooter
+          totalCount={orderFooterCount}
+          itemName="Orders"
+          metrics={orderFooterMetrics}
+          showFinancials
+          hasActiveFilters={hasActiveOrderFilters}
+          onResetFilters={handleClearAllOrderFilters}
         />
       )}
 
