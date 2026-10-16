@@ -11,6 +11,7 @@ import {
     TableHead,
 } from "@/components/ui/table";
 import { TableSkeleton } from "@/components/skeletons";
+import { QuickStageChange, type QuickStageAdvanceArgs } from "@/components/orders/QuickStageChange";
 
 // --- Helpers ---
 
@@ -36,6 +37,12 @@ interface OrdersInvoiceTableProps {
     invoiceSortDirection: "asc" | "desc";
     onChangeSort: (key: "invoice" | "delivery" | "amount") => void;
     isLoading?: boolean;
+    // Optional quick per-product stage advance (tap a stage badge).
+    stages?: string[];
+    vendors?: { id: string; name: string }[];
+    onAdvanceStage?: (args: QuickStageAdvanceArgs) => void;
+    /** `${orderId}:${productNumber}` currently being moved (shows a spinner). */
+    pendingStageKey?: string | null;
 }
 
 // --- Component ---
@@ -46,6 +53,10 @@ function OrdersInvoiceTableComponent({
     invoiceSortDirection,
     onChangeSort,
     isLoading = false,
+    stages,
+    vendors,
+    onAdvanceStage,
+    pendingStageKey,
 }: OrdersInvoiceTableProps) {
     const renderSortIcon = (key: "invoice" | "delivery" | "amount") => {
         if (key !== invoiceSortKey) return null;
@@ -188,16 +199,43 @@ function OrdersInvoiceTableComponent({
                                             )}
                                         </TableCell>
 
-                                        {/* Stage Badge */}
+                                        {/* Stage Badge (tap to quick-advance the product's stage) */}
                                         <TableCell className="py-2.5 px-3 align-top">
                                             <div className={isMultiProduct ? "mt-5 space-y-1" : "mt-0"}>
-                                                {products.map((p: any) => (
-                                                    <div key={p.productNumber} className="h-5 flex items-center">
-                                                        <Badge className={`${getStageColor(p.stage)} text-[10px] px-1.5 py-0 h-4 shadow-none border font-medium`}>
+                                                {products.map((p: any) => {
+                                                    const quickEnabled = !!onAdvanceStage && !!stages?.length;
+                                                    const badge = (
+                                                        <Badge
+                                                            className={`${getStageColor(p.stage)} text-[10px] px-1.5 py-0 h-4 shadow-none border font-medium ${
+                                                                quickEnabled ? "cursor-pointer hover:ring-1 hover:ring-primary/40" : ""
+                                                            }`}
+                                                        >
                                                             {p.stage}
                                                         </Badge>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                    return (
+                                                        <div key={p.productNumber} className="h-5 flex items-center">
+                                                            {quickEnabled ? (
+                                                                <QuickStageChange
+                                                                    orderId={order.id}
+                                                                    productNumber={p.productNumber}
+                                                                    productName={p.productName || orderName}
+                                                                    currentStage={p.stage}
+                                                                    stages={stages!}
+                                                                    vendors={vendors || []}
+                                                                    onAdvance={onAdvanceStage!}
+                                                                    isPending={
+                                                                        pendingStageKey === `${order.id}:${p.productNumber}`
+                                                                    }
+                                                                >
+                                                                    {badge}
+                                                                </QuickStageChange>
+                                                            ) : (
+                                                                badge
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </TableCell>
 

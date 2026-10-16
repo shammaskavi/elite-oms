@@ -51,6 +51,7 @@ import {
 import { toast } from "sonner";
 import WeekCalendar from "@/components/calendar/WeekCalendar";
 import OrdersInvoiceTable from "@/components/orders/OrdersInvoiceTable";
+import type { QuickStageAdvanceArgs } from "@/components/orders/QuickStageChange";
 import { FloatingTableFooter, type SummaryMetric } from "@/components/ui/floating-table-footer";
 import { DateRangeFilter, type DateFilterValue } from "@/components/ui/date-range-filter";
 
@@ -103,6 +104,9 @@ export default function OrdersNew() {
     orderId: "",
     action: "delivered",
   });
+
+  // `${orderId}:${productNumber}` currently mid stage-advance (shows a spinner).
+  const [pendingStageKey, setPendingStageKey] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -791,6 +795,62 @@ export default function OrdersNew() {
       toast.error(err?.message || "Failed to update order status");
     },
   });
+
+  // --- Quick per-product stage advance (from the table) ---
+  const advanceStageMutation = useMutation({
+    mutationFn: async (args: QuickStageAdvanceArgs) => {
+      // Find the product's current (latest) stage row, to mark it done.
+      const { data: cur, error: curErr } = await (supabase as any)
+        .from("order_stages")
+        .select("id")
+        .eq("order_id", args.orderId)
+        .eq("metadata->>product_number", String(args.productNumber))
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (curErr) throw curErr;
+      const currentStageId = cur && cur.length ? cur[0].id : null;
+
+      // Resolve vendor_id from the chosen name (optional).
+      let vendorId: string | null = null;
+      if (args.vendorName) {
+        const found = (vendors || []).find((v: any) => v.name === args.vendorName);
+        if (found) vendorId = found.id;
+      }
+
+      await ordersService.moveToStage({
+        orderId: args.orderId,
+        currentStageId,
+        targetStage: args.targetStage,
+        vendorId,
+        vendorName: args.vendorName,
+        productNumber: Number(args.productNumber),
+        productName: args.productName,
+      });
+    },
+    onMutate: (args: QuickStageAdvanceArgs) => {
+      setPendingStageKey(`${args.orderId}:${args.productNumber}`);
+    },
+    onSuccess: (_data, args: QuickStageAdvanceArgs) => {
+      toast.success(`Moved ${args.productName || "garment"} to ${args.targetStage}`);
+    },
+    onError: (err: any) => {
+      console.error("advanceStageMutation error:", err);
+      toast.error(err?.message || "Failed to advance stage");
+    },
+    onSettled: () => {
+      setPendingStageKey(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.stats() });
+      queryClient.invalidateQueries({ queryKey: ["order-stage-summaries"] });
+    },
+  });
+
+  const handleAdvanceStage = useCallback(
+    (args: QuickStageAdvanceArgs) => {
+      advanceStageMutation.mutate(args);
+    },
+    [advanceStageMutation]
+  );
 
   const OrdersSkeleton = () => {
     return (
@@ -1492,6 +1552,10 @@ export default function OrdersNew() {
           onOrderClick={(orderId) => {
             goToOrder(orderId);
           }}
+          stages={STAGES}
+          vendors={vendors || []}
+          onAdvanceStage={handleAdvanceStage}
+          pendingStageKey={pendingStageKey}
         />
       )}
 
