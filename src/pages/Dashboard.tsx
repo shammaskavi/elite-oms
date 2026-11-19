@@ -109,7 +109,7 @@ export default function Dashboard() {
         totalOrdersRes,
         pendingOrdersRes,
         paymentsDataRes,
-        ordersDataRes,
+        revenueDataRes,
         invoicesRes,
         activeOrdersRes,
         deliveriesRes,
@@ -125,16 +125,58 @@ export default function Dashboard() {
           .neq("order_status", "cancelled")
           .gte("created_at", selectedStartDate),
         isAdmin
-          ? (supabase as any)
-              .from("invoice_payments")
-              .select("amount, date")
-              .gte("date", selectedStartDate)
+          ? (async () => {
+              const isAllTime = timePeriod === "all";
+              const step = 1000;
+              let from = 0;
+              let allPayments: any[] = [];
+              for (;;) {
+                let q = (supabase as any)
+                  .from("invoice_payments")
+                  .select("amount, date");
+
+                if (!isAllTime) {
+                  q = q.gte("date", selectedStartDate);
+                }
+
+                const { data, error } = await q.range(from, from + step - 1);
+                if (error) {
+                  console.error("Dashboard payments query error:", error);
+                  throw error;
+                }
+                allPayments = allPayments.concat(data || []);
+                if (!data || data.length < step) break;
+                from += step;
+              }
+              return { data: allPayments };
+            })()
           : Promise.resolve({ data: [] }),
         isAdmin
-          ? (supabase as any)
-              .from("orders")
-              .select("total_amount")
-              .gte("created_at", selectedStartDate)
+          ? (async () => {
+              const isAllTime = timePeriod === "all";
+              const step = 1000;
+              let from = 0;
+              let allInvoices: any[] = [];
+              for (;;) {
+                let q = (supabase as any)
+                  .from("invoices")
+                  .select("total, status");
+
+                if (!isAllTime) {
+                  q = q.gte("date", selectedStartDate);
+                }
+
+                const { data, error } = await q.range(from, from + step - 1);
+                if (error) {
+                  console.error("Dashboard revenue query error:", error);
+                  throw error;
+                }
+                allInvoices = allInvoices.concat(data || []);
+                if (!data || data.length < step) break;
+                from += step;
+              }
+              return { data: allInvoices };
+            })()
           : Promise.resolve({ data: [] }),
         (supabase as any)
           .from("invoices")
@@ -191,13 +233,25 @@ export default function Dashboard() {
       ]);
 
       // Calculate Stats
+      const totalRev =
+        revenueDataRes?.data?.reduce(
+          (sum: number, inv: any) => sum + Number(inv.total || 0),
+          0
+        ) || 0;
+      const confirmedRev =
+        revenueDataRes?.data
+          ?.filter((inv: any) => inv.status !== "draft")
+          .reduce((sum: number, inv: any) => sum + Number(inv.total || 0), 0) || 0;
+      const draftRev = Math.max(0, totalRev - confirmedRev);
+
       const stats = {
         totalOrders: totalOrdersRes?.count || 0,
         pendingOrders: pendingOrdersRes?.count || 0,
         cashInflow:
           paymentsDataRes?.data?.reduce((sum: number, p: any) => sum + Number(p.amount), 0) || 0,
-        revenue:
-          ordersDataRes?.data?.reduce((sum: number, order: any) => sum + Number(order.total_amount), 0) || 0,
+        revenue: totalRev,
+        confirmedRevenue: confirmedRev,
+        draftRevenue: draftRev,
       };
 
       // Enrich Invoices with Payments (directly from joined relation)
@@ -281,6 +335,8 @@ export default function Dashboard() {
     pendingOrders: 0,
     cashInflow: 0,
     revenue: 0,
+    confirmedRevenue: 0,
+    draftRevenue: 0,
   };
   const overdueOrders = dashboardData?.overdueOrders || [];
   const pendingInvoices = dashboardData?.pendingInvoices || [];
@@ -427,9 +483,13 @@ export default function Dashboard() {
               />
               <StatCard
                 label={`Revenue · ${periodLabel}`}
-                value={`₹${stats.revenue.toLocaleString()}`}
+                value={`₹${Math.round(stats.revenue).toLocaleString()}`}
                 icon={<DollarSign className="h-6 w-6 text-primary" />}
-                hint={periodLabel}
+                hint={
+                  (stats.draftRevenue || 0) > 0
+                    ? `₹${Math.round(stats.confirmedRevenue).toLocaleString()} confirmed · ₹${Math.round(stats.draftRevenue).toLocaleString()} draft`
+                    : periodLabel
+                }
               />
             </>
           ) : (
