@@ -115,20 +115,33 @@ export function PrinterSetupDialog({ open, onOpenChange }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Agent connection */}
-          <div className="rounded-lg border p-3 space-y-3 bg-muted/30">
+          {/* Connection Status */}
+          <div className="rounded-lg border p-3.5 space-y-3 bg-muted/30">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Print Agent
-              </span>
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                  Printer Connection
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {status?.activeService === "qz-tray"
+                    ? "Silent 1-click thermal printing via QZ Tray"
+                    : status?.activeService === "agent"
+                    ? "Connected via local Print Agent"
+                    : "No print service detected"}
+                </span>
+              </div>
               <div className="flex items-center gap-2">
                 {checking ? (
                   <Badge variant="secondary" className="gap-1 text-[10px]">
                     <Loader2 className="w-3 h-3 animate-spin" /> Checking
                   </Badge>
-                ) : status?.online ? (
+                ) : status?.online && status.activeService === "qz-tray" ? (
                   <Badge className="gap-1 text-[10px] bg-emerald-600 hover:bg-emerald-600">
-                    <CheckCircle2 className="w-3 h-3" /> Connected
+                    <CheckCircle2 className="w-3 h-3" /> QZ Tray Ready
+                  </Badge>
+                ) : status?.online ? (
+                  <Badge className="gap-1 text-[10px] bg-blue-600 hover:bg-blue-600">
+                    <CheckCircle2 className="w-3 h-3" /> Agent Connected
                   </Badge>
                 ) : (
                   <Badge variant="destructive" className="gap-1 text-[10px]">
@@ -142,21 +155,8 @@ export function PrinterSetupDialog({ open, onOpenChange }: Props) {
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="agent-url" className="text-[11px] font-semibold">
-                Agent URL
-              </Label>
-              <Input
-                id="agent-url"
-                className="h-8 text-xs font-mono"
-                value={settings.agentUrl}
-                onChange={(e) => setSettings((prev) => ({ ...prev, agentUrl: e.target.value }))}
-                onBlur={() => check()}
-              />
-            </div>
-
-            <div className="space-y-1">
               <Label htmlFor="printer-name" className="text-[11px] font-semibold">
-                Printer
+                Printer Name (Windows)
               </Label>
               {status?.online && status.printers && status.printers.length > 0 ? (
                 <Select
@@ -178,57 +178,48 @@ export function PrinterSetupDialog({ open, onOpenChange }: Props) {
                 <Input
                   id="printer-name"
                   className="h-8 text-xs font-mono"
+                  placeholder="e.g. TSC TA210"
                   value={settings.printerName}
                   onChange={(e) => setSettings((prev) => ({ ...prev, printerName: e.target.value }))}
                 />
               )}
+              <p className="text-[10px] text-muted-foreground">
+                Must match the printer name in Windows Printers &amp; Scanners (e.g. <code>TSC TA210</code>).
+              </p>
             </div>
 
             {!status?.online && !checking && (
-              <div className="text-[10px] text-muted-foreground leading-relaxed space-y-1.5 border-t pt-2">
-                <p className="font-semibold text-destructive">{status?.error || "Not connected."}</p>
-                <p className="font-semibold text-foreground">Check, in order:</p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>
-                    Open{" "}
-                    <a
-                      href={`${settings.agentUrl}/health`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-mono underline text-primary"
-                    >
-                      {settings.agentUrl}/health
-                    </a>{" "}
-                    on the shop PC. If you see text starting with{" "}
-                    <code className="font-mono">{'{"ok":true'}</code>, the agent is running and this dialog
-                    just needs a refresh.
-                  </li>
-                  <li>
-                    Is the <code className="font-mono">start-agent.bat</code> window still open? It has to
-                    stay open. If it closed, reopen it and read the message.
-                  </li>
-                  <li>
-                    Check <code className="font-mono">agent-log.txt</code> in the{" "}
-                    <code className="font-mono">print-agent</code> folder — it records why it stopped.
-                  </li>
-                  <li>
-                    Node.js must be installed on that PC —{" "}
-                    <span className="font-mono">nodejs.org</span>, LTS version.
-                  </li>
-                </ol>
+              <div className="text-[11px] text-muted-foreground leading-relaxed space-y-2 border-t pt-2.5">
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded p-2 text-foreground">
+                  <p className="font-semibold text-xs mb-1">Recommended: Install QZ Tray (2 minutes)</p>
+                  <p className="text-[11px] text-muted-foreground mb-2">
+                    QZ Tray runs silently in the background on the shop PC. No black command windows or Node.js required.
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px]">
+                    <li>
+                      Download and install QZ Tray on this PC:{" "}
+                      <a
+                        href="https://qz.io/download/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium underline text-primary"
+                      >
+                        qz.io/download
+                      </a>
+                    </li>
+                    <li>Launch QZ Tray (it will appear in your Windows taskbar tray).</li>
+                    <li>
+                      Hit the <strong>Refresh</strong> button above. When QZ Tray pops up, check{" "}
+                      <em>&quot;Remember this decision&quot;</em> and click <strong>Allow</strong>.
+                    </li>
+                  </ol>
+                </div>
               </div>
             )}
 
             {status?.online && status.helperError && (
               <p className="text-[10px] leading-relaxed text-destructive border-t pt-2">
-                Agent is running but its raw-print helper failed to build, so printing will not work:{" "}
-                {status.helperError}
-              </p>
-            )}
-
-            {status?.online && status.ready === false && !status.helperError && (
-              <p className="text-[10px] leading-relaxed text-muted-foreground border-t pt-2">
-                Agent is starting up (first-run setup). Give it a few seconds, then refresh.
+                Agent is running but its raw-print helper failed to build: {status.helperError}
               </p>
             )}
           </div>

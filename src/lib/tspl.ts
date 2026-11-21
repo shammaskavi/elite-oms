@@ -310,23 +310,24 @@ function drawGarmentLabel(builder: LabelBuilder, originX: number, originY: numbe
   const S = {
     kicker: scalable ? ({ kind: "scalable", pt: 6 } as TextStyle) : ({ kind: "bitmap", font: "1" } as TextStyle),
     name: scalable ? ({ kind: "scalable", pt: 7 } as TextStyle) : ({ kind: "bitmap", font: "1" } as TextStyle),
-    color: scalable ? ({ kind: "scalable", pt: 8 } as TextStyle) : ({ kind: "bitmap", font: "2" } as TextStyle),
-    price: scalable ? ({ kind: "scalable", pt: 12 } as TextStyle) : ({ kind: "bitmap", font: "3" } as TextStyle),
+    detail: scalable ? ({ kind: "scalable", pt: 6 } as TextStyle) : ({ kind: "bitmap", font: "1" } as TextStyle),
+    color: scalable ? ({ kind: "scalable", pt: 7 } as TextStyle) : ({ kind: "bitmap", font: "2" } as TextStyle),
+    price: scalable ? ({ kind: "scalable", pt: 10 } as TextStyle) : ({ kind: "bitmap", font: "3" } as TextStyle),
     micro: scalable ? ({ kind: "scalable", pt: 6 } as TextStyle) : ({ kind: "bitmap", font: "1" } as TextStyle),
   };
 
-  let y = originY + 2;
+  let y = originY + 4;
 
   // Row 1 — category left, collection right.
   const collection = toPrintableAscii(label.collection || "");
   if (collection) {
     builder.textRight(right, y, S.kicker, fitToWidth(collection, S.kicker, innerWidth * 0.45));
   }
-  const categoryRoom = innerWidth - (collection ? textWidth(collection, S.kicker) + 10 : 0);
+  const categoryRoom = innerWidth - (collection ? textWidth(collection, S.kicker) + 8 : 0);
   builder.text(left, y, S.kicker, fitToWidth(label.category || "", S.kicker, categoryRoom));
-  y += styleHeight(S.kicker) + 3;
+  y += styleHeight(S.kicker) + 2;
 
-  // Row 2 — description.
+  // Row 2 — description / product name.
   builder.text(left, y, S.name, fitToWidth(label.name, S.name, innerWidth));
   y += styleHeight(S.name) + 2;
 
@@ -334,13 +335,13 @@ function drawGarmentLabel(builder: LabelBuilder, originX: number, originY: numbe
   const detail = toPrintableAscii(label.detail || "");
   const sizeText = toPrintableAscii(label.size || "");
   if (sizeText) {
-    builder.textRight(right, y, S.micro, fitToWidth(sizeText, S.micro, innerWidth * 0.45));
+    builder.textRight(right, y, S.detail, fitToWidth(sizeText, S.detail, innerWidth * 0.45));
   }
   if (detail) {
-    const room = innerWidth - (sizeText ? textWidth(sizeText, S.micro) + 10 : 0);
-    builder.text(left, y, S.micro, fitToWidth(detail, S.micro, room));
+    const room = innerWidth - (sizeText ? textWidth(sizeText, S.detail) + 8 : 0);
+    builder.text(left, y, S.detail, fitToWidth(detail, S.detail, room));
   }
-  if (detail || sizeText) y += styleHeight(S.micro) + 2;
+  if (detail || sizeText) y += styleHeight(S.detail) + 2;
 
   // Row 4 — colour, emphasised on its own line.
   if (label.color) {
@@ -351,39 +352,44 @@ function drawGarmentLabel(builder: LabelBuilder, originX: number, originY: numbe
   // Row 5 — price, with a reversed currency mark standing in for the rupee
   // glyph (the printer's internal fonts have no codepoint for it).
   const priceText = Math.round(label.mrp || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
-  const markW = Math.round(styleHeight(S.price) * 0.72);
   const markH = styleHeight(S.price);
-  builder.text(left + 2, y + Math.round(markH * 0.18), S.micro, "RS");
+  const markW = Math.round(markH * 0.85);
+  builder.text(left + 2, y + Math.round(markH * 0.15), S.micro, "RS");
   builder.reverse(left, y, markW, markH);
   builder.text(
-    left + markW + 6,
+    left + markW + 5,
     y,
     S.price,
-    fitToWidth(priceText, S.price, innerWidth - markW - 6)
+    fitToWidth(priceText, S.price, innerWidth - markW - 5)
   );
-  y += markH + 4;
+  y += markH + 3;
 
   // Barcode — as wide as the label allows, at the largest safe module width.
+  // Constrained to 34 dots height (~4.25mm) so it reliably scans while leaving
+  // guaranteed safety margin for the footer and bottom edge.
   const codeVal = toPrintableAscii(label.code || "00000000");
   const { module, width: barcodeWidth } = pickBarcodeModule(codeVal, innerWidth, media.minBarcodeModule);
-
-  const footerH = styleHeight(S.micro);
-  // One footer line carries the readable code and the vendor reference, keeping
-  // as much of the remaining height as possible for the bars themselves — a
-  // Code 128 symbol needs ~6.4mm of bar height to scan dependably.
-  const barcodeHeight = Math.max(48, labelHeight - (y - originY) - footerH - 6);
   const barcodeX = originX + Math.max(pad, Math.round((labelWidth - barcodeWidth) / 2));
+  const barcodeHeight = 34;
 
   builder.code128(barcodeX, y, barcodeHeight, module, codeVal);
   y += barcodeHeight + 2;
 
-  // Footer: readable code left, vendor reference right.
-  const vendor = toPrintableAscii(String(label.vendorCode || label.costCode || ""));
+  // Row 7 — human-readable code centered under barcode.
+  const codeValWidth = textWidth(codeVal, S.micro);
+  const codeValX = originX + Math.max(pad, Math.round((labelWidth - codeValWidth) / 2));
+  builder.text(codeValX, y, S.micro, codeVal);
+  y += styleHeight(S.micro) + 1;
+
+  // Row 8 — Item/Vendor reference left, secondary reference right (matches reference tag).
+  const vendor = toPrintableAscii(String(label.vendorCode || ""));
+  const cost = toPrintableAscii(String(label.costCode || ""));
   if (vendor) {
-    builder.textRight(right, y, S.micro, fitToWidth(vendor, S.micro, innerWidth * 0.45));
+    builder.text(left, y, S.micro, fitToWidth(vendor, S.micro, innerWidth * 0.48));
   }
-  const codeRoom = innerWidth - (vendor ? textWidth(vendor, S.micro) + 10 : 0);
-  builder.text(left, y, S.micro, fitToWidth(codeVal, S.micro, codeRoom));
+  if (cost) {
+    builder.textRight(right, y, S.micro, fitToWidth(cost, S.micro, innerWidth * 0.48));
+  }
 }
 
 /**

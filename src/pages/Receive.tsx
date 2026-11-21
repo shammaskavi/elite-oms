@@ -253,8 +253,9 @@ export default function Receive() {
     const settings = loadPrinterSettings();
     setSendingToPrinter(true);
     try {
-      await sendTsplJob(buildGarmentLabelJob(labels, settings.media), settings);
-      toast.success(`${labels.length} label${labels.length === 1 ? "" : "s"} sent to ${settings.printerName}`);
+      const res = await sendTsplJob(buildGarmentLabelJob(labels, settings.media), settings);
+      const via = res?.service === "qz-tray" ? "QZ Tray" : "print agent";
+      toast.success(`${labels.length} label${labels.length === 1 ? "" : "s"} sent to ${settings.printerName} via ${via}`);
     } catch (err: any) {
       if (err instanceof PrintAgentOfflineError) {
         toast.error(err.message, {

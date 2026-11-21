@@ -1,13 +1,10 @@
 /**
- * Client for the local label print agent.
- *
- * The browser cannot open a USB printer directly, so a small service runs on
- * the shop PC and relays raw TSPL bytes to the Windows spooler. The app talks
- * to it over plain HTTP on localhost — which browsers exempt from mixed-content
- * blocking, so this works even when the app itself is served over HTTPS.
+ * Client for thermal label printing supporting both QZ Tray (recommended)
+ * and the legacy local Node print agent.
  */
 
 import { DEFAULT_MEDIA, LabelMedia } from "./tspl";
+import { qzService } from "./qzService";
 
 export interface PrinterSettings {
   agentUrl: string;
@@ -28,8 +25,6 @@ export function loadPrinterSettings(): PrinterSettings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
-    // Merge rather than replace, so settings saved by an older build don't come
-    // back missing fields added since.
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
@@ -46,6 +41,7 @@ export function savePrinterSettings(settings: PrinterSettings) {
 
 export interface AgentStatus {
   online: boolean;
+  activeService: "qz-tray" | "agent" | "none";
   version?: string;
   printers?: string[];
   defaultPrinter?: string;
@@ -56,34 +52,54 @@ export interface AgentStatus {
   error?: string;
 }
 
+/** Probes QZ Tray first (preferred), falling back to the local Node print agent. */
 export async function probeAgent(settings: PrinterSettings = loadPrinterSettings()): Promise<AgentStatus> {
+  // 1. Try QZ Tray first
   try {
-    // Generous: the agent's first health check on a cold Windows box has to
-    // spawn PowerShell to enumerate printers, which is not fast.
+    const qzRes = await qzService.probe(1500);
+    if (qzRes.connected) {
+      return {
+        online: true,
+        activeService: "qz-tray",
+        version: "QZ Tray",
+        printers: qzRes.printers,
+        defaultPrinter: qzRes.defaultPrinter,
+        ready: true,
+        helperError: null,
+      };
+    }
+  } catch {
+    // Continue to legacy agent check
+  }
+
+  // 2. Fall back to local Node print agent
+  try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 2500);
     const res = await fetch(`${settings.agentUrl}/health`, { signal: controller.signal });
     clearTimeout(timeout);
 
-    if (!res.ok) return { online: false, error: `Agent responded ${res.status}` };
-    const body = await res.json();
-    return {
-      online: true,
-      version: body.version,
-      printers: body.printers,
-      defaultPrinter: body.defaultPrinter,
-      ready: body.ready !== false,
-      helperError: body.helperError ?? null,
-    };
-  } catch (err: any) {
-    return {
-      online: false,
-      error:
-        err?.name === "AbortError"
-          ? "Agent did not respond in time. Is another program using port 9110?"
-          : "Could not reach the print agent on this PC.",
-    };
+    if (res.ok) {
+      const body = await res.json();
+      return {
+        online: true,
+        activeService: "agent",
+        version: body.version,
+        printers: body.printers,
+        defaultPrinter: body.defaultPrinter,
+        ready: body.ready !== false,
+        helperError: body.helperError ?? null,
+      };
+    }
+  } catch {
+    // Both offline
   }
+
+  return {
+    online: false,
+    activeService: "none",
+    error: "No printer service detected. Please open QZ Tray or start the print agent.",
+  };
 }
 
 export class PrintAgentOfflineError extends Error {
@@ -93,27 +109,47 @@ export class PrintAgentOfflineError extends Error {
   }
 }
 
-/** Sends a prepared TSPL job to the printer. Resolves once the spooler accepts it. */
-export async function sendTsplJob(tspl: string, settings: PrinterSettings = loadPrinterSettings()): Promise<void> {
-  if (!tspl.trim()) return;
+/** Sends a prepared TSPL job to the printer via QZ Tray (preferred) or Node print agent. */
+export async function sendTsplJob(
+  tspl: string,
+  settings: PrinterSettings = loadPrinterSettings()
+): Promise<{ service: "qz-tray" | "agent" }> {
+  if (!tspl.trim()) return { service: "qz-tray" };
 
-  let res: Response;
+  // 1. Attempt printing via QZ Tray first
   try {
-    res = await fetch(`${settings.agentUrl}/print`, {
+    const qzConnected = await qzService.connect();
+    if (qzConnected) {
+      await qzService.printRawTspl(settings.printerName, tspl);
+      return { service: "qz-tray" };
+    }
+  } catch (qzErr: any) {
+    console.warn("QZ Tray print attempt failed, attempting agent fallback:", qzErr);
+  }
+
+  // 2. Fall back to local Node print agent if available
+  try {
+    const res = await fetch(`${settings.agentUrl}/print`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ printer: settings.printerName, data: tspl }),
     });
-  } catch {
-    throw new PrintAgentOfflineError(
-      "Print agent is not running on this PC. Start it, or use Printer Setup to check the connection."
-    );
+
+    if (res.ok) {
+      return { service: "agent" };
+    }
+    const detail = await res.text().catch(() => "");
+    throw new Error(detail || `Printer agent rejected the job (HTTP ${res.status})`);
+  } catch (agentErr: any) {
+    if (agentErr?.message && !agentErr.message.includes("fetch")) {
+      throw agentErr;
+    }
   }
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(detail || `Printer rejected the job (HTTP ${res.status})`);
-  }
+  // Both failed
+  throw new PrintAgentOfflineError(
+    "Label printer service is not running on this PC. Please launch QZ Tray (recommended) or the Print Agent."
+  );
 }
 
 /**
