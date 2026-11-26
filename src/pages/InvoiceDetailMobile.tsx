@@ -292,15 +292,37 @@ export default function InvoiceDetailMobile() {
       toast.error("Failed to generate PDF for printing");
       return;
     }
+
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    // If permanent cloud PDF exists in storage, open it directly
+    if (invoice?.file_url) {
+      window.open(invoice.file_url, "_blank");
+      return;
+    }
+
     if (instance.url) {
-      const printWindow = window.open(instance.url);
-      if (printWindow) {
-        setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-        }, 800);
+      if (isMobile) {
+        // On Android / mobile browsers, calling window.print() on an in-memory blob URL
+        // causes the Android Print Spooler preview engine to crash ("There was a problem printing the page").
+        // Instead, open / download the real PDF so Android's native PDF viewer sends it to Canon MF230 cleanly:
+        const link = document.createElement("a");
+        link.href = instance.url;
+        link.download = `Invoice-${invoice?.invoice_number || "download"}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success("Invoice PDF ready. Tap to open and print to Canon printer.");
       } else {
-        toast.error("Pop-up blocked. Please allow pop-ups to print.");
+        const printWindow = window.open(instance.url);
+        if (printWindow) {
+          setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+          }, 800);
+        } else {
+          toast.error("Pop-up blocked. Please allow pop-ups to print.");
+        }
       }
     } else {
       toast.info("Generating invoice PDF, please try again in a moment...");

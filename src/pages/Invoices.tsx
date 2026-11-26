@@ -69,6 +69,7 @@ import { useDataTableSort } from "@/hooks/use-data-table-sort";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { DateRangeFilter, DateFilterValue } from "@/components/ui/date-range-filter";
 import { FloatingTableFooter } from "@/components/ui/floating-table-footer";
+import { getNextInvoiceNumber } from "@/lib/invoiceNumber";
 
 
 export default function Invoices() {
@@ -178,30 +179,11 @@ export default function Invoices() {
   // };
 
   const generateInvoiceNumber = async () => {
-    const { data, error } = await supabase
-      .from("invoices")
-      .select("invoice_number")
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (error) {
-      console.error("Invoice number fetch error:", error);
-      setFormData(prev => ({ ...prev, invoice_number: "INV-001" }));
-      return;
-    }
-
-    if (data && data.length > 0) {
-      const last = data[0].invoice_number;
-      const match = last.match(/INV-(\d+)/);
-
-      const nextNum = match ? parseInt(match[1]) + 1 : 1;
-      setFormData(prev => ({
-        ...prev,
-        invoice_number: `INV-${String(nextNum).padStart(3, "0")}`,
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, invoice_number: "INV-001" }));
-    }
+    const nextNumber = await getNextInvoiceNumber(invoices);
+    setFormData(prev => ({
+      ...prev,
+      invoice_number: nextNumber,
+    }));
   };
 
   const processBarcodeScan = async (scannedCode: string) => {
@@ -407,6 +389,7 @@ export default function Invoices() {
         const { data: invoice, error: invoiceError } = await (supabase as any)
           .from("invoices")
           .update({
+            invoice_number: data.invoice_number,
             customer_id: data.customer_id,
             date: data.date,
             subtotal: parseFloat(data.subtotal),
@@ -515,6 +498,7 @@ export default function Invoices() {
         const { data: updatedInvoice, error: invoiceError } = await (supabase as any)
           .from("invoices")
           .update({
+            invoice_number: data.invoice_number,
             customer_id: data.customer_id,
             date: data.date,
             subtotal: parseFloat(data.subtotal),
@@ -1237,15 +1221,29 @@ export default function Invoices() {
                 {/* Row 1: Responsive Grid for Invoice Details */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <Label htmlFor="invoice_number" className="text-xs">Invoice Number *</Label>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label htmlFor="invoice_number" className="text-xs">Invoice Number *</Label>
+                      {editingDraftId && (
+                        <button
+                          type="button"
+                          className="text-[10px] text-primary hover:underline font-medium"
+                          onClick={async () => {
+                            await generateInvoiceNumber();
+                            toast.info("Invoice number updated to next sequence");
+                          }}
+                        >
+                          Reassign Next Number
+                        </button>
+                      )}
+                    </div>
                     <Input
                       id="invoice_number"
                       value={formData.invoice_number}
                       onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
                       required
-                      disabled
+                      disabled={!editingDraftId}
                       placeholder="Invoice Number"
-                      className="bg-muted h-9"
+                      className={cn("h-9", !editingDraftId && "bg-muted")}
                     />
                   </div>
                   <div>

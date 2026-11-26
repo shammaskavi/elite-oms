@@ -61,6 +61,7 @@ import { MobileBarcodeScanner } from "@/components/MobileBarcodeScanner";
 import { MobileInvoiceReceiptModal } from "@/components/invoices/MobileInvoiceReceiptModal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getNextInvoiceNumber } from "@/lib/invoiceNumber";
 
 interface InvoiceItem {
   name: string;
@@ -181,29 +182,13 @@ export default function QuickPosBilling() {
     staleTime: 60 * 1000,
   });
 
-  // Auto-generate invoice number
+  // Auto-generate invoice number (True numerical maximum across all invoices)
   const generateInvoiceNumber = async () => {
-    try {
-      const { data } = await supabase
-        .from("invoices")
-        .select("invoice_number")
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (data && data.length > 0) {
-        const last = data[0].invoice_number;
-        const match = last?.match(/INV-(\d+)/);
-        const nextNum = match ? parseInt(match[1]) + 1 : 1;
-        setFormData((prev) => ({
-          ...prev,
-          invoice_number: `INV-${String(nextNum).padStart(3, "0")}`,
-        }));
-      } else {
-        setFormData((prev) => ({ ...prev, invoice_number: "INV-001" }));
-      }
-    } catch (e) {
-      setFormData((prev) => ({ ...prev, invoice_number: "INV-001" }));
-    }
+    const nextNumber = await getNextInvoiceNumber();
+    setFormData((prev) => ({
+      ...prev,
+      invoice_number: nextNumber,
+    }));
   };
 
   useEffect(() => {

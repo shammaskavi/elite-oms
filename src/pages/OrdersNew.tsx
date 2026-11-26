@@ -425,10 +425,10 @@ export default function OrdersNew() {
       statusFilter === "completed"
         ? completedOrders
         : statusFilter === "cancelled"
-        ? cancelledOrders
-        : statusFilter === "active"
-        ? activeOrders
-        : enrichedOrders;
+          ? cancelledOrders
+          : statusFilter === "active"
+            ? activeOrders
+            : enrichedOrders;
 
     const query = deferredSearchQuery.trim().toLowerCase();
 
@@ -714,10 +714,10 @@ export default function OrdersNew() {
         (old || []).map((order: any) =>
           order.id === orderId
             ? {
-                ...order,
-                order_status:
-                  newStage === "Delivered" ? "delivered" : order.order_status,
-              }
+              ...order,
+              order_status:
+                newStage === "Delivered" ? "delivered" : order.order_status,
+            }
             : order
         )
       );
@@ -875,9 +875,8 @@ export default function OrdersNew() {
       {/* Stats Cards with Active Filter Ring Indicators */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <Card
-          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md ${
-            statusFilter === "all" && !quickFilter ? "ring-2 ring-primary bg-primary/5" : ""
-          }`}
+          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md ${statusFilter === "all" && !quickFilter ? "ring-2 ring-primary bg-primary/5" : ""
+            }`}
           onClick={() => {
             setStatusFilter("all");
             setQuickFilter(null);
@@ -896,9 +895,8 @@ export default function OrdersNew() {
         </Card>
 
         <Card
-          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md ${
-            statusFilter === "completed" && !quickFilter ? "ring-2 ring-success bg-success/5" : ""
-          }`}
+          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md ${statusFilter === "completed" && !quickFilter ? "ring-2 ring-success bg-success/5" : ""
+            }`}
           onClick={() => {
             setStatusFilter("completed");
             setQuickFilter(null);
@@ -917,9 +915,8 @@ export default function OrdersNew() {
         </Card>
 
         <Card
-          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md ${
-            statusFilter === "active" && !quickFilter ? "ring-2 ring-warning bg-warning/5" : ""
-          }`}
+          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md ${statusFilter === "active" && !quickFilter ? "ring-2 ring-warning bg-warning/5" : ""
+            }`}
           onClick={() => {
             setStatusFilter("active");
             setQuickFilter(null);
@@ -938,11 +935,10 @@ export default function OrdersNew() {
         </Card>
 
         <Card
-          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md ${
-            quickFilter === "overdue"
+          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md ${quickFilter === "overdue"
               ? "ring-2 ring-destructive bg-destructive/10 border-destructive"
               : "border-destructive/40 bg-destructive/5"
-          }`}
+            }`}
           onClick={() => {
             setStatusFilter("active");
             setQuickFilter("overdue");
@@ -965,11 +961,10 @@ export default function OrdersNew() {
         </Card>
 
         <Card
-          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md col-span-2 sm:col-span-1 ${
-            quickFilter === "dueSoon"
+          className={`p-3.5 sm:p-5 cursor-pointer transition-all hover:shadow-md col-span-2 sm:col-span-1 ${quickFilter === "dueSoon"
               ? "ring-2 ring-amber-500 bg-amber-500/10"
               : ""
-          }`}
+            }`}
           onClick={() => {
             setStatusFilter("active");
             setQuickFilter("dueSoon");
@@ -1037,119 +1032,119 @@ export default function OrdersNew() {
           </div>
 
           {(viewMode === "table" || viewMode === "list") && (
-          <div className="flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap gap-2.5 items-stretch sm:items-center">
-            <div className="relative flex-1 min-w-[200px]">
-              <Input
-                placeholder="Search by order #, customer, item..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 pr-8"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
+            <div className="flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap gap-2.5 items-stretch sm:items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Input
+                  placeholder="Search by order #, customer, item..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-9 pr-8"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
+
+              {/* Stage Filter (multi-select) */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="min-w-[130px] justify-between h-9 text-xs">
+                    <span className="truncate">
+                      {stageFilter.length === 0
+                        ? "All Stages"
+                        : `${stageFilter.length} stage${stageFilter.length > 1 ? "s" : ""}`}
+                    </span>
+                    <SlidersHorizontal className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
+                  </Button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent align="start" className="w-56 max-h-[280px] overflow-y-auto">
+                  <DropdownMenuLabel className="flex items-center justify-between">
+                    Stages
+                    {stageFilter.length > 0 && (
+                      <button
+                        type="button"
+                        className="text-[11px] font-normal text-muted-foreground hover:text-foreground"
+                        onClick={() => setStageFilter([])}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {STAGES.map((stage) => (
+                    <DropdownMenuCheckboxItem
+                      key={stage}
+                      checked={stageFilter.includes(stage)}
+                      onCheckedChange={() => toggleStage(stage)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      {stage}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Vendor Filter (multi-select) */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-w-[130px] justify-between h-9 text-xs"
+                  >
+                    <span className="truncate">
+                      {vendorFilter.length === 0
+                        ? "All Vendors"
+                        : `${vendorFilter.length} vendor${vendorFilter.length > 1 ? "s" : ""}`}
+                    </span>
+                    <SlidersHorizontal className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
+                  </Button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent align="start" className="w-56 max-h-[280px] overflow-y-auto">
+                  <DropdownMenuLabel className="flex items-center justify-between">
+                    Vendors
+                    {vendorFilter.length > 0 && (
+                      <button
+                        type="button"
+                        className="text-[11px] font-normal text-muted-foreground hover:text-foreground"
+                        onClick={() => setVendorFilter([])}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {(vendors || []).map((vendor: any) => (
+                    <DropdownMenuCheckboxItem
+                      key={vendor.id}
+                      checked={vendorFilter.includes(vendor.name)}
+                      onCheckedChange={() => toggleVendor(vendor.name)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      {vendor.name}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full sm:w-auto">
+                <TabsList className="grid grid-cols-3 w-full sm:w-auto h-9">
+                  <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+                  <TabsTrigger value="active" className="text-xs">Active</TabsTrigger>
+                  <TabsTrigger value="completed" className="text-xs">Completed</TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
-
-            <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
-
-            {/* Stage Filter (multi-select) */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="min-w-[130px] justify-between h-9 text-xs">
-                  <span className="truncate">
-                    {stageFilter.length === 0
-                      ? "All Stages"
-                      : `${stageFilter.length} stage${stageFilter.length > 1 ? "s" : ""}`}
-                  </span>
-                  <SlidersHorizontal className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="start" className="w-56 max-h-[280px] overflow-y-auto">
-                <DropdownMenuLabel className="flex items-center justify-between">
-                  Stages
-                  {stageFilter.length > 0 && (
-                    <button
-                      type="button"
-                      className="text-[11px] font-normal text-muted-foreground hover:text-foreground"
-                      onClick={() => setStageFilter([])}
-                    >
-                      Clear
-                    </button>
-                  )}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {STAGES.map((stage) => (
-                  <DropdownMenuCheckboxItem
-                    key={stage}
-                    checked={stageFilter.includes(stage)}
-                    onCheckedChange={() => toggleStage(stage)}
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    {stage}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Vendor Filter (multi-select) */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-w-[130px] justify-between h-9 text-xs"
-                >
-                  <span className="truncate">
-                    {vendorFilter.length === 0
-                      ? "All Vendors"
-                      : `${vendorFilter.length} vendor${vendorFilter.length > 1 ? "s" : ""}`}
-                  </span>
-                  <SlidersHorizontal className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="start" className="w-56 max-h-[280px] overflow-y-auto">
-                <DropdownMenuLabel className="flex items-center justify-between">
-                  Vendors
-                  {vendorFilter.length > 0 && (
-                    <button
-                      type="button"
-                      className="text-[11px] font-normal text-muted-foreground hover:text-foreground"
-                      onClick={() => setVendorFilter([])}
-                    >
-                      Clear
-                    </button>
-                  )}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {(vendors || []).map((vendor: any) => (
-                  <DropdownMenuCheckboxItem
-                    key={vendor.id}
-                    checked={vendorFilter.includes(vendor.name)}
-                    onCheckedChange={() => toggleVendor(vendor.name)}
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    {vendor.name}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full sm:w-auto">
-              <TabsList className="grid grid-cols-3 w-full sm:w-auto h-9">
-                <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
-                <TabsTrigger value="active" className="text-xs">Active</TabsTrigger>
-                <TabsTrigger value="completed" className="text-xs">Completed</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
           )}
         </div>
 
@@ -1178,14 +1173,14 @@ export default function OrdersNew() {
                 {dateFilter.presetLabel
                   ? dateFilter.presetLabel
                   : dateFilter.singleDate
-                  ? dateFilter.singleDate
-                  : dateFilter.startDate && dateFilter.endDate
-                  ? `${dateFilter.startDate} → ${dateFilter.endDate}`
-                  : dateFilter.startDate
-                  ? `From ${dateFilter.startDate}`
-                  : dateFilter.endDate
-                  ? `Until ${dateFilter.endDate}`
-                  : "custom"}{" "}
+                    ? dateFilter.singleDate
+                    : dateFilter.startDate && dateFilter.endDate
+                      ? `${dateFilter.startDate} → ${dateFilter.endDate}`
+                      : dateFilter.startDate
+                        ? `From ${dateFilter.startDate}`
+                        : dateFilter.endDate
+                          ? `Until ${dateFilter.endDate}`
+                          : "custom"}{" "}
                 <X className="h-3 w-3" />
               </Badge>
             )}
@@ -1278,20 +1273,18 @@ export default function OrdersNew() {
                 return (
                   <Card
                     key={order.id}
-                    className={`p-4 rounded-xl border-l-4 hover:shadow-md transition-all cursor-pointer ${
-                      getCardClassName(order.order_status)
-                    } ${
-                      order.isOverdue
+                    className={`p-4 rounded-xl border-l-4 hover:shadow-md transition-all cursor-pointer ${getCardClassName(order.order_status)
+                      } ${order.isOverdue
                         ? "border-destructive bg-destructive/5 ring-1 ring-destructive/30"
                         : ""
-                    }`}
+                      }`}
                     onClick={() => goToOrder(order.id)}
                     style={{
                       borderLeftColor: order.isOverdue
                         ? "hsl(var(--destructive))"
                         : order.order_status === "delivered"
-                        ? "hsl(var(--success))"
-                        : "hsl(var(--warning))",
+                          ? "hsl(var(--success))"
+                          : "hsl(var(--warning))",
                     }}
                   >
                     <div className="flex items-start justify-between">
@@ -1360,9 +1353,8 @@ export default function OrdersNew() {
                           return (
                             <div
                               key={stage}
-                              className={`h-1.5 rounded-full flex-1 transition-colors ${
-                                isCompleted ? "bg-success" : "bg-muted"
-                              }`}
+                              className={`h-1.5 rounded-full flex-1 transition-colors ${isCompleted ? "bg-success" : "bg-muted"
+                                }`}
                             />
                           );
                         })}
@@ -1459,10 +1451,10 @@ export default function OrdersNew() {
                                   📦{" "}
                                   {order.metadata?.delivery_date
                                     ? new Date(order.metadata.delivery_date).toLocaleDateString("en-IN", {
-                                        day: "numeric",
-                                        month: "short",
-                                        year: "numeric",
-                                      })
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                    })
                                     : "-"}
                                 </span>
                               </div>

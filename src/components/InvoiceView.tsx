@@ -245,15 +245,32 @@ export function InvoiceView({
       return;
     }
 
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    if (invoice?.file_url) {
+      window.open(invoice.file_url, "_blank");
+      return;
+    }
+
     if (instance.url) {
-      const printWindow = window.open(instance.url);
-      if (printWindow) {
-        setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-        }, 1000);
+      if (isMobile) {
+        const link = document.createElement("a");
+        link.href = instance.url;
+        link.download = `Invoice-${invoice?.invoice_number || "download"}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success("Invoice PDF ready. Tap to open and print.");
       } else {
-        toast.error("Pop-up blocked. Please allow pop-ups to print.");
+        const printWindow = window.open(instance.url);
+        if (printWindow) {
+          setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+          }, 1000);
+        } else {
+          toast.error("Pop-up blocked. Please allow pop-ups to print.");
+        }
       }
     } else {
       toast.info("Generating invoice PDF...");
