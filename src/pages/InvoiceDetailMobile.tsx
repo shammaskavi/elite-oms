@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { derivePaymentStatus } from "@/lib/derivePaymentStatus";
 import { ensureInvoiceTrackingToken, openWhatsApp, normalizeWhatsAppPhone } from "@/lib/whatsapp";
-import { usePDF } from "@react-pdf/renderer";
+import { usePDF, pdf } from "@react-pdf/renderer";
 import { PrintableInvoice } from "@/components/PrintableInvoice";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -286,46 +286,43 @@ export default function InvoiceDetailMobile() {
     }
   }, [invoiceDocument, invoicePayments]);
 
-  // Handle PDF Print
-  const handlePrint = () => {
-    if (instance.error) {
-      toast.error("Failed to generate PDF for printing");
-      return;
-    }
+  // Handle PDF Print (opens invoice and auto-triggers native print dialog)
+  const handlePrint = async () => {
+    try {
+      let printUrl = instance.url;
 
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      // If instance.url isn't ready yet, generate it on-the-fly
+      if (!printUrl && invoiceDocument) {
+        toast.info("Preparing invoice for printing...");
+        const blob = await pdf(invoiceDocument).toBlob();
+        printUrl = URL.createObjectURL(blob);
+      }
 
-    // If permanent cloud PDF exists in storage, open it directly
-    if (invoice?.file_url) {
-      window.open(invoice.file_url, "_blank");
-      return;
-    }
+      if (!printUrl) {
+        printUrl = invoice?.file_url;
+      }
 
-    if (instance.url) {
-      if (isMobile) {
-        // On Android / mobile browsers, calling window.print() on an in-memory blob URL
-        // causes the Android Print Spooler preview engine to crash ("There was a problem printing the page").
-        // Instead, open / download the real PDF so Android's native PDF viewer sends it to Canon MF230 cleanly:
-        const link = document.createElement("a");
-        link.href = instance.url;
-        link.download = `Invoice-${invoice?.invoice_number || "download"}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast.success("Invoice PDF ready. Tap to open and print to Canon printer.");
-      } else {
-        const printWindow = window.open(instance.url);
+      if (printUrl) {
+        const printWindow = window.open(printUrl, "_blank");
         if (printWindow) {
+          // Give browser enough time to parse the PDF, then trigger native print dialog
           setTimeout(() => {
-            printWindow.focus();
-            printWindow.print();
-          }, 800);
+            try {
+              printWindow.focus();
+              printWindow.print();
+            } catch (err) {
+              console.warn("Auto-print in popup window:", err);
+            }
+          }, 1200);
         } else {
           toast.error("Pop-up blocked. Please allow pop-ups to print.");
         }
+      } else {
+        toast.error("Unable to generate invoice PDF. Please try again.");
       }
-    } else {
-      toast.info("Generating invoice PDF, please try again in a moment...");
+    } catch (e: any) {
+      console.error("Print error:", e);
+      toast.error("Failed to open print dialog");
     }
   };
 

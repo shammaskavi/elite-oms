@@ -238,42 +238,43 @@ export function InvoiceView({
     }
   }, [ordersWithCurrentStage]);
 
-  // Print (opens PDF and triggers print dialog)
-  const handlePrint = () => {
-    if (instance.error) {
-      toast.error("Failed to generate PDF for printing");
-      return;
-    }
+  // Print (opens PDF and auto-triggers print dialog)
+  const handlePrint = async () => {
+    try {
+      let printUrl = instance.url;
 
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      // If instance.url isn't ready yet, generate it on-the-fly
+      if (!printUrl && invoiceDocument) {
+        toast.info("Preparing invoice for printing...");
+        const blob = await pdf(invoiceDocument).toBlob();
+        printUrl = URL.createObjectURL(blob);
+      }
 
-    if (invoice?.file_url) {
-      window.open(invoice.file_url, "_blank");
-      return;
-    }
+      if (!printUrl) {
+        printUrl = invoice?.file_url;
+      }
 
-    if (instance.url) {
-      if (isMobile) {
-        const link = document.createElement("a");
-        link.href = instance.url;
-        link.download = `Invoice-${invoice?.invoice_number || "download"}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast.success("Invoice PDF ready. Tap to open and print.");
-      } else {
-        const printWindow = window.open(instance.url);
+      if (printUrl) {
+        const printWindow = window.open(printUrl, "_blank");
         if (printWindow) {
+          // Give browser enough time to parse the PDF, then trigger native print dialog
           setTimeout(() => {
-            printWindow.focus();
-            printWindow.print();
-          }, 1000);
+            try {
+              printWindow.focus();
+              printWindow.print();
+            } catch (err) {
+              console.warn("Auto-print in popup window:", err);
+            }
+          }, 1200);
         } else {
           toast.error("Pop-up blocked. Please allow pop-ups to print.");
         }
+      } else {
+        toast.error("Unable to generate invoice PDF. Please try again.");
       }
-    } else {
-      toast.info("Generating invoice PDF...");
+    } catch (e: any) {
+      console.error("Print error:", e);
+      toast.error("Failed to open print dialog");
     }
   };
 
